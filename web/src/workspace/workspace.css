@@ -267,3 +267,118 @@
   color: var(--fog);
   font-size: 11.5px;
 }
+
+/* ---- Answer form ---- */
+
+.ws-answer {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.ws-field legend,
+.ws-legend {
+  padding: 0;
+  color: var(--mist);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ws-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-choice {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.ws-choice[aria-checked="true"] {
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.ws-choice.holds[aria-checked="true"] {
+  background: var(--good);
+}
+
+.ws-choice.fails[aria-checked="true"] {
+  background: var(--bad);
+}
+
+.ws-choice.cant_tell[aria-checked="true"] {
+  background: var(--gold);
+}
+
+.ws-field:disabled .chip,
+.ws-field[disabled] .chip {
+  cursor: default;
+}
+
+.ws-select {
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  color: var(--snow);
+}
+
+.ws-select:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-note {
+  font-family: var(--text);
+  font-size: 14px;
+}
+
+.ws-cites-plain {
+  list-style: disc;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--snow);
+  gap: 3px;
+}
+
+.ws-cites-plain li {
+  display: list-item;
+}
+
+.ws-sent {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--good);
+  font-size: 13px;
+}
+
+.ws-tasks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-brief {
+  line-height: 1.4;
+}
+
+/* Sections keep their height and the panel scrolls, instead of squeezing and overlapping. */
+.ws-root > * {
+  flex: none;
+}
