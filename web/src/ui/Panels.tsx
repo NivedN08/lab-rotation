@@ -5,7 +5,7 @@ import { fmtElapsed, MODEL_NAME, plainLine, PRIVATE_NOTE, ROLE_READS, roundWord,
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
-import { MasteryChart } from "../panels";
+import { BenchCard, MasteryChart } from "../panels";
 import { Avatar } from "./Avatar";
 import { Safe } from "./Safe";
 
@@ -168,6 +168,13 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
         <Section title="Your mastery">
           <Safe name="The mastery chart">
             <MasteryChart />
+          </Safe>
+        </Section>
+      )}
+      {id === "ines" && (
+        <Section title="How good are the examiners?">
+          <Safe name="The benchmark card">
+            <BenchCard compact />
           </Safe>
         </Section>
       )}

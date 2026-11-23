@@ -1,5 +1,5 @@
 import type { LabEvent } from "../api/types";
-import { CaseCard } from "../panels";
+import { BenchCard, CaseCard } from "../panels";
 import { caseEvent, isCase, plainLine, plainNumbers } from "../sim/replay";
 import { Safe } from "./Safe";
 
@@ -57,6 +57,8 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
   const s = scenes[index];
   if (!s) return null;
   const end = scenes[index + 1]?.start ?? Infinity;
+  // The story ends on how far to trust the examiners: their benchmark score.
+  const last = index === scenes.length - 1;
   const key = keyEvent(events, s.start, end);
   // After the verdict, Telem brings a real case of the same mistake.
   const verdictAt = events.find((e) => e.k === "verdict")?.t;
@@ -65,7 +67,7 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
       ? caseEvent(events, Math.max(s.start, verdictAt), end)
       : undefined;
   return (
-    <div className={`tour box${realCase ? " verdict" : ""}`} role="region" aria-label="The story so far" aria-live="polite">
+    <div className={`tour box${realCase || last ? " verdict" : ""}`} role="region" aria-label="The story so far" aria-live="polite">
       <span className="count">
         Scene {index + 1} of {scenes.length}
       </span>
@@ -90,6 +92,14 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
             <p className="why">{plainNumbers(realCase.text ?? "")}</p>
           )}
         </div>
+      )}
+      {last && (
+        <section className="section">
+          <h3>How good are the examiners?</h3>
+          <Safe name="The benchmark card">
+            <BenchCard />
+          </Safe>
+        </section>
       )}
       <div className="row">
         <button className="btn" onClick={onBack} disabled={index === 0}>
