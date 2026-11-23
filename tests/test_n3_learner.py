@@ -106,20 +106,45 @@ def test_rules_fallback():
 
 
 def test_refresh_flattens_the_mock_session(tmp_path):
+    """Counts come from the mock file itself, so the test holds when N1 regenerates it."""
+    import csv
+    import json
+    import shutil
     from pathlib import Path
 
     from lab.learner import refresh
-    root = Path(__file__).resolve().parent.parent
-    out = refresh.stage(sessions=root / "contract", bench=tmp_path / "missing.csv", dest=tmp_path / "learn")
-    assert out == {"sessions": 1, "events": 68, "bench": 0}
-    import csv
-    rows = list(csv.DictReader(open(tmp_path / "learn" / "session_events.csv")))
-    end = [r for r in rows if r["k"] == "task.end"]
-    assert len(end) == 1 and end[0]["trap"] == "unit_mismatch" and end[0]["learner"] == "guest"
+    mock = Path(__file__).resolve().parent.parent / "contract" / "mock_session.jsonl"
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    shutil.copy(mock, sessions / "mock-1.jsonl")
+    raw = [json.loads(line) for line in mock.read_text().splitlines() if line.strip()]
+    start = next(e for e in raw if e["k"] == "session.start")
+    ends = [e for e in raw if e["k"] == "task.end"]
+    assert ends, "the mock session should grade at least one task"
+
+    out = refresh.stage(sessions=sessions, bench=tmp_path / "missing.csv", dest=tmp_path / "learn")
+    assert out == {"sessions": 1, "events": len(raw), "bench": 0}
+    with open(tmp_path / "learn" / "session_events.csv", newline="") as f:
+        reader = csv.DictReader(f)
+        assert reader.fieldnames == refresh.EVENT_COLUMNS
+        rows = list(reader)
+    assert [int(r["seq"]) for r in rows] == [e["seq"] for e in raw]
+    flat_ends = [r for r in rows if r["k"] == "task.end"]
+    assert [(r["trap"], float(r["score"])) for r in flat_ends] == \
+        [(e["data"]["trap"], e["data"]["score"]) for e in ends]
+    assert all(r["learner"] == start["data"]["learner"] and r["session_id"] == "mock-1" for r in flat_ends)
     assert (tmp_path / "learn" / "bench.csv").read_text().startswith("split,dimension,system")
+
     # the batch replay (Bruin's bkt_mastery) gives the same mastery as the live model
-    st = bkt.trace([{"skill": r["trap"], "correct": float(r["score"]) >= bkt.CORRECT_SCORE} for r in end])
-    assert round(st["unit_mismatch"]["score"], 2) == 0.61
+    batch = bkt.trace([{"skill": r["trap"], "correct": float(r["score"]) >= bkt.CORRECT_SCORE}
+                       for r in flat_ends])
+    for e in ends:
+        L.record("mock-learner", e["data"]["trap"], score=e["data"]["score"])
+    live = {t["trap"]: t for t in L.mastery("mock-learner")["traps"]}
+    for s in bkt.SKILLS:
+        assert live[s]["score"] == round(batch[s]["score"], 3)
+        assert live[s]["attempts"] == batch[s]["attempts"]
+
 
 
 NEWS = {"trap": "unit_mismatch", "headline": "Grocer's sales report mixed cents and dollars",
