@@ -25,6 +25,7 @@ All backend calls live in `client.ts`. Which backend it talks to: served by the 
 | `getSponsors(id)` | `GET /api/session/:id/sponsors` |
 | `getDemo()` | `GET /api/demo` |
 | `getHealth()` | `GET /api/health` |
+| `getBench()` | `GET /api/bench` (`{source: "bruin" \| "csv" \| "none", rows: [{split, dimension, system, macro_f1, n, record}], lines: [3 strings]}`; `Bench`, `BenchRow`; read from `recorded/bench.json` in static mode; canned from the bench README in sample mode) |
 
 Errors: a non-2xx reply or `{"error": "plain words"}` is shown as is, except 404 and 503, which show "not ready yet".
 
@@ -80,6 +81,8 @@ Build with `VITE_STATIC=1` and the app reads a recorded session from JSON files 
 |---|---|
 | `recorded/demo.json` | `{session, start, end, speed}`, or `{session: null}` (then the fake session plays and the page says "Sample data") |
 | `recorded/agents.json` | the agents list |
+| `recorded/bench.json` | `{source, rows, lines}`, the examiner benchmark (the `GET /api/bench` reply) |
+| `recorded/portraits/<agent>.png` | each agent's portrait (`vale`, `ines`, `sam`, `telem`, `riley`, `learner`); in static mode every agent's `portrait` points here, whatever agents.json says |
 | `recorded/<id>/events.json` | every event from the beginning (an array, or `{events}`) |
 | `recorded/<id>/task.json` | `{task}` |
 | `recorded/<id>/tables.json` | the tables (also tried per task first: `recorded/<id>/<task>/tables.json`) |

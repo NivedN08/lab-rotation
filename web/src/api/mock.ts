@@ -9,7 +9,7 @@ import { live } from "./mockLive";
 import type { TrapId } from "./traps";
 import { recordedEvents, SCRIPT } from "./mockSession";
 import { runMockSql } from "./mockSql";
-import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
+import type { Bench, BenchRow, DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -33,6 +33,30 @@ function parseCsv(text: string, columns: TableInfo["columns"]): Cell[][] {
 const FAKE_TABLES: FakeTable[] = (tablesJson as (TableInfo & { key?: string })[]).map(({ rowCount: _n, key: _k, ...t }) => ({ ...t, rows: parseCsv(CSVS[t.name] ?? "", t.columns) }));
 
 // ---- the fake routes ----
+
+const DIMS = ["Mistake_Identification", "Mistake_Location", "Providing_Guidance", "Actionability"] as const;
+const RECORD = [71.8, 59.8, 58.3, 70.9];
+const bench = (split: BenchRow["split"], system: string, scores: (number | null)[], n: number): BenchRow[] =>
+  DIMS.map((dimension, i) => ({ split, dimension, system, macro_f1: scores[i], n, record: RECORD[i] }));
+
+const SAMPLE_BENCH: Bench = {
+  source: "csv",
+  rows: [
+    ...bench("dev-A", "single-opus-start", [62.6, 55.7, 57.9, 61.4], 412),
+    ...bench("dev-A", "panel-opus-start", [63.8, 58.2, 57.9, 64.5], 412),
+    ...bench("dev-A", "single-opus-tuned", [71.8, 64.5, 64.8, 74.7], 412),
+    ...bench("dev-B", "single-opus-start", [58.2, 57.9, 56.6, 59.9], 411),
+    ...bench("dev-B", "single-opus-tuned", [66.4, 57.1, 59.7, 69.8], 411),
+    ...bench("dev-B", "panel-opus-start", [59.0, 58.0, 56.3, 60.3], 411),
+    ...bench("dev-B", "panel-opus-tuned", [66.5, 57.3, 60.6, 70.6], 411),
+    ...bench("test", "single-opus-tuned", [null, null, null, null], 1547),
+  ],
+  lines: [
+    "MRBench (BEA 2025), held-out dev data: our tuned grading guide adds +5.1 macro-F1 (95% CI +2.1 to +8.0).",
+    "Dev, tuned guide: MI 66.4 · ML 57.1 · PG 59.7 · AC 69.8. Best teams on the test set: 71.8 · 59.8 · 58.3 · 70.9.",
+    "Two readers plus a referee score the same as one reader (+0.5, CI -0.8 to +1.8). Test set: score pending on CodaBench.",
+  ],
+};
 
 export const DEMO_SESSION = "mock-demo";
 
@@ -119,6 +143,9 @@ export const mock = {
       sessionId === DEMO_SESSION ? { agent: q.agent, text: "This is a recording, so there is nobody to ask.", sources: [] } : live.ask(q),
       400,
     ),
+
+  // Canned from the bench README's results table, in the shape GET /api/bench sends.
+  getBench: () => wait<Bench>(SAMPLE_BENCH, 120),
 
   getAgents: () =>
     wait<AgentInfo[]>([

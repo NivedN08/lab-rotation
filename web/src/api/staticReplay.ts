@@ -2,7 +2,7 @@
 // Reading only. Anything that would change the session is refused with a short plain note.
 
 import { STATIC_FILES } from "./staticFiles";
-import type { AgentInfo, Cell, CurrentTask, DemoInfo, EventsPage, LabEvent, Mastery, SponsorTotals, TableInfo, TableProfile } from "./types";
+import type { AgentInfo, Bench, Cell, CurrentTask, DemoInfo, EventsPage, LabEvent, Mastery, SponsorTotals, TableInfo, TableProfile } from "./types";
 
 export const REPLAY_ONLY = "Replay only: this is a recorded session, so it can't be changed.";
 
@@ -46,7 +46,9 @@ export const staticReplay = {
   refuse: (): Promise<never> => Promise.reject(new Error(REPLAY_ONLY)),
 
   getDemo: () => read<DemoInfo>(STATIC_FILES.demo()),
-  getAgents: () => read<AgentInfo[]>(STATIC_FILES.agents()),
+  // Portraits come from the recording's own folder, whatever agents.json says.
+  getAgents: () => read<AgentInfo[]>(STATIC_FILES.agents()).then((agents) => agents.map((a) => ({ ...a, portrait: STATIC_FILES.portrait(a.id) }))),
+  getBench: () => read<Bench>(STATIC_FILES.bench()),
   getCurrentTask: (id: string) => read<CurrentTask | CurrentTask["task"]>(STATIC_FILES.task(id)).then((t) => (t && "task" in (t as object) ? (t as CurrentTask) : { task: (t as CurrentTask["task"]) ?? null })),
 
   async getEvents(id: string, since: number): Promise<EventsPage> {
