@@ -24,6 +24,7 @@ import os
 import pathlib
 import queue
 import random
+import re
 import secrets
 import threading
 import time
@@ -153,6 +154,50 @@ def leaks_beyond(reply: str, question: str) -> bool:
 # a line said only when the news steered the pick would tell the learner the task has a trap.
 NEWS_BRIEF = "Telem's monitor read the news this morning; I'll tell you after the verdict whether it shaped this pick."
 NEWS_WAIT_S = 3.0
+
+
+# Riley's verdict comes from the key's careless answer; the model only words it.
+_NEGATED = re.compile(r"\b(doesn'?t|does not|didn'?t|won'?t|isn'?t|is not|not)\s+(hold( up)?|true|right|correct|stand( up)?)\b",
+                      re.I)
+_SAYS = {
+    "fails": re.compile(r"\b(fails|falls apart|looks (wrong|false|off)|is (wrong|false)|untrue|debunked)\b", re.I),
+    "holds": re.compile(r"\b(holds|holds up|looks (true|right|correct|solid|legit)|is (true|right|correct)|checks out|"
+                        r"confirmed|stands up)\b", re.I),
+    "cant_tell": re.compile(r"\b(can'?t tell|cannot tell|can not tell|not sure|unclear|hard to say|can'?t say|"
+                            r"inconclusive|can'?t be (checked|sure|told)|no way to tell)\b", re.I),
+}
+
+
+_MONEY = re.compile(r"\$\s?\d")
+
+
+def verdicts_said(text: str) -> set[str]:
+    """Which verdicts a line states ('doesn't hold' counts as fails, not holds)."""
+    text = text.replace("\u2019", "'")   # models write a curly "can’t"
+    said = {"fails"} if _NEGATED.search(text) else set()
+    rest = _NEGATED.sub(" ", text)
+    return said | {v for v, rx in _SAYS.items() if rx.search(rest)}
+
+
+def rival_prompt(claim: str, tables: str, verdict: str, note: str) -> str:
+    """Riley's user prompt: the planted verdict is stated, and a can't-tell answer has no number."""
+    head = f"Claim: {claim}\nPublic tables:\n{tables}\nYour quick analysis: {note}\n"
+    if verdict == "cant_tell":
+        return head + ("Your verdict: you can't tell from this data. Say your suspicion and that you can't tell, "
+                       "in one or two breezy sentences. Give no number and do not say whether the claim holds.")
+    return head + (f"Your verdict: the claim {verdict}. Say that verdict and the numbers from your quick analysis, "
+                   "in one or two breezy sentences. Use no other numbers.")
+
+
+def rival_line(text: str, verdict: str, note: str) -> str:
+    """The model's wording, unless it states a verdict other than the planted one: then the note."""
+    said = verdicts_said(text or "")
+    made_up = verdict == "cant_tell" and _MONEY.search(text or "") and not _MONEY.search(note)
+    if text and (not said or verdict in said) and not made_up:
+        return text
+    if verdict == "cant_tell" and "cant_tell" not in verdicts_said(note):
+        return f"{note} So I can't tell from this data."
+    return note
 
 
 def topic_query(claim: str) -> str:
@@ -636,20 +681,22 @@ class Session:
     def rival_text(self) -> tuple[str, str, str]:
         """(text, model, provider) of Riley's quick answer; blocking, safe to run in the pool."""
         s, key = self.slot, self.slot.task.key
-        note = (key.get("careless") or {}).get("note", "")
+        careless = key.get("careless") or {}
+        note, verdict = careless.get("note", ""), careless.get("verdict", "holds")
         tables = dict(view("riley", self))["public tables"]
-        got = None if speaker.canned() else sources.riley_model(self.sponsors, speaker.system_prompt("riley"),
-                                  f"Claim: {s.public()['claim']}\nPublic tables:\n{tables}\n"
-                                  f"Your quick analysis: {note}\nSay your answer and your number in one or two "
-                                  "breezy sentences.")
+        prompt = rival_prompt(s.public()["claim"], tables, verdict, note)
+        got = None if speaker.canned() else sources.riley_model(self.sponsors, speaker.system_prompt("riley"), prompt)
         if got:
             text, model, provider = speaker.clean(got["text"], 60), got["model"], got["provider"]
         else:
             parts = view("riley", self) + [("your quick analysis", note)]
-            text, fb = speaker.call("riley", "Give your quick answer to the claim: your number and your verdict.",
+            text, fb = speaker.call("riley", "Give your quick answer to the claim. " + prompt.rsplit("\n", 1)[-1],
                                     parts, note, 40)
             model, provider = ("claude -p (careless prompt)" if not fb else "careless analysis"), "claude_fallback"
-        return text, model, provider
+        line = rival_line(text, verdict, note)
+        if line != text:
+            self.engine.note(self, "Riley's line stated another verdict; using the planted analysis")
+        return line, model, provider
 
     def emit_rival(self, text: str, model: str, provider: str) -> None:
         s, careless = self.slot, self.slot.task.key.get("careless") or {}
