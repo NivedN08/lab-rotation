@@ -19,9 +19,14 @@ NUDGE_BOOST = 0.15         # added to the bandit's draw for the skill in the new
 _LOCK = threading.Lock()
 
 
+def _dir() -> Path:
+    """data/learners, or LAB_LEARNERS_DIR when set (the session engine and its tests use it)."""
+    return Path(os.environ.get("LAB_LEARNERS_DIR") or DIR)
+
+
 def _path(learner: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(learner or "anon"))[:64] or "anon"
-    return DIR / f"{safe}.json"
+    return _dir() / f"{safe}.json"
 
 
 def history(learner: str) -> list[dict]:
@@ -82,6 +87,13 @@ def record(learner: str, trap: str, correct: bool | None = None, *, score: float
             out.append({"trap": s, "from": a, "to": b, "correct": bool(correct),
                         "attempts": after[s]["attempts"]})
     return out
+
+
+def update(learner: str, trap: str, correct: bool) -> dict:
+    """record() for one answer, returning that skill's mastery.update data
+    {trap, from, to, correct, attempts} (the form the session engine asks for)."""
+    ups = record(learner, trap, correct)
+    return next(u for u in ups if u["trap"] == trap)
 
 
 # ----------------------------------------------------------------------------- picking

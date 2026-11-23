@@ -198,3 +198,11 @@ def test_nudge_edge_cases():
     p = L.pick_next("ivy", tier=1, rng=random.Random(0), nudge=NEWS, use_bandit=False)
     assert p["fallback"] is True and p["nudged"] is False and p["nudge"] == NEWS
     assert not any(w in p["reason"].lower() for w in LEAK_WORDS)
+
+
+def test_update_and_learners_dir_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_LEARNERS_DIR", str(tmp_path / "elsewhere"))
+    u = L.update("jo", "unit_mismatch", True)
+    assert u == {"trap": "unit_mismatch", "from": 0.15, "to": 0.61, "correct": True, "attempts": 1}
+    assert (tmp_path / "elsewhere" / "jo.json").exists()
+    assert {t["trap"]: t["attempts"] for t in L.mastery("jo")["traps"]}["unit_mismatch"] == 1
