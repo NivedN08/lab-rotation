@@ -309,12 +309,30 @@ def band_relay(room, text: str) -> dict:
         return {"id": None, "local": True}
 
 
-def telem_search(query: str, trap_for_fallback: str, on_call) -> dict:
+class Sponsors:
+    """One session's sponsor clients (N2), each reporting to that session's log."""
+
+    def __init__(self, on_call):
+        self.on_call = on_call
+        self.lib = self.rw = None
+        try:
+            from lab.sponsors.telem import Librarian   # N2
+            self.lib = Librarian(on_call=on_call)
+        except Exception as e:
+            _log(f"Telem client unavailable ({type(e).__name__})")
+        try:
+            from lab.sponsors.runware import Runware   # N2
+            self.rw = Runware(on_call=on_call)
+        except Exception as e:
+            _log(f"Runware client unavailable ({type(e).__name__})")
+
+
+def telem_search(sp: Sponsors, query: str, trap_for_fallback: str) -> dict:
     """{query, results, trace, cached}. Results are untrusted text; callers quote them as data."""
+    on_call = sp.on_call
     try:
-        from lab.sponsors import telem   # N2
-        got = telem.search(query, on_call=on_call)
-        if got and got.get("results") is not None:
+        got = sp.lib.case_for(trap_for_fallback) if sp.lib else None
+        if got and got.get("results"):
             return {"query": got.get("query", query), "results": list(got["results"])[:3],
                     "trace": got.get("trace") or "", "cached": bool(got.get("cached", False))}
     except Exception as e:
@@ -326,29 +344,50 @@ def telem_search(query: str, trap_for_fallback: str, on_call) -> dict:
     return rec
 
 
-def tts(agent: str, text: str, on_call) -> dict:
+def case_of_day(sp: Sponsors) -> dict | None:
+    """{title, url, trace, summary, cached} from Telem's monitor, or None."""
+    try:
+        got = sp.lib.case_of_day() if sp.lib else None
+        if got and got.get("title"):
+            return got
+    except Exception as e:
+        _log(f"Telem monitor unavailable ({type(e).__name__})")
+    return None
+
+
+def tts(sp: Sponsors, agent: str, text: str, line_of: int | None = None) -> dict:
     """{file, seconds, cost?, provider}. Browser speech when Runware is not there."""
     try:
-        from lab.sponsors import runware   # N2
-        got = runware.tts(agent, text, on_call=on_call)
-        if got and got.get("file"):
+        got = sp.rw.tts(agent, text, line_of=line_of) if sp.rw else None
+        if got and got.get("file") and got.get("provider", "runware") == "runware":
             return {"file": pathlib.Path(str(got["file"])).name, "seconds": float(got.get("seconds") or 0),
                     "cost": float(got.get("cost") or 0), "provider": "runware"}
-    except Exception:
-        pass
+        if got:
+            return {"file": "", "seconds": float(got.get("seconds") or 0) or max(1.5, len(text.split()) / 2.6),
+                    "provider": "browser"}
+    except Exception as e:
+        _log(f"Runware voice unavailable ({type(e).__name__})")
     words = len(text.split())
     return {"file": "", "seconds": round(max(1.5, words / 2.6), 1), "provider": "browser"}
 
 
-def riley_model(prompt: str, on_call) -> dict | None:
-    """{text, model} from Runware's open model, or None."""
+def riley_model(sp: Sponsors, system: str, user: str) -> dict | None:
+    """{text, model, provider} from Runware's open model (or N2's own claude fallback), or None."""
     try:
-        from lab.sponsors import runware   # N2
-        fn = getattr(runware, "riley", None)
-        if fn:
-            got = fn(prompt, on_call=on_call)
-            if got and got.get("text"):
-                return {"text": str(got["text"]), "model": str(got.get("model") or "open model via Runware")}
-    except Exception:
-        pass
+        got = sp.rw.riley(system=system, user=user) if sp.rw else None
+        if got and got.get("text"):
+            prov = got.get("provider") if got.get("provider") in ("runware", "claude_fallback") else "runware"
+            return {"text": str(got["text"]), "model": str(got.get("model") or "open model via Runware"),
+                    "provider": prov}
+    except Exception as e:
+        _log(f"Runware Riley unavailable ({type(e).__name__})")
     return None
+
+
+def teamily_post(session: str, tasks: list, mastery_: dict, learner: str, on_call) -> dict | None:
+    try:
+        from lab.sponsors.teamily import Teamily   # N2
+        return Teamily(on_call=on_call).post_summary(session, tasks, mastery_, learner)
+    except Exception as e:
+        _log(f"Teamily unavailable ({type(e).__name__})")
+        return None

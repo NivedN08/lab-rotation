@@ -115,7 +115,14 @@ class Session:
         self.q: queue.Queue = queue.Queue()
         self.lock = threading.RLock()
         self.room = None
+        self._sponsors = None
         self.thread: threading.Thread | None = None
+
+    @property
+    def sponsors(self) -> sources.Sponsors:
+        if self._sponsors is None:
+            self._sponsors = sources.Sponsors(self.on_call)
+        return self._sponsors
 
     # ------------------------------------------------------------------ views for agents
     @property
@@ -158,7 +165,7 @@ class Session:
 
     def _voice(self, agent: str, text: str, line_of: int, task: str | None) -> None:
         try:
-            v = sources.tts(agent, text, self.on_call)
+            v = sources.tts(self.sponsors, agent, text, line_of=line_of)
             data = {"file": v["file"], "lineOf": line_of, "seconds": v["seconds"], "provider": v["provider"]}
             if v.get("cost") is not None and v["provider"] == "runware":
                 data["cost"] = v["cost"]
@@ -231,8 +238,9 @@ class Session:
                   f"tier {s.tier} next; the learner model favours the skills you have shown least")
         p = s.public()
         self.emit("task.picked", "vale", reason, task=s.id, text=f"Vale picked task {s.id[1:]}.",
-                  data={"taskId": s.id, "title": p["title"], "tier": s.tier, "claim": p["claim"],
-                        "reason": reason, "fallback": bool(pick.get("fallback") or s.task.stub)})
+                  data={"taskId": s.id, "title": p["title"], "brief": p["brief"], "seconds": p["seconds"],
+                        "tier": s.tier, "claim": p["claim"], "reason": reason,
+                        "fallback": bool(pick.get("fallback") or s.task.stub)})
         self.save()
         self.q.put(("brief",))
 
@@ -271,7 +279,7 @@ class Session:
         case_trap = key["trap"] if (s.tier == 1 and key["trap"] != "none") else self.rng.choice(
             [t for t in summary.TRAPS if t != "none"])
         case_query = fallback.CASES[case_trap]["query"]
-        search_f = speaker.POOL.submit(sources.telem_search, case_query, case_trap, self.on_call)
+        search_f = speaker.POOL.submit(sources.telem_search, self.sponsors, case_query, case_trap)
         line, used_fb = vale_f.result()
         if leaks(line, key["trap"]):
             line = brief_fallback
@@ -397,10 +405,13 @@ class Session:
         careless = key.get("careless") or {}
         verdict, trap = careless.get("verdict", "holds"), careless.get("trap", "none")
         note = careless.get("note", "")
-        got = sources.riley_model(f"Claim: {s.public()['claim']}\nYour quick analysis: {note}\n"
-                                  "Say your answer in one or two breezy sentences.", self.on_call)
+        tables = dict(view("riley", self))["public tables"]
+        got = sources.riley_model(self.sponsors, speaker.system_prompt("riley"),
+                                  f"Claim: {s.public()['claim']}\nPublic tables:\n{tables}\n"
+                                  f"Your quick analysis: {note}\nSay your answer and your number in one or two "
+                                  "breezy sentences.")
         if got:
-            text, model, provider = got["text"], got["model"], "runware"
+            text, model, provider = got["text"], got["model"], got["provider"]
         else:
             parts = view("riley", self) + [("your quick analysis", note)]
             text, fb = speaker.call("riley", "Give your quick answer to the claim: your number and your verdict.",
@@ -447,10 +458,21 @@ class Session:
             self.pick_task()
             return
         total = round(sum(x.grade["score"] for x in self.slots if x.grade) / len(self.slots), 2)
+        if self.mode == "rotation":
+            done = [{"taskId": x.id, "title": x.public()["title"], "trap": x.task.key["trap"],
+                     "score": x.grade["score"], "result": x.grade["result"]} for x in self.slots if x.grade]
+            sources.teamily_post(self.id, done, self.mastery_now(), self.learner, self.on_call)
         self.finished = True
         self.emit("session.end", "system", "judge mode is one task" if self.mode == "judge"
                   else "all three rotation tasks are graded", data={"tasks": len(self.slots), "totalScore": total})
         self.save()
+
+    def case_of_day(self) -> None:
+        got = sources.case_of_day(self.sponsors)
+        if got:
+            self.emit("monitor.hit", "telem", "Telem's daily monitor watches for real data errors in the news",
+                      text=f"Case of the day: {got.get('title', '')}"[:200],
+                      data={k: got.get(k, "") for k in ("title", "url", "trace", "summary")})
 
     # -------------------------------------------------------------------------- appeal
     def do_appeal(self, aid: str) -> None:
@@ -611,6 +633,7 @@ class Engine:
         s.room = sources.band_room(s.on_call)
         with s.lock:
             s.pick_task()
+        speaker.POOL.submit(s.case_of_day)
         s.start_worker()
         tasks = [{"id": x.id, "title": x.public()["title"] if x.task else f"Task {x.id[1:]}"} for x in s.slots]
         return {"sessionId": sid, "tasks": tasks, "task": s.slot.public()}

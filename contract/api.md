@@ -18,6 +18,9 @@ proxies to it. The front end's own mock is on by default; `?mock=0` calls the se
 **Server mock.** With `LAB_MOCK=1`, the server replays `contract/mock_session.jsonl`
 at real speed (`LAB_MOCK_SPEED` multiplies the speed) and serves the tables in
 `contract/mock_task/`. Every route works in mock mode.
+A start with `{"mock": true}` gets a mock session from a live server too, and any
+session id that starts with `mock-` is a mock replay. In mock mode answer, appeal and
+ask take canned replies and add no events.
 
 **Visibility.** No reply contains the answer key, the trap or the bank id of a task
 that has not been graded yet, panel whisper text before the verdict, or any key.
@@ -28,9 +31,9 @@ that has not been graded yet, panel whisper text before the verdict, or any key.
 |---|---|---|---|---|
 | Start a session | `POST /api/session/start` | optional `{mode?: "rotation" \| "judge", learner?}`. No body means rotation. | `{sessionId, tasks: [{id, title}], task}` | `lab.session.engine.start_session` |
 | Current task | `GET /api/session/:id/task` | | `{task}`, or `{task: null}` when all are done | `engine.current_task` |
-| List tables | `GET /api/session/:id/tables` | | `[{name, about, columns: [{name, type, about?}], rowCount}]` | `lab.workspace_sql.tables` |
-| Read rows | `GET /api/session/:id/tables/:table/rows?offset=&limit=` | | `{rows: [[cell]]}` | `lab.workspace_sql.table_rows` |
-| Column profiles | `GET /api/session/:id/tables/:table/profile` | | `{table, columns: [ColumnProfile]}` | `lab.workspace_sql.profile` |
+| List tables | `GET /api/session/:id/tables?task=` | `task` (optional, a slot id) | `[{name, about, columns: [{name, type, about?}], rowCount}]` | `lab.workspace_sql.tables` |
+| Read rows | `GET /api/session/:id/tables/:table/rows?offset=&limit=&task=` | | `{rows: [[cell]]}` | `lab.workspace_sql.table_rows` |
+| Column profiles | `GET /api/session/:id/tables/:table/profile?task=` | | `{table, columns: [ColumnProfile]}` | `lab.workspace_sql.profile` |
 | New events | `GET /api/session/:id/events?since=N` | `since` is the last reply's `next` (0 the first time) | `{events: [LabEvent], next}` | `engine.events_since` |
 | Run SQL | `POST /api/session/:id/sql` | `{sql}` | `{columns, rows, ms, truncated}` or `{error}` | `lab.workspace_sql.run_query`, then `engine.on_query` |
 | Submit answer | `POST /api/session/:id/answer` | `{taskId, verdict, trap, evidence: [Evidence], note}` | `{accepted: true}` | `engine.on_answer` |
@@ -39,6 +42,7 @@ that has not been graded yet, panel whisper text before the verdict, or any key.
 | Mastery | `GET /api/session/:id/mastery` | | `{traps: [{trap, score, attempts}]}` | `lab.learner.mastery` |
 | Ask an agent | `POST /api/session/:id/ask` | `{agent, text}` | `{agent, text, sources: [string]}` | `engine.ask` |
 | Agents | `GET /api/agents` | | `[{id, name, role, reads, portrait}]` | `lab.session.cast.agents` |
+| Portraits | `GET /api/portraits/:file` | | the image (not JSON) | static, from `data/portraits/` |
 | Voice audio | `GET /api/audio/:file` | | the audio file (not JSON) | static, from `data/audio/` |
 | Sponsor totals | `GET /api/session/:id/sponsors` | | `SponsorTotals` (below) | `engine.sponsor_totals` |
 | Demo replay | `GET /api/demo` | | `{session, start, end, speed}`, or `{session: null}` | `engine.demo` |
@@ -130,3 +134,16 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
 `sponsors`) keep working for a finished session, so a replay can show the workspace.
 
 **Events**: see `events.md`.
+
+## Additions (N1, after the freeze; all optional)
+
+- `task` query on `tables`, `rows` and `profile`: the slot id (`t1`, `t2`, `t3`) whose
+  tables to read, so a replay can show any task of a finished session. Without it the
+  routes use the current task, or the last one when the session is over.
+- `GET /api/agents` items also carry `title` ("Lab head", "Examiner", ...).
+  `portrait` is `/api/portraits/<agent>.png` when that file exists.
+- Roles in `GET /api/agents`: `vale` director, `ines` referee, `sam` head, `telem`
+  library, `riley` team-b. The learner is the agent id `learner`.
+- Answering a task that is not open, or appealing a task twice or before its verdict,
+  returns `409 {error}`. In judge mode (and when a rotation task's `seconds` run out) the
+  server answers for the learner with `cant_tell`, and `learner.answer`'s `why` says so.

@@ -40,7 +40,15 @@ def public_task(s) -> tuple[str, str]:
 def learner_profile(s) -> tuple[str, str]:
     rows = s.mastery_now()["traps"]
     past = [f"{x.id}: score {x.grade['score']}" for x in s.slots if x.grade]
-    return ("learner profile", "Mastery (0 to 1): " + ", ".join(f"{r['trap']} {r['score']:.2f}" for r in rows)
+    pick = (s.slot.pick or {}) if s.slot else {}
+    why = ""
+    if pick:
+        why = "\nWhy you picked this task: the learner model favours the skills shown least; tier " \
+              f"{s.slot.tier} because it is task {s.slot.id[1:]} of {len(s.slots)}"
+        if s.slot.grade:   # the draws name the trap, so they wait for the verdict
+            draws = ", ".join(f"{t} {v.get('sample')}" for t, v in (pick.get("bandit") or {}).items())
+            why += f". Full reason: {pick.get('reason', '')}" + (f" (draws: {draws})" if draws else "")
+    return ("learner profile", "Mastery (0 to 1): " + ", ".join(f"{r['trap']} {r['score']:.2f}" for r in rows) + why
             + (f"\nThis session so far: {'; '.join(past)}" if past else "\nThis session so far: no graded tasks")
             + f"\nWrong answers this session: {s.wrong_guesses}")
 
