@@ -41,6 +41,7 @@ that has not been graded yet, panel whisper text before the verdict, or any key.
 | Agents | `GET /api/agents` | | `[{id, name, role, reads, portrait}]` | `lab.session.cast.agents` |
 | Voice audio | `GET /api/audio/:file` | | the audio file (not JSON) | static, from `data/audio/` |
 | Sponsor totals | `GET /api/session/:id/sponsors` | | `SponsorTotals` (below) | `engine.sponsor_totals` |
+| Demo replay | `GET /api/demo` | | `{session, start, end, speed}`, or `{session: null}` | `engine.demo` |
 | Health | `GET /api/health` | | `{ok, mock, band: "live" \| "local"}` | |
 
 ## Shapes
@@ -115,5 +116,17 @@ when BAND is down). Replies and the ruling arrive as `appeal.message` and
  "teamily": {"posts": 0}}
 ```
 `cost` is in dollars. `teamily` is an addition the front end may ignore.
+
+**Demo**: `GET /api/demo` names a recorded session to replay on stage and on the
+live link. `session` is its sessionId; `start` and `end` are `t` values in seconds
+(the part worth showing); `speed` is the playback multiplier. Nived picks it with
+`LAB_DEMO_SESSION`, `LAB_DEMO_START`, `LAB_DEMO_END` and `LAB_DEMO_SPEED` in `.env`.
+Unset, the reply is `{session: null}` and the front end plays its own mock session.
+
+**Recorded sessions**: every session is saved as it runs to
+`data/sessions/<sessionId>.jsonl` and survives a server restart. For a finished
+session, `GET /api/session/:id/events?since=0` returns every event, and `next` stays
+at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
+`sponsors`) keep working for a finished session, so a replay can show the workspace.
 
 **Events**: see `events.md`.
