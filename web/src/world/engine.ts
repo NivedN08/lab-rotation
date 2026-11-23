@@ -174,6 +174,8 @@ export class LabEngine {
 
   seek(t: number) {
     this.live = false;
+    this.queue = [];
+    this.shownUntil = 0;
     this.liveSeen.clear();
     this.liveAnswers = {};
     this.t = Math.max(this.lo, Math.min(this.hi, t));
@@ -796,12 +798,33 @@ export class LabEngine {
   }
 
   private say(a: Actor, icon: Icon, color: string, seconds: number) {
+    if (this.oneAtATime) return this.enqueue(() => (a.bubble = { icon, color, until: this.real + seconds }), seconds);
     a.bubble = { icon, color, until: this.real + seconds };
   }
 
   private floater(x: number, y: number, text: string, color: string, seconds: number) {
+    if (this.oneAtATime) return this.enqueue(() => this.floaters.push({ x, y, text, color, until: this.real + seconds, born: this.real }), seconds);
     this.floaters.push({ x, y, text, color, until: this.real + seconds, born: this.real });
     if (this.floaters.length > 8) this.floaters.shift();
+  }
+
+  // ---- One at a time (the demo) -------------------------------------------------------------------
+  /** Bubbles and floating texts wait their turn instead of stacking. */
+  oneAtATime = false;
+  private queue: { show: () => void; seconds: number }[] = [];
+  private shownUntil = 0;
+
+  private enqueue(show: () => void, seconds: number) {
+    this.queue.push({ show, seconds: Math.min(seconds, 2.5) });
+    // At high speed the queue could fall far behind: keep only the latest few.
+    if (this.queue.length > 4) this.queue.splice(0, this.queue.length - 4);
+  }
+
+  private showNext() {
+    if (!this.oneAtATime || this.real < this.shownUntil || !this.queue.length) return;
+    const next = this.queue.shift()!;
+    next.show();
+    this.shownUntil = this.real + next.seconds;
   }
 
   /** Where a visitor stands: across the desk from the person, facing them. */
@@ -858,6 +881,7 @@ export class LabEngine {
   private idleWork() {
     const moving = this.ext ? this.ext.playing : this.playing;
     if (!this.replay.cast.size || !moving) return;
+    if (this.oneAtATime && (this.queue.length || this.real < this.shownUntil)) return; // the story's own bubbles come first
     for (const a of this.actors.values()) {
       if (!a.visible || a.bubble || a.steps.length || a.path.length) continue;
       const due = this.nextIdle.get(a.id);
@@ -931,6 +955,7 @@ export class LabEngine {
   }
 
   private update(dt: number) {
+    this.showNext();
     this.idleWork();
     this.autoCam(dt);
     const f = this.walkFactor();

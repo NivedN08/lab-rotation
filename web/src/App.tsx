@@ -11,6 +11,7 @@ import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
 import { TaskChips } from "./ui/TaskChips";
 import { Safe } from "./ui/Safe";
+import { buildScenes, sceneAt, StoryCaption } from "./ui/Story";
 import { VerdictCard, verdictFromEvents } from "./ui/Verdict";
 import { Timeline } from "./ui/Timeline";
 import { WorkspaceTab } from "./ui/WorkspaceTab";
@@ -157,6 +158,58 @@ export function App() {
       setDemoEnded(true);
     } else if (demoState.position < near) setDemoEnded(false);
   }, [demoState.status, demoState.playing, demoState.position, demoState.end]);
+  // ---- The demo as a guided story ----------------------------------------------------------------
+  // One scene at a time, one caption at a time. Each caption stays at least 5 s: the story speeds
+  // through quiet stretches, slows near the next scene, and waits there until the caption has had its time.
+  const [story, setStory] = useState(false);
+  const scenes = useMemo(() => buildScenes(demoState.timeline), [demoState.timeline]);
+  const sceneIdx = sceneAt(scenes, demoState.position);
+  const sceneShownAt = useRef(Date.now());
+  useEffect(() => {
+    sceneShownAt.current = Date.now();
+  }, [sceneIdx]);
+  const storyWait = useRef(0);
+  useEffect(() => {
+    if (!story || demoState.status !== "ready" || !demoState.playing) return;
+    const cur = scenes[sceneIdx];
+    const next = scenes[sceneIdx + 1];
+    if (!cur) return;
+    const shown = Date.now() - sceneShownAt.current;
+    if (next && demoState.position + Math.max(0.3, demoState.speed * 0.3) >= next.start && shown < 5000) {
+      demoPlayer.pause();
+      window.clearTimeout(storyWait.current);
+      storyWait.current = window.setTimeout(() => demoPlayer.play(), 5000 - shown);
+      return;
+    }
+    const want = demoState.position - cur.start < 6 || (next && next.start - demoState.position < 3) ? 1 : 6;
+    if (demoState.speed !== want) demoPlayer.setSpeed(want);
+  }, [story, scenes, sceneIdx, demoState.status, demoState.playing, demoState.position, demoState.speed]);
+  useEffect(() => () => window.clearTimeout(storyWait.current), []);
+  const goScene = (i: number) => {
+    const s = scenes[i];
+    if (!s) return;
+    window.clearTimeout(storyWait.current);
+    setDemoEnded(false);
+    setDemoHeld(false);
+    demoPlayer.seek(Math.max(demoState.start, s.start)); // the scene's own first moment
+    demoPlayer.play();
+  };
+  const startStory = () => {
+    setStory(true);
+    setWelcome(false);
+    setSelected(null);
+    setPanel(null);
+    startDemo();
+  };
+  const leaveDemo = () => {
+    setStory(false);
+    window.clearTimeout(storyWait.current);
+    stopDemo();
+  };
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.oneAtATime = demoOn;
+  }, [demoOn, replay]);
+
   const watchAgain = () => {
     setDemoHeld(false);
     setDemoEnded(false);
@@ -208,7 +261,7 @@ export function App() {
     }
   };
 
-  const enter = () => {
+  const enter = (asStory = false) => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     setView("leaving");
     const e = engine();
@@ -220,7 +273,7 @@ export function App() {
     }
     window.setTimeout(() => {
       setView("lab");
-      setWelcome(true);
+      setWelcome(!asStory); // the story starts straight away, with no welcome box
       const en = engine();
       if (en && !en.playing && en.t < (replay?.end ?? 0) - 1) en.setPlaying(true);
     }, reduced ? 0 : 1050);
@@ -350,8 +403,8 @@ export function App() {
                   setSelected(null);
                   setPanel(null);
                   setTour(null);
-                  if (e.target.value === DEMO) startDemo();
-                  else stopDemo();
+                  if (e.target.value === DEMO) startStory();
+                  else leaveDemo();
                 }}
               >
                 <option value={ROTATION}>Your rotation</option>
@@ -382,7 +435,7 @@ export function App() {
                 <button
                   className="btn quiet hide-sm"
                   aria-pressed={demoOn}
-                  onClick={() => (demoOn ? stopDemo() : startDemo())}
+                  onClick={() => (demoOn ? leaveDemo() : startStory())}
                   title={demoOn ? "Leave the demo and go back to your rotation" : "Watch a recorded rotation from start to verdict"}
                 >
                   {demoOn ? "Your rotation" : "Demo"}
@@ -484,7 +537,17 @@ export function App() {
               </button>
             </div>
 
-            {tour === null && !welcome && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} />}
+            {story && demoOn && (
+              <button className="btn story-exit" onClick={() => setStory(false)} title="Leave the story and look around the lab yourself">
+                Explore the lab
+              </button>
+            )}
+
+            {story && demoOn && !demoEnded && tour === null && (
+              <StoryCaption scenes={scenes} index={sceneIdx} events={rotation.events} onBack={() => goScene(sceneIdx - 1)} onNext={() => goScene(sceneIdx + 1)} />
+            )}
+
+            {tour === null && !welcome && !(story && demoOn) && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} />}
 
             {welcome && tour === null && (
               <div className="tour box" role="dialog" aria-label="Welcome">
@@ -669,8 +732,8 @@ export function App() {
         <Landing
           onEnter={enter}
           onDemo={() => {
-            startDemo();
-            enter();
+            startStory();
+            enter(true);
           }}
           ready={!!replay}
           status={status}

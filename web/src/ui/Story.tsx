@@ -1,0 +1,80 @@
+import type { LabEvent } from "../api/types";
+
+// The demo as a guided story: one scene at a time, following the task as the recording has it.
+// Scene starts come from the recording's own events; the words under each come from those events
+// (their text and why), with one plain line per scene saying what is going on.
+
+type Mark = { t: number; k: string; agent: string };
+
+/** `after`: the scene only starts once that scene has (the panel confers about your answer, not before it). */
+type SceneDef = { id: string; title: string; intro: string; starts: (m: Mark) => boolean; after?: string };
+
+const SCENES: SceneDef[] = [
+  { id: "brief", title: "The brief", intro: "Dr. Vale picks your task and brings it to your desk.", starts: (m) => m.k === "task.picked" },
+  { id: "context", title: "Context", intro: "Telem looks up how this kind of data usually goes wrong, and brings you a real case.", starts: (m) => m.agent === "telem" },
+  { id: "rival", title: "The rival", intro: "Riley sits down in Team B to work the same task, without ever seeing yours.", starts: (m) => m.agent === "riley" },
+  { id: "analysis", title: "Analysis", intro: "You query the tables to test the claim.", starts: (m) => m.k === "learner.query" },
+  { id: "question", title: "The question", intro: "Sam sees where you are stuck and drops by with one question, never the answer.", starts: (m) => m.agent === "sam" && m.k === "agent.say" },
+  { id: "answer", title: "Your answer", intro: "You send your verdict and evidence, and Riley's answer meets yours at the hatch.", starts: (m) => m.k === "learner.answer" },
+  { id: "panel", title: "The panel confers", intro: "Dr. Vale, Sam and Ines talk it over in private before anyone rules.", starts: (m) => m.k === "panel.whisper", after: "answer" },
+  { id: "verdict", title: "The verdict", intro: "Ines runs the Bruin checks on your answer and seals the verdict.", starts: (m) => m.k === "check.result" || m.k === "verdict", after: "answer" },
+  { id: "next", title: "What's next", intro: "Your mastery of this trap moves, and that shapes the task you get next.", starts: (m) => m.k === "mastery.update", after: "verdict" },
+];
+
+export type Scene = { id: string; title: string; intro: string; start: number };
+
+/** Each scene starts at its first event after the brief, in the order the recording has them. */
+export function buildScenes(timeline: Mark[]): Scene[] {
+  const brief = timeline.find((m) => m.k === "task.picked")?.t ?? 0;
+  const found: Scene[] = [];
+  for (const s of SCENES) {
+    const from = Math.max(brief, (s.after && found.find((f) => f.id === s.after)?.start) || 0);
+    const m = timeline.find((x) => x.t >= from && s.starts(x));
+    if (m) found.push({ id: s.id, title: s.title, intro: s.intro, start: m.t });
+  }
+  return found.sort((a, b) => a.start - b.start);
+}
+
+/** The scene playing at time t. */
+export function sceneAt(scenes: Scene[], t: number): number {
+  let i = 0;
+  for (let j = 0; j < scenes.length; j++) if (scenes[j].start <= t + 0.01) i = j;
+  return i;
+}
+
+/** The scene's key moment: its first event with words, for the caption's second line and its why. */
+function keyEvent(events: LabEvent[], from: number, to: number): LabEvent | undefined {
+  const inScene = events.filter((e) => e.t >= from && e.t < to && e.k !== "sponsor.call" && e.k !== "meter.update");
+  return inScene.find((e) => e.text && e.k !== "learner.query") ?? inScene.find((e) => e.why);
+}
+
+/** One caption, in one place: which scene, what is happening, and why. */
+export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes: Scene[]; index: number; events: LabEvent[]; onBack: () => void; onNext: () => void }) {
+  const s = scenes[index];
+  if (!s) return null;
+  const end = scenes[index + 1]?.start ?? Infinity;
+  const key = keyEvent(events, s.start, end);
+  return (
+    <div className="tour box" role="region" aria-label="The story so far" aria-live="polite">
+      <span className="count">
+        Scene {index + 1} of {scenes.length}
+      </span>
+      <h2>{s.title}</h2>
+      <p>{s.intro}</p>
+      {key && (
+        <p style={{ marginTop: 6 }}>
+          {key.text && key.k !== "learner.query" ? <span style={{ color: "var(--snow)" }}>{key.text} </span> : null}
+          <span className="why">Why: {key.why}</span>
+        </p>
+      )}
+      <div className="row">
+        <button className="btn" onClick={onBack} disabled={index === 0}>
+          Back
+        </button>
+        <button className="btn gold" onClick={onNext} disabled={index >= scenes.length - 1}>
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}

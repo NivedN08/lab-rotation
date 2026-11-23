@@ -1311,7 +1311,8 @@ a {
 /* ---- Decision log: each event's why, under its line --------------------------------------------- */
 
 .log .why,
-.item .why {
+.item .why,
+.tour .why {
   display: block;
   margin-top: 2px;
   color: var(--fog);
@@ -1345,4 +1346,13 @@ a {
   .with-strip .side {
     bottom: 104px;
   }
+}
+
+/* ---- The demo story: a way out, in the top left corner ------------------------------------------ */
+
+.story-exit {
+  position: absolute;
+  z-index: 16;
+  top: 70px;
+  left: 14px;
 }
