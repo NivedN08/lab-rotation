@@ -2,3 +2,21 @@
 .env
 .env.*
 !.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local data (DuckDB files, session logs, audio, portraits)
+data/
+*.duckdb
+*.duckdb.wal
+logs/
+
+# Web
+node_modules/
+web/dist/
+
+.DS_Store
