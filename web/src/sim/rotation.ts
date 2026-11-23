@@ -7,7 +7,12 @@ import type { Role, Run } from "../data/types";
 const ROLES = new Set<string>(["director", "library", "team-a", "team-b", "team-c", "referee", "solo", "head", "other"]);
 
 /** Shape the backend's agent list as a run the floor can draw: everyone present from the start. */
-export function rotationRun(agents: AgentInfo[]): Run {
+export function rotationRun(listed: AgentInfo[]): Run {
+  // The agent list names the panel; you, the learner, are on the floor too (id "learner",
+  // your desk in Team A), whether or not the list includes you.
+  const agents = listed.some((a) => a.id === "learner")
+    ? listed
+    : [...listed, { id: "learner", name: "You", role: "team-a", reads: "Everything you open in the workspace.", portrait: null } as AgentInfo];
   return {
     run: "rotation",
     label: "Your rotation",

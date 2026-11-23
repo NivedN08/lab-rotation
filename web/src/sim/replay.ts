@@ -113,7 +113,9 @@ export function readsWell(why: string | undefined): boolean {
 const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Scores arrive as 0 to 1; people read them as percentages. */
-export const plainNumbers = (s: string) => s.replace(/\b([01])\.(\d+)\b/g, (m) => `${Math.round(Number(m) * 100)}%`);
+// Only bare scores (0.15, 0.6): never money ($0.40), multipliers (0.5x) or numbers already in percent.
+export const plainNumbers = (s: string) =>
+  s.replace(/(?<![$£€\d.,])\b0\.\d+\b(?!\s*(?:x\b|%|times|\d))/g, (m) => `${Math.round(Number(m) * 100)}%`);
 
 /** A reason that leans on scores or internal gauges ("struggle meter 0.62") is not for people. */
 const technical = (why: string) => /\d\.\d|meter|bandit|epsilon|tier \d/i.test(why);

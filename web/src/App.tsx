@@ -3,7 +3,7 @@ import { demo as demoPlayer, getAgents, rotation as session, startDemo, stopDemo
 import { SampleBadge } from "./api/SampleBadge";
 import { useLateRotation } from "./ui/useLateRotation";
 import { Debrief } from "./ui/Debrief";
-import { MasteryChart, MuteButton, PanelRoom, SponsorStrip, Voice } from "./panels";
+import { CaseCard, MasteryChart, MuteButton, PanelRoom, SponsorStrip, Voice } from "./panels";
 import type { Run } from "./data/types";
 import { isTimeUp, Replay, TIME_UP } from "./sim/replay";
 import { rotationRun } from "./sim/rotation";
@@ -62,8 +62,11 @@ export function App() {
 
   // In the demo it waits for the end of the recording, the way the old clip ended on its results.
   // After the last task: every task has its result, or the session says it ended.
-  const sessionOver =
-    rotation.events.some((e) => e.k === "session.end") || (rotation.tasks.length > 0 && rotation.tasks.every((x) => rotation.results[x.id]));
+  // The server's session.end comes after the last verdict, the case and the mastery update, so the
+  // results card waits for it; a session that never sends one ends when every task has its result.
+  const sentEnd = rotation.events.some((e) => e.k === "session.end");
+  const sendsEnd = rotation.events.some((e) => e.k === "session.start");
+  const sessionOver = sentEnd || (!sendsEnd && rotation.tasks.length > 0 && rotation.tasks.every((x) => rotation.results[x.id]));
   const [resultsHeld, setResultsHeld] = useState(false); // the visitor left the results card
   const resultsShown = isRotation && !judge && sessionOver && !resultsHeld && (demoOn ? demoEnded && !demoHeld : !!verdictTask && closedVerdicts.includes(verdictTask));
   const verdictShown = demoOn
@@ -766,7 +769,7 @@ export function App() {
             )}
 
             {resultsShown && tour === null && !welcome && (
-              <div className="tour box" role="dialog" aria-label="Results">
+              <div className="tour box verdict" role="dialog" aria-label="Results">
                 <span className="count">Results</span>
                 <h2>
                   You passed {rotation.tasks.filter((x) => rotation.results[x.id] === "passed").length} of {rotation.tasks.length} tasks
@@ -787,6 +790,9 @@ export function App() {
                     <MasteryChart compact />
                   </Safe>
                 </div>
+                <Safe name="The case card">
+                  <CaseCard />
+                </Safe>
                 <div className="row">
                   <button
                     className="btn"
