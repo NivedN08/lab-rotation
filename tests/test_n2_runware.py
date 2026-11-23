@@ -7,8 +7,10 @@ import pytest
 from lab.sponsors import runware as rwmod
 from lab.sponsors.runware import Runware, mp3_seconds, speech_seconds
 
-# One MPEG1 layer 3 frame header at 128 kbps, then padding: 16000 bytes is 1.0 s.
-MP3 = b"\xff\xfb\x90\x00" + b"\x00" * 15996
+# 38 MPEG1 layer 3 frames at 128 kbps, 44.1 kHz: 417 bytes and 1152 samples each, 0.99 s.
+FRAME = b"\xff\xfb\x90\x00" + b"\x00" * 413
+MP3 = FRAME * 38
+MP3_S = round(38 * 1152 / 44100, 2)
 
 
 class FakeClient:
@@ -56,7 +58,11 @@ def make(tmp_path, fail=None, calls=None, fallback=None):
 def test_mp3_seconds_and_estimate(tmp_path):
     p = tmp_path / "a.mp3"
     p.write_bytes(MP3)
-    assert mp3_seconds(p) == 1.0
+    assert mp3_seconds(p) == MP3_S == 0.99
+    # VBR: the duration counts frames, so a low-bitrate first frame does not stretch it.
+    low = b"\xff\xfb\x10\x00" + b"\x00" * 100  # 32 kbps, 104 bytes
+    p.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00" + low + MP3)
+    assert mp3_seconds(p) == round(39 * 1152 / 44100, 2)
     assert speech_seconds("one two three four five six") == 2.3
 
 
@@ -65,7 +71,7 @@ def test_tts_saves_mp3_with_cost_and_caches(tmp_path):
     rw, client = make(tmp_path, calls=calls)
     line = rw.tts("ines", "Check spend by region.", line_of=7)
     assert line["provider"] == "runware" and line["file"].endswith(".mp3") and line["lineOf"] == 7
-    assert line["seconds"] == 1.0 and line["cost"] == 0.0215
+    assert line["seconds"] == MP3_S and line["cost"] == 0.0215
     assert (tmp_path / "audio" / line["file"]).exists()
     sp = client.requests[0].speech
     assert (sp.text, sp.voice) == ("Check spend by region.", "Serena")
@@ -103,7 +109,9 @@ def test_riley_on_open_model(tmp_path):
     rw, client = make(tmp_path, calls=calls)
     ans = rw.riley(system="Be careless.", user="Is the claim true?")
     assert ans == {"text": "Spend went up. Holds.", "model": rwmod.TEXT_MODEL, "provider": "runware", "cost": 0.0004}
-    assert [m.role for m in client.requests[0].messages] == ["system", "user"]
+    req = client.requests[0]  # Runware refuses a "system" message: the prompt rides in settings
+    assert [m.role for m in req.messages] == ["user"]
+    assert req.settings.systemPrompt == "Be careless." + rwmod.RILEY_GUARD  # keeps the planted verdict
     assert calls[0].op == "chat" and calls[0].by == "riley"
 
 
@@ -113,7 +121,7 @@ def test_riley_falls_back_to_claude(tmp_path):
                  fallback=lambda s, u: seen.append((s, u)) or "Fine. Holds.")
     ans = rw.riley(system="Be careless.", user="Is the claim true?")
     assert ans["provider"] == "claude_fallback" and ans["text"] == "Fine. Holds."
-    assert seen == [("Be careless.", "Is the claim true?")]
+    assert seen == [("Be careless." + rwmod.RILEY_GUARD, "Is the claim true?")]
 
 
 def test_riley_fallback_failure_is_silent_not_fatal(tmp_path):
@@ -163,3 +171,14 @@ def test_overlong_line_goes_to_browser_without_a_call(tmp_path):
     rw, client = make(tmp_path)
     line = rw.tts("vale", "word " * 500)
     assert line["provider"] == "browser" and client.requests == []
+
+
+def test_default_models_and_env_override(monkeypatch):
+    monkeypatch.delenv("RUNWARE_TTS_MODEL", raising=False)
+    monkeypatch.delenv("RUNWARE_TEXT_MODEL", raising=False)
+    rw = Runware(offline=True)
+    assert (rw.tts_model, rw.text_model) == ("inworld:tts@2", "openai:gpt@5.4-mini")
+    monkeypatch.setenv("RUNWARE_TTS_MODEL", "inworld:tts@1.5-mini")
+    monkeypatch.setenv("RUNWARE_TEXT_MODEL", "google:gemma@4-31b")
+    rw = Runware(offline=True)
+    assert (rw.tts_model, rw.text_model) == ("inworld:tts@1.5-mini", "google:gemma@4-31b")
