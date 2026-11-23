@@ -604,13 +604,13 @@ export function App() {
                     className="btn gold"
                     onClick={() => {
                       if (demoOn) return watchAgain();
-                      // Your own session, from the start, at the replay speed.
+                      // Your own session, from the start, at 4x.
                       setResultsHeld(true);
                       const e = engine();
                       if (!e) return;
                       e.seek(0);
-                      e.setSpeed(12);
-                      setSpeed(12);
+                      e.setSpeed(4);
+                      setSpeed(4);
                       e.setPlaying(true);
                     }}
                     autoFocus
