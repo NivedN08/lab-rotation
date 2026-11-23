@@ -87,9 +87,11 @@ export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Ke
  * Telem's real case of the trap: a search with data.phase "case", sent after the panel transcript.
  * Older sessions had no phase; for those, what Telem says (or finds) after the verdict.
  */
+export const isCase = (e: LabEvent) => e.k === "search" && (e.data as { phase?: string } | undefined)?.phase === "case";
+
 export function caseEvent(events: LabEvent[], from = -Infinity, to = Infinity): LabEvent | undefined {
   const inRange = events.filter((e) => e.agent === "telem" && e.t >= from && e.t < to);
-  const tagged = inRange.find((e) => e.k === "search" && (e.data as { phase?: string } | undefined)?.phase === "case");
+  const tagged = [...inRange].reverse().find(isCase);
   if (tagged) return tagged;
   const verdictAt = events.find((e) => e.k === "verdict")?.t ?? Infinity;
   const after = inRange.filter((e) => e.t >= verdictAt && e.text);

@@ -1,5 +1,7 @@
 import type { LabEvent } from "../api/types";
-import { caseEvent, plainLine, plainNumbers } from "../sim/replay";
+import { CaseCard } from "../panels";
+import { caseEvent, isCase, plainLine, plainNumbers } from "../sim/replay";
+import { Safe } from "./Safe";
 
 // The demo as a guided story: one scene at a time, following the task as the recording has it.
 // Scene starts come from the recording's own events; the words under each come from those events
@@ -63,7 +65,7 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
       ? caseEvent(events, Math.max(s.start, verdictAt), end)
       : undefined;
   return (
-    <div className="tour box" role="region" aria-label="The story so far" aria-live="polite">
+    <div className={`tour box${realCase ? " verdict" : ""}`} role="region" aria-label="The story so far" aria-live="polite">
       <span className="count">
         Scene {index + 1} of {scenes.length}
       </span>
@@ -76,10 +78,18 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
         </p>
       )}
       {realCase && (
-        <p style={{ marginTop: 6 }}>
-          <span style={{ color: "var(--snow)" }}>Telem brings a real case of this mistake. </span>
-          <span className="why">{plainNumbers(realCase.text ?? "")}</span>
-        </p>
+        <div style={{ marginTop: 8 }}>
+          <p>
+            <span style={{ color: "var(--snow)" }}>Telem brings a real case of this mistake.</span>
+          </p>
+          {isCase(realCase) ? (
+            <Safe name="The case card">
+              <CaseCard event={realCase} />
+            </Safe>
+          ) : (
+            <p className="why">{plainNumbers(realCase.text ?? "")}</p>
+          )}
+        </div>
       )}
       <div className="row">
         <button className="btn" onClick={onBack} disabled={index === 0}>

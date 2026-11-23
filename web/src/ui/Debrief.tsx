@@ -1,6 +1,6 @@
 import type { LabEvent } from "../api/types";
-import { MasteryChart, PanelRoom } from "../panels";
-import { caseEvent, plainNumbers } from "../sim/replay";
+import { CaseCard, MasteryChart, PanelRoom } from "../panels";
+import { caseEvent, isCase, plainNumbers } from "../sim/replay";
 import { Safe } from "./Safe";
 
 // Judge mode's debrief, one card at a time, centered: (1) the verdict card, then these two:
@@ -47,7 +47,13 @@ export function Debrief({ step, events, onBack, onNext, onDone }: Props) {
       {realCase && (
         <section className="section">
           <h3>Telem brings a real case of this mistake</h3>
-          <div className="quote">{plainNumbers(realCase.text ?? "")}</div>
+          {isCase(realCase) ? (
+            <Safe name="The case card">
+              <CaseCard event={realCase} />
+            </Safe>
+          ) : (
+            <div className="quote">{plainNumbers(realCase.text ?? "")}</div>
+          )}
         </section>
       )}
       <div className="row">
