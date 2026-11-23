@@ -562,7 +562,7 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 
 const ROOM_TEXT: Record<string, { role?: Role; what: string }> = {
   director: { role: "director", what: "Dr. Vale's office. Vale picks your task, walks it to your desk, and sits on the panel that rules on your answer with Ines and Sam." },
-  library: { role: "library", what: "Telem's library. When you need a method, Telem searches papers and the web for how it should be done and what usually goes wrong, then carries what it finds to your desk." },
+  library: { role: "library", what: "Telem's library. Before you answer, Telem looks up the topic and tells you what to watch for; after the verdict, he brings a real case of the same mistake." },
   "team-a": { role: "team-a", what: "Your desk is here. Sam, your mentor, sits at the head desk at the back and can drop by with a hint, never the answer." },
   "team-b": { role: "team-b", what: "Riley works the same task from the same tables, blind. Riley never sees your work and you never see Riley's until the verdict. The wall between the rooms has no door." },
   "team-c": { what: "Closed during a rotation. Nobody works here." },

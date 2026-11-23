@@ -43,23 +43,38 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
     onSeek(lo + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * span);
   };
   const moments = R.moments.filter((m) => (!filter || !m.study || m.study === filter) && m.t >= lo && m.t <= hi);
+  // A live rotation starts quiet: just the time so far, until there is a moment to go back to.
+  if (live && (!moments.length || hi - lo < 30)) {
+    return (
+      <div className="timeline box" role="group" aria-label="Session time">
+        <div className="clock">
+          <b>{fmtElapsed(t)}</b>
+          <span>{into}</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="timeline box" role="group" aria-label="Replay controls">
       <button className="btn icon gold" onClick={onPlay} aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (space)" : "Play (space)"}>
         {playing ? <PauseIcon /> : <PlayIcon />}
       </button>
-      <label className="sr-only" htmlFor="speed">
-        Speed
-      </label>
-      <select id="speed" className="speed" value={speed} onChange={(e) => onSpeed(Number(e.target.value))} title="Replay speed">
-        {SPEEDS.map((s) => (
-          <option key={s} value={s}>
-            {s}x
-          </option>
-        ))}
-      </select>
+      {!live?.on && (
+        <>
+          <label className="sr-only" htmlFor="speed">
+            Speed
+          </label>
+          <select id="speed" className="speed" value={speed} onChange={(e) => onSpeed(Number(e.target.value))} title="Replay speed">
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>
+                {s}x
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <div className="clock">
-        <b>{fmtClock(R.run.started, t)}</b>
+        <b>{session ? fmtElapsed(t) : fmtClock(R.run.started, t)}</b>
         <span>
           {fmtElapsed(t)} {into}
         </span>

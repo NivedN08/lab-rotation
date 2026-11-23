@@ -71,9 +71,15 @@ export function App() {
   const [followOn, setFollowOn] = useState(true); // the camera glides to where things happen
   const followRef = useRef(followOn);
   followRef.current = followOn;
-  const [speed, setSpeed] = useState(12);
+  const [speed, setSpeed] = useState(4); // replaying your session: slow enough to follow
   const [selected, setSelected] = useState<Target | null>(null);
-  const [panel, setPanel] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
+  const [panel, setPanelState] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
+  const [slim, setSlim] = useState(false); // the side panel shrunk to a bar
+  // Opening a tab always shows the panel in full.
+  const setPanel: typeof setPanelState = (p) => {
+    setSlim(false);
+    setPanelState(p);
+  };
   const [taskRunning, setTaskRunning] = useState(false); // the workspace has a task open: widen the panel
   const [filter, setFilter] = useState<string | null>(null);
   const [chatAgent, setChatAgent] = useState("guide");
@@ -285,6 +291,12 @@ export function App() {
     }, reduced ? 0 : 1050);
   };
 
+  /** Close the verdict card (in the demo, stop it looping back too). */
+  const closeVerdict = () => {
+    if (demoOn) setDemoHeld(true);
+    else if (verdictTask) setClosedVerdicts((c) => [...c, verdictTask]);
+  };
+
   /** Start a session in the chosen mode, then walk in. Judge mode goes straight to the Workspace. */
   const begin = (m: "rotation" | "judge") => {
     session.configure({ mode: m });
@@ -347,8 +359,9 @@ export function App() {
   useEffect(() => {
     if (view !== "lab") return;
     const onKey = (ev: KeyboardEvent) => {
-      const tag = (ev.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (ev.target as HTMLElement)?.getAttribute("role") === "slider") return;
+      const el = ev.target instanceof HTMLElement ? ev.target : null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable || el?.getAttribute("role") === "slider") return;
       const e = engine();
       if (!e) return;
       if (ev.key === " ") {
@@ -358,8 +371,13 @@ export function App() {
       } else if (ev.key === "ArrowRight") nextMoment(1);
       else if (ev.key === "ArrowLeft") nextMoment(-1);
       else if (ev.key === "Escape") {
+        // Esc closes what is on top first: the tour, then a verdict or results card, then the side panel.
         if (tour !== null) setTour(null);
-        else {
+        else if (verdictCard && verdictTask) closeVerdict();
+        else if (resultsShown) {
+          if (demoOn) setDemoHeld(true);
+          else setResultsHeld(true);
+        } else {
           setPanel(null);
           setSelected(null);
         }
@@ -486,7 +504,7 @@ export function App() {
 
             {panel && nav && (
               <aside
-                className={`side box${taskRunning && panel === "workspace" ? " wide" : ""}`}
+                className={`side box${taskRunning && panel === "workspace" ? " wide" : ""}${slim ? " slim" : ""}`}
                 aria-label={{ workspace: "Workspace", details: "Details", chat: "Ask the lab", room: "Panel room" }[panel]}
               >
                 <div className="side-head">
@@ -506,6 +524,17 @@ export function App() {
                       Panel room
                     </button>
                   </div>
+                  <button
+                    className="btn quiet icon"
+                    onClick={() => setSlim(!slim)}
+                    aria-label={slim ? "Show the panel" : "Shrink the panel to a bar"}
+                    aria-expanded={!slim}
+                    title={slim ? "Show the panel" : "Shrink to a bar and watch the floor"}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 6 6" shapeRendering="crispEdges" aria-hidden="true">
+                      {slim ? <path d="M0 1h6v1H0zM0 1h1v5H0zM5 1h1v5H5zM0 5h6v1H0z" fill="currentColor" /> : <path d="M0 4h6v2H0z" fill="currentColor" />}
+                    </svg>
+                  </button>
                   <button className="btn quiet icon" onClick={() => setPanel(null)} aria-label="Close panel" title="Close (Esc)">
                     <svg width="12" height="12" viewBox="0 0 6 6" shapeRendering="crispEdges" aria-hidden="true">
                       <path d="M0 0h1v1H0zM1 1h1v1H1zM2 2h2v2H2zM4 1h1v1H4zM5 0h1v1H5zM1 4h1v1H1zM0 5h1v1H0zM4 4h1v1H4zM5 5h1v1H5z" fill="currentColor" />
@@ -647,7 +676,7 @@ export function App() {
                 <VerdictCard
                   taskTitle={verdictTitle}
                   {...verdictCard}
-                  onClose={() => (demoOn ? setDemoHeld(true) : setClosedVerdicts((c) => [...c, verdictTask]))}
+                  onClose={closeVerdict}
                   onPanelRoom={() => {
                     if (demoOn) setDemoHeld(true);
                     else setClosedVerdicts((c) => [...c, verdictTask]);

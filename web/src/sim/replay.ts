@@ -83,15 +83,29 @@ export function whisperHidden(e: LabEvent, seen: LabEvent[]): boolean {
 export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Kept private until the verdict." };
 
 /** A lab log line for a live event: the backend's own words, nothing added. */
+/** Kinds the log leaves out: counters, the struggle meter, voice lines (the agent.say just before has the
+ * words) and walks (the floor shows them). Every event stays in each person's Details. */
+const LOG_SKIP = new Set(["sponsor.call", "meter.update", "voice.line", "agent.move"]);
+
+/** Whether a why reads like a sentence for people, not a note for the machine. */
+function readsWell(why: string | undefined): boolean {
+  if (!why) return false;
+  const words = why.trim().split(/\s+/);
+  return words.length >= 4 && !/^(speak|play|log|emit|set|call|run|poll|send)\b/i.test(why.trim());
+}
+
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function describeLive(e: LabEvent, seen: LabEvent[]): { text: string; why: string; tone?: "bad" } | null {
-  // Counters and the struggle meter tick constantly; everything else shows its text (or its why).
-  if (e.k === "sponsor.call" || e.k === "meter.update") return null;
+  if (LOG_SKIP.has(e.k)) return null;
   if (whisperHidden(e, seen)) return { ...PRIVATE_NOTE };
-  const text = e.text || e.why;
+  // The event's own line first. Without one, a system event says nothing; an agent's reason
+  // stands in only when it reads like a sentence.
+  const text = e.text || (e.agent !== "system" && readsWell(e.why) ? sentence(e.why) : "");
   if (!text) return null;
   const d = (e.data ?? {}) as { passed?: boolean; result?: string };
   const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.result === "failed");
-  return { text, why: e.text ? e.why : "", tone: bad ? "bad" : undefined };
+  return { text, why: e.text && readsWell(e.why) ? sentence(e.why) : "", tone: bad ? "bad" : undefined };
 }
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */

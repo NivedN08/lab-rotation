@@ -1276,16 +1276,51 @@ a {
 }
 
 .side.wide {
-  width: min(720px, calc(100vw - 28px));
+  width: min(600px, calc(100vw - 28px));
 }
 
 .side.wide ~ .mapctl {
-  right: 746px;
+  right: 626px;
+}
+
+/* Cards (verdict, results, story, tour) sit over the floor beside the side panel, never on it. */
+.side ~ .tour {
+  left: calc((100vw - 448px) / 2);
+  width: min(560px, calc(100vw - 476px));
+}
+
+.side.wide ~ .tour {
+  left: calc((100vw - 628px) / 2);
+  width: min(560px, calc(100vw - 656px));
+}
+
+/* Collapsed to a slim bar: just the tabs, so the floor shows while you watch. */
+.lab .side.slim {
+  bottom: auto;
+}
+
+.side.slim > :not(.side-head) {
+  display: none;
+}
+
+.side.slim ~ .tour {
+  left: 50%;
+  width: min(560px, calc(100vw - 28px));
+}
+
+.side.slim ~ .mapctl {
+  right: 14px;
 }
 
 @media (max-width: 860px) {
   .side.wide {
     width: auto;
+  }
+
+  .side ~ .tour,
+  .side.wide ~ .tour {
+    left: 50%;
+    width: min(560px, calc(100vw - 28px));
   }
 }
 

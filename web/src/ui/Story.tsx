@@ -11,7 +11,7 @@ type SceneDef = { id: string; title: string; intro: string; starts: (m: Mark) =>
 
 const SCENES: SceneDef[] = [
   { id: "brief", title: "The brief", intro: "Dr. Vale picks your task and brings it to your desk.", starts: (m) => m.k === "task.picked" },
-  { id: "context", title: "Context", intro: "Telem looks up how this kind of data usually goes wrong, and brings you a real case.", starts: (m) => m.agent === "telem" },
+  { id: "context", title: "Context", intro: "Telem looks up the topic, so you know what to watch for. He keeps the real case for later.", starts: (m) => m.agent === "telem" },
   { id: "rival", title: "The rival", intro: "Riley sits down in Team B to work the same task, without ever seeing yours.", starts: (m) => m.agent === "riley" },
   { id: "analysis", title: "Analysis", intro: "You query the tables to test the claim.", starts: (m) => m.k === "learner.query" },
   { id: "question", title: "The question", intro: "Sam sees where you are stuck and drops by with one question, never the answer.", starts: (m) => m.agent === "sam" && m.k === "agent.say" },
@@ -55,6 +55,12 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
   if (!s) return null;
   const end = scenes[index + 1]?.start ?? Infinity;
   const key = keyEvent(events, s.start, end);
+  // After the verdict, Telem brings a real case of the same mistake.
+  const verdictAt = events.find((e) => e.k === "verdict")?.t;
+  const realCase =
+    (s.id === "verdict" || s.id === "next") && verdictAt !== undefined
+      ? events.find((e) => e.agent === "telem" && (e.k === "agent.say" || e.k === "search") && e.t >= Math.max(s.start, verdictAt) && e.t < end && e.text)
+      : undefined;
   return (
     <div className="tour box" role="region" aria-label="The story so far" aria-live="polite">
       <span className="count">
@@ -66,6 +72,12 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
         <p style={{ marginTop: 6 }}>
           {key.text && key.k !== "learner.query" ? <span style={{ color: "var(--snow)" }}>{key.text} </span> : null}
           <span className="why">Why: {key.why}</span>
+        </p>
+      )}
+      {realCase && (
+        <p style={{ marginTop: 6 }}>
+          <span style={{ color: "var(--snow)" }}>Telem brings a real case of this mistake. </span>
+          <span className="why">{realCase.text}</span>
         </p>
       )}
       <div className="row">

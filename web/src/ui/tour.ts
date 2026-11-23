@@ -22,7 +22,7 @@ export function buildRotationTour(R: Replay): RotationStep[] {
   if (has("vale"))
     steps.push({ title: `${n("vale")} runs the lab`, text: `${n("vale")} picks each task, walks it over to your desk, and sits on the panel that rules on your answer.`, focus: who("vale"), select: who("vale") });
   if (has("telem"))
-    steps.push({ title: `${n("telem")} searches for you`, text: `When a task needs a method, ${n("telem")} searches papers and the web from the library terminal and carries what it finds to your desk.`, focus: who("telem"), select: who("telem") });
+    steps.push({ title: `${n("telem")} searches for you`, text: `Before you answer, ${n("telem")} looks up the topic and tells you what to watch for. After the verdict, he brings a real case of the same mistake.`, focus: who("telem"), select: who("telem") });
   if (has("learner"))
     steps.push({
       title: "This is you",
