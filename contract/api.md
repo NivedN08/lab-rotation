@@ -48,6 +48,7 @@ right after its verdict), `panel.whisper` events have no `text` and carry `seale
 | Voice audio | `GET /api/audio/:file` | | the audio file (not JSON) | static, from `data/audio/` |
 | Sponsor totals | `GET /api/session/:id/sponsors` | | `SponsorTotals` (below) | `engine.sponsor_totals` |
 | Demo replay | `GET /api/demo` | | `{session, start, end, speed}`, or `{session: null}` | `engine.demo` |
+| Bench | `GET /api/bench` | | `{source: "bruin" \| "csv" \| "none", rows: [{split, dimension, system, macro_f1, n, record}], lines: [3 strings]}` | `lab.session.bench.results` |
 | Health | `GET /api/health` | | `{ok, mock, band: "live" \| "local"}` | |
 
 ## Shapes
@@ -161,3 +162,11 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
   `events.md`.
 - `ask` to `telem` runs a live Telem search with the learner's question; the reply adds
   `links` (`[{title, url}]`) and `trace`.
+
+**Bench**: `GET /api/bench` gives N4's MRBench results for the examiner panel. Rows come
+from Bruin's `learn.bench_results` (`source: "bruin"`), else N4's `data/bench/results.csv`
+(`"csv"`), else none. `split` is `dev-A`, `dev-B` or `test` as recorded: never show a dev
+number as a test number. `macro_f1` is a percent, `null` for `test` until CodaBench scores
+it; `n` is replies scored (or predicted, for `test`); `record` is the best BEA 2025
+test-set score for that dimension. `lines` are the three on-screen demo lines from
+`bench/README.md`, each naming its split.

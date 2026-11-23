@@ -442,7 +442,8 @@ def test_glasser_fact_in_the_level_2_hint_and_the_verdict(env, monkeypatch):
     assert "bought" not in hint1["data"]
     verdict = next(e for e in evs if e["k"] == "verdict")["data"]
     assert verdict["benchmark"]["low"] == 25.62 and verdict["text"].endswith(
-        f"Reality check: {STAPLES}, from Glasser ($0.008).")
+        f"Reality check: {STAPLES}, from Glasser ($0.008). The $1,067 a quick read gives (members' average "
+        "spend per visit, before the fix) should have looked wrong: fixed, it is $37.")
     assert calls == [("basket", "sam"), ("basket", "ines")]
 
 
@@ -522,3 +523,17 @@ def test_one_glasser_per_session(monkeypatch):
     b = sources.glasser_benchmark(sp, "basket", "ines")
     assert len(made) == 1 and a["cost"] == 0.008 and b["cost"] == 0.0
     assert [c["count"] for c in seen] == [1, 0]   # the repeat is reported, free
+
+
+def test_naive_sentence_only_when_the_quick_number_is_clearly_off():
+    from lab.session.engine import naive_sentence
+    unit = {"value": 1632.71, "unit": "USD per visit", "label": "members' average spend per visit, before the fix",
+            "group": "members", "fixed": 42.53}
+    assert naive_sentence({"trap": "unit_mismatch", "naive": unit}) == (
+        "The $1,633 a quick read gives (members' average spend per visit, before the fix) should have looked "
+        "wrong: fixed, it is $43.")
+    assert naive_sentence({"trap": "confounder", "naive": {**unit, "value": 42.53}}) == ""      # value == fixed
+    assert naive_sentence({"trap": "duplicate_rows", "naive": {**unit, "value": 47.1}}) == ""   # a few dollars
+    assert naive_sentence({"trap": "hidden_variable"}) == ""                                   # no naive key
+    assert naive_sentence({"trap": "none", "naive": unit}) == ""
+    assert naive_sentence({"trap": "unit_mismatch", "naive": {**unit, "fixed": 0}}) == ""

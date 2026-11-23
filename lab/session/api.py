@@ -172,6 +172,9 @@ def route(method: str, path: str, q: dict, body):
         return cast.agents()
     if method == "GET" and parts == ["demo"]:
         return summary.demo()
+    if method == "GET" and parts == ["bench"]:
+        from lab.session import bench
+        return bench.results()
     if parts[:1] != ["session"] or len(parts) < 2:
         raise ApiError(404, "unknown endpoint")
 

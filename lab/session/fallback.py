@@ -23,6 +23,9 @@ STUB_KEY = {
                         "members average 37.05 and others 35.00: not 2.4x."},
     "careless": {"verdict": "holds", "trap": "none",
                  "note": "Members average 1067 vs 441 for others. That's 2.4x. Claim holds."},
+    # N3's shape: the careless headline number and the careful one for the same group.
+    "naive": {"value": 1067, "unit": "USD per visit", "label": "members' average spend per visit, before the fix",
+              "group": "members", "fixed": 37.05},
     "checks": [
         {"check": "duplicate_rows.unique_visit", "trap": "duplicate_rows",
          "sql": "select visit_id, count(*) as n from visits group by 1 having count(*) > 1 order by 1 limit 5",

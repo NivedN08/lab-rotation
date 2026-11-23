@@ -249,6 +249,6 @@ def test_mock_shows_the_telem_and_glasser_additions(mock):
     hint2 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 2)
     assert hint2["data"]["bought"]["sponsor"] == "glasser" and "($26 to $67)" in hint2["text"]
     verdict = next(e for e in evs if e["k"] == "verdict")["data"]
-    assert verdict["benchmark"]["low"] == 25.62 and verdict["text"].endswith("($26 to $67), from Glasser.")
+    assert verdict["benchmark"]["low"] == 25.62 and "($26 to $67), from Glasser. The $1,067 a quick read gives" in verdict["text"]
     repeat = [e for e in evs if e["k"] == "sponsor.call" and e["data"]["sponsor"] == "glasser" and e["data"]["by"] == "ines"]
     assert repeat[0]["data"]["count"] == 0 and repeat[0]["data"]["cost"] == 0   # bought once per session

@@ -133,7 +133,10 @@ are there for the lab log, the verdict card and the people reading them.
   `parts` (`{verdict, trap, evidence, hints}`), `correctVerdict`, `correctTrap`, `text`
   (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`),
   `benchmark?` (`{kind, label, value?, low, high, unit, source, cost, trace, cached}`, the
-  Glasser number behind the reality-check sentence that ends `text`; built in code).
+  Glasser number behind the reality-check sentence that ends `text`; built in code). When
+  the careless answer's number is more than 3 times the careful one (in practice a unit
+  mix-up), one more sentence follows: "The $1,067 a quick read gives (...) should have
+  looked wrong: fixed, it is $37."
 - `ledger.seal` (system): `index`, `hash`, `prev`, `record` (`{taskId, score, verdict, trap}`).
 
 ### Appeal

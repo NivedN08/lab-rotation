@@ -117,3 +117,34 @@ def test_checks_agree_with_the_bruin_call():
             assert not d.get("failed")
             # A Glasser lookup already bought this session is free: count 0, cost 0.
             assert d["count"] == 1 or (d["count"] == 0 and d["sponsor"] == "glasser" and d.get("cost") == 0)
+
+
+def test_bench_route_reads_bruin_then_the_csv(tmp_path, monkeypatch):
+    import duckdb
+    from lab.session import api, bench
+    header = "split,dimension,system,macro_f1,n,record\n"
+    csv_file = tmp_path / "results.csv"
+    csv_file.write_text(header + "test,Actionability,panel-opus-tuned,,1547,70.9\n"
+                                 "dev-B,Actionability,panel-opus-tuned,69.8,411,70.9\n")
+    monkeypatch.setattr(bench, "WAREHOUSE", tmp_path / "missing.duckdb")
+    monkeypatch.setattr(bench, "RESULTS_CSV", csv_file)
+    monkeypatch.setattr(bench, "README", tmp_path / "README.md")   # no README: the built-in lines
+    status, got = api.handle("GET", "/api/bench", "", None)
+    assert status == 200 and got["source"] == "csv" and len(got["lines"]) == 3
+    assert got["rows"] == [
+        {"split": "dev-B", "dimension": "Actionability", "system": "panel-opus-tuned", "macro_f1": 69.8, "n": 411,
+         "record": 70.9},
+        {"split": "test", "dimension": "Actionability", "system": "panel-opus-tuned", "macro_f1": None, "n": 1547,
+         "record": 70.9}]
+    wh = tmp_path / "warehouse.duckdb"
+    con = duckdb.connect(str(wh))
+    con.execute("create schema learn")
+    con.execute("create table learn.bench_results as select 'dev-A' as split, 'Mistake_Location' as dimension, "
+                "'single-opus-start' as system, 55.0::double as macro_f1, 400::bigint as n, '59.8' as record")
+    con.close()
+    monkeypatch.setattr(bench, "WAREHOUSE", wh)
+    (tmp_path / "README.md").write_text("# Bench\n\n## Demo lines\n\nText:\n\n    one\n    two\n    three\n\n## Next\n")
+    got = api.handle("GET", "/api/bench", "", None)[1]
+    assert got["source"] == "bruin" and got["lines"] == ["one", "two", "three"]
+    assert got["rows"] == [{"split": "dev-A", "dimension": "Mistake_Location", "system": "single-opus-start",
+                            "macro_f1": 55.0, "n": 400, "record": 59.8}]   # record is text in Bruin, a number here
