@@ -77,9 +77,17 @@ export default function Workspace({ onTaskChange }: Props) {
           )}
           <div className="ws-task" key={`brief-${task.id}`}>
             <div className="ws-task-head">
-              <h2 className="ws-title">{task.title}</h2>
+              <h2 className="ws-title">
+                {task.title}
+                {task.tier && <span className="ws-tier">{task.tier}</span>}
+              </h2>
               <Timer startedAt={startedAt} seconds={task.seconds} />
             </div>
+            {task.claim && (
+              <p className="ws-claim">
+                <b>Claim:</b> {task.claim}
+              </p>
+            )}
             <p className="ws-brief">{task.brief}</p>
           </div>
           <TableBrowser sessionId={sessionId} tables={tables} />

@@ -20,6 +20,12 @@ export type TaskInfo = {
   brief: string;
   /** Time allowed, in seconds. */
   seconds: number;
+  /** Difficulty tier of the task. */
+  tier?: string;
+  /** The claim the learner is checking. */
+  claim?: string;
+  /** Why this task was picked for this learner. */
+  reason?: string;
 };
 
 /** Tasks arrive one at a time. `task` is the current one, or null when all are done. */
@@ -133,5 +139,5 @@ export type SponsorTotals = {
   glasser: { calls: number };
 };
 
-/** The recorded session the backend picked for the demo. `start` and `end` are seconds since that session began. */
-export type DemoInfo = { session: string; start: number; end: number; speed: number };
+/** The recorded session the backend picked for the demo, or `session: null` when there is none. `start` and `end` are seconds since that session began. */
+export type DemoInfo = { session: string | null; start: number; end: number; speed: number };

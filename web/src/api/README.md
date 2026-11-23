@@ -25,7 +25,7 @@ All timestamps `t` are seconds since the session started. `:id` is the `sessionI
 | Ask an agent | `POST /api/session/:id/ask` | `{agent, text}` (`agent` is an agent id) | `{agent, text, sources: [string]}`. The agent answers only from what it could see; `sources` says what it used. |
 | Agents | `GET /api/agents` | nothing | `[{id, name, role, reads, portrait}]`. `role` is the floor role (`director`, `referee`, `library`, `head`, `team-a`, `team-b`). `reads` is what the agent can read, in plain words. `portrait` is an image URL or `null`. |
 | Voice audio | `GET /api/audio/:file` | nothing | The audio file itself (not JSON). `:file` is the `data.file` of a `voice.line` event. |
-| Demo session | `GET /api/demo` | nothing | `{session, start, end, speed}`: the id of the recorded session the backend picked for the demo, the seconds (since that session began) to play from and to, and the playback speed (1 is normal). The front end then reads that session's tables, task and events with the routes above, using `session` as `:id`. |
+| Demo session | `GET /api/demo` | nothing | `{session, start, end, speed}`: the id of the recorded session the backend picked for the demo, the seconds (since that session began) to play from and to, and the playback speed (1 is normal). Only `start` to `end` is played, at `speed`, on a loop. `{session: null}` means there is no demo: the front end falls back to the fake session and shows "Sample data". The front end then reads that session's tables, task and events with the routes above, using `session` as `:id`. |
 | Sponsor totals | `GET /api/session/:id/sponsors` | nothing | `{band: {messages}, telem: {searches, monitorHits, traces: [string]}, bruin: {checksRun, checksFailed}, runware: {lines, cost}, glasser: {calls}}`. `cost` is in dollars. |
 
 ## Ids and values
@@ -92,13 +92,13 @@ Data that the front end reads:
 
 The demo replays a **real recorded session** from the backend, never fake data. It is front end only apart from `GET /api/demo`.
 
-1. `getDemo()` calls `GET /api/demo` and gets `{session, start, end, speed}`.
+1. `getDemo()` calls `GET /api/demo` and gets `{session, start, end, speed}`. With `session: null` it uses the fake session instead (see below).
 2. It loads that session's whole event list from the beginning with the normal events route (`GET /api/session/:session/events?since=...`, repeated until it returns no events), so the recording must be readable from `since=0` after it has finished.
 3. A player moves a clock through `start` to `end`, looping at the end, and feeds the same rotation state and events a live session produces. `useRotation()` and `subscribeEvents()` work unchanged. Nothing starts a live session while the demo runs.
 
 Controls: `startDemo()` (or `?demo=1`), `stopDemo()`, `demo.play()`, `demo.pause()`, `demo.toggle()`, `demo.setSpeed(n)`, `demo.seek(t)`. `useDemo()` gives `{status, error, playing, speed, position, start, end, sample, timeline}`. `timeline` lists every recorded event's `seq`, `t`, `k` and `agent`, so the bottom timeline can draw marks and rewind. `subscribeJump(cb)` fires on every seek and every loop with the new time and all events up to it, so the floor can reset and redraw; `subscribeEvents` still gets only new events during normal playback.
 
-For the demo to show the task and the top bar, the `task.picked` event's `data` must carry `{taskId, title, brief, seconds}` (the same task shape as the session routes). Without `title`, tasks are called "Task 1", "Task 2", and so on.
+For the demo to show the task and the top bar, the `task.picked` event's `data` carries `{taskId, title, tier, claim, reason, brief, seconds}`. In a replay the task is shown from `task.picked` only; nothing else is asked for it. Without `title`, tasks are called "Task 1", "Task 2", and so on.
 
 **Mock mode only:** `getDemo()` returns the fake session (`mockSession.ts`), `sample` is `true`, and the page shows a "Sample data" chip (`SampleBadge`, mounted once in the app) for as long as it plays. Against a real backend `sample` is `false` and nothing says "sample".
 

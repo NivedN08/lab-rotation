@@ -5,6 +5,7 @@
 
 import { useSyncExternalStore } from "react";
 import { getDemo, getEvents, useMock } from "./client";
+import { mock } from "./mock";
 import { drive } from "./session";
 import type { AgentId, LabEvent, TaskInfo } from "./types";
 
@@ -45,8 +46,17 @@ function set(patch: Partial<DemoState>) {
 // ---- turning recorded events into the rotation state ----
 
 const taskOf = (e: LabEvent, n: number): TaskInfo => {
+  // In a replay the task comes from task.picked only.
   const d = (e.data ?? {}) as Partial<TaskInfo> & { taskId?: string };
-  return { id: String(d.taskId ?? e.task ?? `t${n}`), title: d.title ?? `Task ${n}`, brief: d.brief ?? e.text ?? "", seconds: d.seconds ?? 600 };
+  return {
+    id: String(d.taskId ?? e.task ?? `t${n}`),
+    title: d.title ?? `Task ${n}`,
+    brief: d.brief ?? e.text ?? "",
+    seconds: d.seconds ?? 600,
+    tier: d.tier,
+    claim: d.claim,
+    reason: d.reason,
+  };
 };
 
 function derive(pos: number) {
@@ -110,22 +120,30 @@ async function load() {
   drive.claim(load);
   set({ ...off, status: "loading", sample: useMock() });
   try {
-    const info = await getDemo();
+    let info = await getDemo();
+    let sample = useMock();
+    if (info.session === null) {
+      // The backend has no recorded demo: fall back to the fake session, and say so.
+      info = await mock.getDemo();
+      sample = true;
+    }
+    const session = info.session as string;
     // The full event list from the beginning, with the same events route a live session uses.
     const all: LabEvent[] = [];
     let since = 0;
     for (let i = 0; i < 200; i++) {
-      const page = await getEvents(info.session, since);
+      const page = await getEvents(session, since);
       if (!page.events.length) break;
       all.push(...page.events);
       since = page.next;
     }
     if (mine !== token) return;
     events = all.sort((a, b) => a.t - b.t || a.seq - b.seq);
-    sessionId = info.session;
+    sessionId = session;
     const first = derive(info.start);
     drive.open(sessionId, first.tasks);
     set({
+      sample,
       status: "ready",
       playing: true,
       speed: info.speed || 1,
@@ -188,6 +206,9 @@ export function stopDemo() {
   set({ ...off });
   drive.release();
 }
+
+/** Every recorded event, for readers that need what is still to come (for example mastery before and after an update). */
+export const getRecordedEvents = (): LabEvent[] => events;
 
 /** The demo's current state without subscribing (for code outside React). */
 export const getDemoState = (): DemoState => state;

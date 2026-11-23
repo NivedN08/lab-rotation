@@ -651,3 +651,23 @@
     animation: none;
   }
 }
+
+.ws-tier {
+  margin-left: 10px;
+  padding: 1px 8px;
+  background: var(--night-3);
+  color: var(--mist);
+  font-family: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.ws-claim {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  font-size: 14px;
+}
