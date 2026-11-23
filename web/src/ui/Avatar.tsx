@@ -1,9 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Role } from "../data/types";
 import { lookFor, personSprite, SPR_H, SPR_W } from "../world/people";
 
-/** A person's sprite, scaled up with hard pixels. */
-export function Avatar({ id, role, scale = 5 }: { id: string; role: Role; scale?: number }) {
+/** A person's portrait from the backend when there is one, otherwise their sprite scaled up with hard pixels. */
+export function Avatar({ id, role, scale = 5, portrait }: { id: string; role: Role; scale?: number; portrait?: string | null }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [portrait]);
+  if (portrait && !broken) return <img className="photo" src={portrait} alt="" onError={() => setBroken(true)} />;
+  return <Sprite id={id} role={role} scale={scale} />;
+}
+
+function Sprite({ id, role, scale }: { id: string; role: Role; scale: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current;

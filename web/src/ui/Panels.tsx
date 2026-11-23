@@ -92,10 +92,40 @@ export function PersonButton({ id, R, t, select, note }: { id: string; R: Replay
 
 // ---- A person ---------------------------------------------------------------------------------
 
+const PLACE_WORDS: Record<string, string> = {
+  door: "the door",
+  vale_office: "Dr. Vale's office",
+  learner_desk: "your desk",
+  riley_desk: "Riley's desk",
+  shelves: "the library shelves",
+  terminal: "the Bruin terminal",
+  panel_table: "the panel table",
+  whiteboard: "the whiteboard",
+};
+const KIND_WORDS: Record<string, string> = {
+  "voice.line": "Says it out loud",
+  "panel.whisper": "Passes a note to the panel",
+  "learner.evidence": "Cites evidence",
+  "ledger.seal": "Seals the record",
+  "task.end": "The task ends",
+  "session.end": "The session ends",
+  "session.start": "The session starts",
+};
+
+/** Plain words for an event that has no line of its own. */
+function plainKind(e: LabEvent): string {
+  if (e.k === "agent.move") {
+    const place = String((e.data as { place?: string } | undefined)?.place ?? "");
+    return `Walks to ${PLACE_WORDS[place] ?? place.replace(/_/g, " ")}`;
+  }
+  return KIND_WORDS[e.k] ?? e.k.replace(/[._]/g, " ");
+}
+
 /** A person in your rotation: who they are, what they can read, and every decision they made and why. */
 export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
   const { R } = nav;
   const a = R.agents.get(id)!;
+  // The portrait comes from the backend's agent list (Runware), when it sends one.
   const seen = (nav.live ?? []).filter((e) => e.t <= nav.t + 0.5);
   // Whispers keep their words and reason private until the verdict.
   const mine = seen
@@ -107,7 +137,7 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
     <div style={band(a.role, id)}>
       <div className="who">
         <div className="portrait">
-          <Avatar id={id} role={a.role} scale={5} />
+          <Avatar id={id} role={a.role} scale={5} portrait={a.portrait} />
         </div>
         <div>
           <h2>{R.name(id)}</h2>
@@ -145,7 +175,7 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
         {!mine.length && <p className="empty">Nothing yet.</p>}
         {mine.map((e) => (
           <div className="item" key={e.seq}>
-            <div className="label">{e.text ?? e.k}</div>
+            <div className="label">{e.text ?? plainKind(e)}</div>
             <div className="meta">{fmtElapsed(e.t)} into the session</div>
             <span className="why">Why: {e.why}</span>
           </div>

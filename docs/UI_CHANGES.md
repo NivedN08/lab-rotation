@@ -37,7 +37,7 @@
 - [x] 13. Panel room tab in the side panel: the BAND transcript, opened after the verdict
 - [ ] 14. Live updates every second instead of every 8 (`App.tsx`), or the event stream if Nived ships it
 - [ ] 15.* Appeal view inside the Panel room tab
-- [ ] 16.* Runware portraits in the Details panel (`ui/Avatar.tsx`)
+- [x] 16.* Runware portraits in the Details panel (`ui/Avatar.tsx`)
 - [x] 17.* Tour rewritten for a rotation (`ui/tour.ts`); judge mode button on the landing page
 
 **Workspace session** (only `web/src/workspace/`, own `workspace.css`)
@@ -112,6 +112,7 @@ No new animation types are needed. Each new event reuses one that the original a
 - Floor places (Nived's list): door = lobby door, vale_office = Vale's desk, learner_desk / riley_desk = those desks, shelves = library shelves, terminal = the Bruin terminal (Ines now sits at the bench under the Bruin sign), panel_table = the referee table with a set spot per person, whiteboard = a new easel whiteboard by Sam's desk. Every agent.move walks from `from` to `place`. Whispers show as envelopes only; their words and reason stay hidden in the lab log, Details and captions until the verdict, replays included. Idle: people now and then get up for a short wander near their desk.
 - Bruin terminal: Ines's seat at the referee bench now has a bigger screen on a green base.
 - 17 (judge mode): "Judge mode" next to "Start your rotation" on the opening screen starts a session with mode judge: one task on its 4-minute clock, a Judge mode chip in the top bar, the Workspace open straight away, and at the verdict the full debrief (verdict card with your mastery chart, and the Panel room transcript beside it). No session starts until the visitor picks rotation, judge mode or the demo.
+- 16: when the agents function sends a portrait URL, the Details panel shows it in the portrait frame; with none (or a broken link) it keeps the pixel sprite. Events without their own line read in plain words there ("Walks to the whiteboard", "Says it out loud").
 - 8: top bar shows Task 1, 2, 3 with passed/failed marks and the time left, all read from the shared rotation state (same clock as the workspace timer); clicking a task opens the Workspace tab. Falls back to the study chips when there is no rotation.
 - 7: every rotation event from the shared poll plays one of the floor's existing animations on the cast (table above); the lab log shows the backend's own line for each event. Live animations keep moving while the replay is paused. The hatch shows "answers match" or "answers differ" by comparing the two answers as sent.
 - Rotation floor: the floor opens on your rotation, built from the backend's agent list and matched by id (vale, ines, sam, telem, riley, learner); recorded runs stay in the run picker with their timeline, tour and demo. Every event's why shows under its lab log line and in a person's Details panel ("Decisions, and why").
