@@ -513,6 +513,9 @@ def test_one_glasser_per_session(monkeypatch):
 
     import types, sys
     monkeypatch.setitem(sys.modules, "lab.sponsors.glasser", types.SimpleNamespace(Glasser=FakeGlasser))
+    # The real Telem and Runware clients would read .env into this process; keep them out.
+    monkeypatch.setitem(sys.modules, "lab.sponsors.telem", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "lab.sponsors.runware", types.SimpleNamespace())
     seen = []
     sp = sources.Sponsors(seen.append)
     a = sources.glasser_benchmark(sp, "basket", "sam")

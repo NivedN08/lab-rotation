@@ -29,7 +29,7 @@ def sponsor_totals(events: list[dict]) -> dict:
         if e.get("k") != "sponsor.call":
             continue
         d = e.get("data") or {}
-        n = int(d.get("count") or 1)
+        n = 1 if d.get("count") is None else int(d["count"])   # 0: a free repeat, not a call
         sp, op = d.get("sponsor"), d.get("op")
         if sp == "band":
             out["band"]["messages"] += n
