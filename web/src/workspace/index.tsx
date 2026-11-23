@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { EvidenceTray } from "./EvidenceTray";
 import { SqlBox } from "./SqlBox";
 import { TableBrowser } from "./TableBrowser";
 import { loadTables } from "./fakeData";
@@ -23,6 +24,7 @@ export default function Workspace(_props: Props) {
       <h2 className="ws-title">Tables</h2>
       {tables ? <TableBrowser tables={tables} /> : <p className="empty">Loading tables…</p>}
       <SqlBox />
+      <EvidenceTray />
     </div>
   );
 }

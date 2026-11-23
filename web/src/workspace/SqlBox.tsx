@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Grid } from "./Grid";
 import { runSql, type SqlResult } from "./runSql";
 import { ROW_CAP } from "./TableBrowser";
 
@@ -56,34 +57,7 @@ export function SqlBox() {
             <p className="empty">The query ran and returned no rows. ({result.ms} ms)</p>
           ) : (
             <>
-              <div className="ws-grid-wrap" tabIndex={0} aria-label="Query results">
-                <table className="ws-grid">
-                  <thead>
-                    <tr>
-                      <th className="ws-rownum" scope="col">
-                        #
-                      </th>
-                      {result.columns.map((c) => (
-                        <th key={c} scope="col">
-                          {c}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, i) => (
-                      <tr key={i}>
-                        <td className="ws-rownum">{i + 1}</td>
-                        {row.map((cell, j) => (
-                          <td key={j} className={cell === null ? "ws-null" : typeof cell === "number" ? "ws-num" : undefined}>
-                            {cell === null ? "null" : String(cell)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Grid source="query" sql={result.sql} columns={result.columns.map((name) => ({ name }))} rows={rows} label="Query results" />
               <p className="empty">
                 {result.rows.length} row{result.rows.length === 1 ? "" : "s"} in {result.ms} ms
                 {result.rows.length > ROW_CAP ? `, showing the first ${ROW_CAP}` : ""}

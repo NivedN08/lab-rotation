@@ -1,7 +1,7 @@
 import { FAKE_TABLES } from "./fakeData";
 import type { Cell } from "./types";
 
-export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number; offline: boolean };
+export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number; offline: boolean; sql: string };
 
 /**
  * Sends the query to the server's runner (POST /api/sql -> {columns, rows} or {error}).
@@ -19,13 +19,13 @@ export async function runSql(sql: string): Promise<SqlResult> {
     if (res.status !== 404 && res.status !== 503 && (res.headers.get("content-type") ?? "").includes("json")) {
       const body = await res.json();
       if (!res.ok || body.error) throw new Error(body.error ?? `The runner returned ${res.status}.`);
-      return { columns: body.columns, rows: body.rows, ms: Math.round(performance.now() - t0), offline: false };
+      return { columns: body.columns, rows: body.rows, ms: Math.round(performance.now() - t0), offline: false, sql };
     }
   } catch (e) {
     if (e instanceof Error && !(e instanceof TypeError)) throw e;
   }
   const r = standIn(sql);
-  return { ...r, ms: Math.round(performance.now() - t0), offline: true };
+  return { ...r, ms: Math.round(performance.now() - t0), offline: true, sql };
 }
 
 function standIn(sql: string): { columns: string[]; rows: Cell[][] } {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Grid } from "./Grid";
 import type { Table } from "./types";
 
 export const ROW_CAP = 50;
@@ -23,35 +24,7 @@ export function TableBrowser({ tables }: { tables: Table[] }) {
         ))}
       </div>
       <p className="empty ws-about">{table.about}</p>
-      <div className="ws-grid-wrap" tabIndex={0} aria-label={`${table.name} rows`}>
-        <table className="ws-grid">
-          <thead>
-            <tr>
-              <th className="ws-rownum" scope="col">
-                #
-              </th>
-              {table.columns.map((c) => (
-                <th key={c.name} scope="col">
-                  {c.name}
-                  <span className="ws-type">{c.type}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                <td className="ws-rownum">{i + 1}</td>
-                {row.map((cell, j) => (
-                  <td key={j} className={cell === null ? "ws-null" : typeof cell === "number" ? "ws-num" : undefined}>
-                    {cell === null ? "null" : String(cell)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Grid source={table.name} columns={table.columns} rows={rows} label={`${table.name} rows`} />
       <div className="ws-foot">
         <span>
           Showing {rows.length} of {table.rows.length} rows

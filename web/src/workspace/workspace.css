@@ -149,3 +149,121 @@
   color: var(--snow);
   font-size: 13px;
 }
+
+/* ---- Evidence picker ---- */
+
+.ws-hit {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ws-hit:hover {
+  color: var(--gold-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ws-cell {
+  cursor: pointer;
+}
+
+.ws-cell:hover {
+  background: var(--night-3);
+}
+
+.ws-grid .ws-cited {
+  background: rgba(255, 201, 92, 0.16);
+}
+
+.ws-grid td.ws-cited {
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.ws-grid th.ws-cited .ws-hit {
+  color: var(--gold);
+}
+
+.ws-grid tr.ws-cited .ws-rownum .ws-hit {
+  color: var(--gold);
+}
+
+.ws-tray {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-tray-head .btn {
+  margin-left: auto;
+  min-height: 28px;
+}
+
+.ws-cites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-cites li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ws-cites .btn.icon {
+  margin-left: auto;
+  width: 28px;
+  min-height: 28px;
+  flex: none;
+}
+
+.ws-kind {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+  text-transform: uppercase;
+  cursor: default;
+  flex: none;
+}
+
+.ws-kind.row {
+  color: var(--team-a);
+}
+
+.ws-kind.column {
+  color: var(--library);
+}
+
+.ws-kind.cell {
+  color: var(--good);
+}
+
+.ws-cite-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ws-cite-sql {
+  display: block;
+  margin-top: 2px;
+  color: var(--fog);
+  font-size: 11.5px;
+}
