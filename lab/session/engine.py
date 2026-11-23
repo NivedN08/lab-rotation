@@ -51,10 +51,12 @@ LEAK = {"duplicate_rows": ("duplicate_rows", "duplicate", "double-count", "count
 SPONSOR_WHY = {"band": "the panel talks in its BAND room",
                "telem": "the librarian finds real cases with Telem AI",
                "runware": "every spoken line is a Runware voice",
-               "bruin": "Bruin's checks prove the planted trap",
+               "bruin": "Bruin's checks show where the data breaks, if it does",
                "glasser": "real retail numbers come from Glasser",
                "teamily": "the practice summary goes to Teamily"}
 
+SPONSOR_OP_WHY = {("bruin", "run"): "the learner model runs as a Bruin asset",
+                  ("telem", "monitor"): "Telem's monitor reads the news each morning"}
 
 HOME = {"vale": "vale_office", "ines": "terminal", "sam": "whiteboard", "telem": "door", "riley": "door"}
 
@@ -180,6 +182,8 @@ class Session:
         self.where = dict(HOME)
         self._sponsors = None
         self.thread: threading.Thread | None = None
+        self.worker_lock = threading.Lock()   # the worker's exit and a restart never cross
+        self.save_lock = threading.Lock()
 
     @property
     def sponsors(self) -> sources.Sponsors:
@@ -217,8 +221,9 @@ class Session:
         if not data.get("sponsor") or not data.get("label"):
             return
         data.setdefault("count", 1)
-        self.emit("sponsor.call", "system", SPONSOR_WHY.get(data["sponsor"], "a sponsor service was called"),
-                  data=data)
+        why = SPONSOR_OP_WHY.get((data["sponsor"], data.get("op"))) or SPONSOR_WHY.get(
+            data["sponsor"], "a sponsor service was called")
+        self.emit("sponsor.call", "system", why, data=data)
 
     def say(self, agent: str, text: str, why: str, to: str | None = "learner", task: str | None = None,
             data: dict | None = None) -> dict:
@@ -266,17 +271,24 @@ class Session:
                             "checks": s.checks, "search": s.search, "case": s.case, "seenCols": sorted(s.seen_cols),
                             "ledger": s.ledger, "rival": s.rival} for s in self.slots]}
         path = self.log.path.with_suffix(".state.json")
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, default=str))
-        tmp.replace(path)
+        with self.save_lock:   # the worker and the HTTP threads both save
+            tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps(state, default=str))
+            tmp.replace(path)
 
     # ----------------------------------------------------------------------- worker
     def start_worker(self) -> None:
         self.thread = threading.Thread(target=self._run, name=f"session-{self.id}", daemon=True)
         self.thread.start()
 
+    def ensure_worker(self) -> None:
+        """Start the worker if it has stopped (a finished session gets an appeal). Call after q.put."""
+        with self.worker_lock:
+            if self.thread is None or not self.thread.is_alive():
+                self.start_worker()
+
     def _run(self) -> None:
-        while not self.finished or not self.q.empty():
+        while True:   # every exit goes through the locked check below
             try:
                 action = self.q.get(timeout=TICK_S)
             except queue.Empty:
@@ -285,8 +297,10 @@ class Session:
                 getattr(self, "do_" + action[0])(*action[1:])
             except Exception as e:
                 self.engine.log_error(self, action[0], e)
-            if self.finished and self.q.empty() and not self._open_appeals():
-                break
+            with self.worker_lock:   # decide to stop under the lock, so ensure_worker sees it
+                if self.finished and self.q.empty() and not self._open_appeals():
+                    self.thread = None
+                    break
 
     def _open_appeals(self) -> bool:
         return any(not a.get("ruled") for a in self.appeals.values())
@@ -472,7 +486,8 @@ class Session:
         if bench:
             text = f"{text} {self.reality_line(bench)}"
         s.grade = g
-        self.emit("verdict", "ines", "graded against the answer key, with the failing Bruin check as evidence",
+        self.emit("verdict", "ines", "graded against the answer key, with the failing Bruin check as evidence"
+                  if failing else "graded against the answer key; every Bruin check passed",
                   task=s.id, text=f"{'Passed' if g['result'] == 'passed' else 'Failed'}: {g['score']}.",
                   data={"taskId": s.id, **{k: g[k] for k in ("result", "score", "parts", "correctVerdict",
                                                              "correctTrap")},
@@ -914,8 +929,7 @@ class Engine:
                                                        "room": "local" if room["local"] else "band"})
             s.save()
         s.q.put(("appeal", aid))
-        if s.thread is None or not s.thread.is_alive():
-            s.start_worker()
+        s.ensure_worker()
         return {"appealId": aid}
 
     def on_appeal_message(self, sid: str, aid: str, body: dict) -> dict:
@@ -928,8 +942,7 @@ class Engine:
             s.emit("appeal.message", "learner", "the learner added to the appeal", to="ines", task=a["taskId"],
                    text=body["text"], data={"appealId": aid, "text": body["text"]})
         s.q.put(("appeal_reply", aid, body["text"]))
-        if s.thread is None or not s.thread.is_alive():
-            s.start_worker()
+        s.ensure_worker()
         return {"ok": True}
 
     def mastery(self, sid: str) -> dict:

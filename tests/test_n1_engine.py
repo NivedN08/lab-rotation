@@ -289,14 +289,14 @@ def test_whisper_whys_come_from_the_fixed_table(env):
 
 def pre_answer(evs):
     """The events before the answer, without what differs between any two sessions. Voice
-    lines come from a thread pool, so they are compared as a set, not in order."""
+    lines and sponsor calls come from a thread pool, so they are compared as a set."""
     out, voices = [], []
     for e in evs:
         if e["k"] == "learner.answer":
             break
         d = {k: v for k, v in (e.get("data") or {}).items() if k not in ("startedAt", "ms", "learner", "lineOf")}
         row = (e["k"], e["agent"], e["why"], e.get("to"), e.get("text"), json.dumps(d, sort_keys=True))
-        (voices if e["k"] == "voice.line" else out).append(row)
+        (voices if e["k"] in ("voice.line", "sponsor.call") else out).append(row)
     return out + sorted(voices)
 
 
