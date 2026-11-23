@@ -83,3 +83,14 @@ def test_split_by_dialogue_fixed_and_disjoint():
     assert {d.id for d in a} | {d.id for d in b} == {d.id for d in ds}
     a2, _ = data.split(list(reversed(ds)))
     assert [d.id for d in a] == [d.id for d in a2]
+
+
+def test_submission_adds_annotations_with_fallback():
+    from bench import submit
+    doc = [{"conversation_id": "x", "conversation_history": "h",
+            "tutor_responses": {"Tutor_1": {"response": "r"}, "Tutor_2": {"response": "s"}}}]
+    preds = {"x::Tutor_1": {"Mistake_Identification": "No"}}
+    out, fallbacks = submit.build(doc, preds, ("Mistake_Identification",))
+    assert out[0]["tutor_responses"]["Tutor_1"]["annotation"] == {"Mistake_Identification": "No"}
+    assert out[0]["tutor_responses"]["Tutor_2"]["annotation"] == {"Mistake_Identification": "Yes"}
+    assert fallbacks == 1 and "annotation" not in doc[0]["tutor_responses"]["Tutor_1"]
