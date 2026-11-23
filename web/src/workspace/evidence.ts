@@ -1,20 +1,8 @@
 import { useSyncExternalStore } from "react";
-import type { Cell } from "./types";
+import type { Cell, EvidenceRef } from "../api/client";
 
-/** One thing the learner cites: a whole row, a whole column, or a single cell. */
-export type Evidence = {
-  key: string;
-  kind: "row" | "column" | "cell";
-  /** Table name, or "query" for a SQL result. */
-  source: string;
-  /** The SQL that produced it, for query results. */
-  sql?: string;
-  row?: number; // 1-based
-  column?: string;
-  value?: Cell;
-  /** Short plain-words description for the tray and the answer form. */
-  label: string;
-};
+/** One thing the learner cites, plus a key to tell items apart. */
+export type Evidence = EvidenceRef & { key: string };
 
 const STORE = "lab-rotation.workspace.evidence";
 

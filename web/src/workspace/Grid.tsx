@@ -1,5 +1,5 @@
 import { evidence, show, useEvidence, type Evidence } from "./evidence";
-import type { Cell } from "./types";
+import type { Cell } from "../api/client";
 
 type Props = {
   /** Table name, or "query" for a SQL result. Cited evidence is tagged with it. */

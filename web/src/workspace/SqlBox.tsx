@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { Grid } from "./Grid";
-import { runSql, type SqlResult } from "./runSql";
+import { runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
 const START = "SELECT * FROM samples WHERE batch = 'C' LIMIT 20";
 
-export function SqlBox() {
+export function SqlBox({ sessionId }: { sessionId: string }) {
   const [sql, setSql] = useState(START);
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [result, setResult] = useState<SqlResult | null>(null);
+  const [result, setResult] = useState<(SqlResult & { sql: string }) | null>(null);
   const [error, setError] = useState("");
 
   async function run() {
     if (!sql.trim() || state === "running") return;
     setState("running");
     try {
-      setResult(await runSql(sql));
+      setResult({ ...(await runSql(sessionId, sql)), sql });
       setState("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -52,7 +52,7 @@ export function SqlBox() {
       )}
       {state === "done" && result && (
         <>
-          {result.offline && <p className="empty">Practice mode: the server's SQL runner isn't connected yet, so this ran on sample data in your browser.</p>}
+          {useMock() && <p className="empty">Sample mode: the lab server isn't connected yet, so this answer is made up.</p>}
           {result.rows.length === 0 ? (
             <p className="empty">The query ran and returned no rows. ({result.ms} ms)</p>
           ) : (
