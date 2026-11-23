@@ -26,7 +26,9 @@ export function LabLog({ R, t, filter, select, live = [], compact = false }: { R
   );
   if (liveLines.length && compact) {
     const { e, text, why, tone } = liveLines[liveLines.length - 1];
-    const short = text.length > 90 ? `${text.slice(0, 88).replace(/\s+\S*$/, "")}…` : text;
+    // Lines spoken to you (Telem's background, Sam's question) show in full; the rest stay short.
+    const toYou = e.to === "learner";
+    const short = !toYou && text.length > 90 ? `${text.slice(0, 88).replace(/\s+\S*$/, "")}…` : text;
     const open = openWhy === e.seq;
     return (
       <div className="log" aria-label="Lab log">
