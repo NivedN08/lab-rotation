@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { askAgent, type AgentId, type AskReply } from "../api/client";
+import { askAgent, isStatic, type AgentId, type AskReply } from "../api/client";
 import type { Replay } from "../sim/replay";
 import { colorOf } from "../world/palette";
 import { Avatar } from "./Avatar";
@@ -28,7 +28,10 @@ type Props = {
   setChats: (f: (c: Record<string, Msg[]>) => Record<string, Msg[]>) => void;
 };
 
-export function AskTab({ R, sessionId, agent, setAgent, people, chats, setChats }: Props) {
+export function AskTab({ R, sessionId: liveSession, agent, setAgent, people, chats, setChats }: Props) {
+  // The hosted replay has no one to ask: the input is off there.
+  const off = isStatic();
+  const sessionId = off ? null : liveSession;
   const [text, setText] = useState("");
   const msgsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -92,7 +95,11 @@ export function AskTab({ R, sessionId, agent, setAgent, people, chats, setChats 
       <div className="msgs" ref={msgsRef} aria-live="polite">
         {!msgs.length && (
           <p className="empty" style={{ fontSize: 14 }}>
-            {sessionId ? `${name} answers only from what they can see.` : "Start your rotation to ask the panel."}
+            {off
+              ? "Questions are off in this recorded replay. Ask the panel when you play live."
+              : sessionId
+                ? `${name} answers only from what they can see.`
+                : "Start your rotation to ask the panel."}
           </p>
         )}
         {msgs.map((m, i) =>

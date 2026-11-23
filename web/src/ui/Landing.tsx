@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isStatic } from "../api/client";
 import { SummitScene } from "../world/summit";
 
 type Props = { onEnter: () => void; onJudge: () => void; onDemo: () => void; ready: boolean; status: string; live: boolean; leaving: boolean };
@@ -24,15 +25,24 @@ export function Landing({ onEnter, onJudge, onDemo, ready, status, live, leaving
           Rotation
         </h1>
         <p>Your first week as a data analyst. A panel of AI scientists hands you a dataset that may hide a trap, watches how you work, and grades you against a real answer key.</p>
-        <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
-          Start your rotation
-        </button>
-        <button className="btn gold cta" onClick={onJudge} disabled={!ready} style={{ marginLeft: 10 }} title="One task, four minutes, then the full debrief">
-          Judge mode
-        </button>
-        <button className="btn cta" onClick={onDemo} disabled={!ready} style={{ marginLeft: 10 }}>
-          Watch the demo
-        </button>
+        {isStatic() ? (
+          // The hosted replay has no live backend: the demo is the one way in.
+          <button className="btn gold cta" onClick={onDemo} disabled={!ready} autoFocus>
+            Watch the demo
+          </button>
+        ) : (
+          <>
+            <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
+              Start your rotation
+            </button>
+            <button className="btn gold cta" onClick={onJudge} disabled={!ready} style={{ marginLeft: 10 }} title="One task, four minutes, then the full debrief">
+              Judge mode
+            </button>
+            <button className="btn cta" onClick={onDemo} disabled={!ready} style={{ marginLeft: 10 }}>
+              Watch the demo
+            </button>
+          </>
+        )}
         <div className="now">
           {live && <span className="live-dot" aria-hidden="true" />}
           {status}

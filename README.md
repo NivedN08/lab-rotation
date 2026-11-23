@@ -22,6 +22,8 @@ You need Python with [uv](https://docs.astral.sh/uv/) and Node.
 
 3. Open **http://localhost:5173/?mock=0** to play against the server. Plain **http://localhost:5173** runs on the front end's built-in sample data instead (a "Sample data" chip says so), with no server at all.
 
+**Hosted replay vs live play.** The hosted replay on Vercel is a recorded session built with `VITE_STATIC=1`: it works without Nived's Mac, opens on "Watch the demo" only, and has no live play or questions. Live play (Judge mode, Your rotation, Ask the lab) needs Nived's server.
+
 **Live play at the venue.** Nived's server serves the built page and the real backend together at his address: open that address and play, no `?mock=0` needed.
 
 `npm run build` type-checks and builds the front end into `web/dist`.

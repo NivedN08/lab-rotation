@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { demo as demoPlayer, getAgents, rotation as session, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, type LabEvent } from "./api/client";
+import { demo as demoPlayer, getAgents, isStatic, rotation as session, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, type LabEvent } from "./api/client";
 import { SampleBadge } from "./api/SampleBadge";
 import { useLateRotation } from "./ui/useLateRotation";
 import { Debrief } from "./ui/Debrief";
@@ -454,7 +454,8 @@ export function App() {
               <button className="brand" onClick={() => location.reload()} title="Back to the start">
                 <b>Lab Rotation</b>
               </button>
-              {!calm && (
+              {/* The hosted replay has no live session to switch to. */}
+              {!calm && !isStatic() && (
                 <>
               <label className="sr-only" htmlFor="run">
                 Run
@@ -505,7 +506,7 @@ export function App() {
                   })}
                 </nav>
               )}
-              {isRotation && !calm && (
+              {isRotation && !calm && !isStatic() && (
                 <button
                   className="btn quiet hide-sm"
                   aria-pressed={demoOn}
@@ -531,9 +532,11 @@ export function App() {
                   <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
                     Workspace
                   </button>
-                  <button className="btn gold" onClick={() => talk(chatAgent)}>
-                    Ask the lab
-                  </button>
+                  {!isStatic() && (
+                    <button className="btn gold" onClick={() => talk(chatAgent)}>
+                      Ask the lab
+                    </button>
+                  )}
                 </>
               )}
             </header>
