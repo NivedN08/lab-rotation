@@ -671,3 +671,56 @@
   box-shadow: 0 0 0 2px var(--line);
   font-size: 14px;
 }
+
+/* ---- Data dictionary ---- */
+
+.ws-dict {
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  padding: 6px 12px;
+}
+
+.ws-dict summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--mist);
+}
+
+.ws-md {
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 6px 0 4px;
+}
+
+.ws-md h4 {
+  margin: 4px 0;
+  font-family: var(--pixel);
+  font-size: 16px;
+}
+
+.ws-md p,
+.ws-md ul {
+  margin: 4px 0;
+}
+
+.ws-md ul {
+  padding-left: 18px;
+}
+
+.ws-md code {
+  background: var(--night-3);
+  padding: 0 4px;
+  font-size: 12.5px;
+}
+
+.ws-md-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ws-md-table th,
+.ws-md-table td {
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--night-3);
+  text-align: left;
+}

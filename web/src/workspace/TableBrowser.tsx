@@ -85,7 +85,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
             </p>
           )}
           {profiles[table.name]?.columns.find((c) => c.column === picked.column) && (
-            <ProfileCard profile={profiles[table.name].columns.find((c) => c.column === picked.column)!} onClose={() => setPicked(null)} />
+            <ProfileCard about={table.columns.find((c) => c.name === picked.column)?.about} profile={profiles[table.name].columns.find((c) => c.column === picked.column)!} onClose={() => setPicked(null)} />
           )}
         </>
       )}

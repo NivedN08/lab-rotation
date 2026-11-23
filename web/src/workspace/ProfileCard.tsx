@@ -4,7 +4,7 @@ import { show } from "./evidence";
 const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "0%");
 
 /** The profile of one column: how many rows, how many missing, how many different values, the range and the common values. */
-export function ProfileCard({ profile, onClose }: { profile: ColumnProfile; onClose: () => void }) {
+export function ProfileCard({ profile, about, onClose }: { profile: ColumnProfile; about?: string; onClose: () => void }) {
   const p = profile;
   const max = Math.max(1, ...p.top.map((t) => t.count));
   const stats: [string, string][] = [
@@ -24,6 +24,7 @@ export function ProfileCard({ profile, onClose }: { profile: ColumnProfile; onCl
           ×
         </button>
       </div>
+      {about && <p className="empty">{about}</p>}
       <dl className="ws-stats">
         {stats.map(([k, v]) => (
           <div key={k}>

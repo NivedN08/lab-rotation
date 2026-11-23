@@ -4,10 +4,9 @@ import { lastQuery } from "./lastQuery";
 import { runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
-const START = "SELECT * FROM samples WHERE batch = 'C' LIMIT 20";
 
-export function SqlBox({ sessionId }: { sessionId: string }) {
-  const [sql, setSql] = useState(START);
+export function SqlBox({ sessionId, firstTable }: { sessionId: string; firstTable: string }) {
+  const [sql, setSql] = useState(`SELECT * FROM ${firstTable} LIMIT 20`);
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<(SqlResult & { sql: string }) | null>(null);
   const [error, setError] = useState("");
@@ -64,6 +63,7 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
               <p className="empty">
                 {result.rows.length} row{result.rows.length === 1 ? "" : "s"} in {result.ms} ms
                 {result.rows.length > ROW_CAP ? `, showing the first ${ROW_CAP}` : ""}
+                {result.truncated ? ". The server stops a result at 500 rows, so there may be more; narrow the query to see them" : ""}
               </p>
             </>
           )}

@@ -4,6 +4,11 @@ import "./panels.css";
 
 const NAME: Record<AgentId, string> = { vale: "Dr. Vale", ines: "Ines", sam: "Sam", telem: "Telem", riley: "Riley", learner: "You", system: "System" };
 
+const wordsOf = (e: LabEvent): string | undefined => {
+  const d = (e.data ?? {}) as { text?: string; reason?: string };
+  return e.text ?? d.text ?? d.reason;
+};
+
 const verdictTask = (events: LabEvent[]): string | undefined => {
   const v = [...events].reverse().find((e) => e.k === "verdict");
   return (v?.data as { taskId?: string } | undefined)?.taskId ?? v?.task;
@@ -68,7 +73,7 @@ export function PanelRoom() {
   }
 
   // A message already confirmed by an event is not shown twice.
-  const shown = new Set(thread.map((e) => e.text));
+  const shown = new Set(thread.map(wordsOf));
   const waiting = pending.filter((p) => ![...shown].some((s) => s?.includes(p)));
 
   return (
@@ -85,7 +90,10 @@ export function PanelRoom() {
                   {NAME[e.agent]}
                   {e.to ? ` to ${NAME[e.to]}` : ""}
                 </span>
-                <span>{e.text}</span>
+                <span>{wordsOf(e)}</span>
+                {((e.data as { cc?: string[] } | undefined)?.cc?.length ?? 0) > 0 && (
+                  <span className="pn-why">Also to {(e.data as { cc: AgentId[] }).cc.map((c) => NAME[c] ?? c).join(", ")}</span>
+                )}
                 <span className="pn-why">Why: {e.why}</span>
               </li>
             ))}
@@ -100,7 +108,7 @@ export function PanelRoom() {
             {thread.map((e) => (
               <li key={e.seq} className={e.k === "appeal.ruling" ? "pn-ruling" : undefined}>
                 <span className="pn-who">{e.k === "appeal.ruling" ? `Ruling, ${NAME[e.agent]}` : NAME[e.agent]}</span>
-                <span>{e.text}</span>
+                <span>{wordsOf(e)}</span>
                 <span className="pn-why">Why: {e.why}</span>
               </li>
             ))}

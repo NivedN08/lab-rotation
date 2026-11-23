@@ -5,7 +5,7 @@
 
 import { getDemoState } from "./demo";
 import { DEMO_SESSION, mock } from "./mock";
-import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { Health, DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 export * from "./types";
 export * from "./traps";
@@ -131,3 +131,6 @@ export const getSponsors = (sessionId: string): Promise<SponsorTotals> =>
  * falls back to the fake session and says "Sample data". In mock mode the fake session stands in directly.
  */
 export const getDemo = (): Promise<DemoInfo> => (useMock() ? mock.getDemo() : call("GET", "/api/demo"));
+
+/** Is the server up, is it in mock mode, and is BAND live or local. */
+export const getHealth = (): Promise<Health> => (useMock() ? Promise.resolve({ ok: true, mock: true, band: "local" as const }) : call("GET", "/api/health"));

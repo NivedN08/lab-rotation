@@ -5,7 +5,7 @@ import type { TrapId } from "./traps";
 
 export type Cell = string | number | boolean | null;
 
-export type Column = { name: string; type: "text" | "int" | "real" | "date" };
+export type Column = { name: string; type: "text" | "int" | "real" | "date"; /** What the column means, in plain words. */ about?: string };
 
 export type TableInfo = {
   name: string;
@@ -20,10 +20,12 @@ export type TaskInfo = {
   brief: string;
   /** Time allowed, in seconds. */
   seconds: number;
-  /** Difficulty tier of the task. */
-  tier?: string;
+  /** Difficulty tier: 1 one trap in one table, 2 a trap plus a decoy, 3 a trap that spans two tables. */
+  tier?: number;
   /** The claim the learner is checking. */
   claim?: string;
+  /** The data dictionary, in Markdown. The only place the dictionary_flip trap shows up. Sent by GET /task, not in task.picked. */
+  dictionary?: string;
   /** Why this task was picked for this learner. */
   reason?: string;
 };
@@ -65,7 +67,7 @@ export type LabEvent = {
 
 export type EventsPage = { events: LabEvent[]; next: number };
 
-export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number };
+export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number; /** True when the server's 500-row cap cut the result. */ truncated?: boolean };
 
 export type EvidenceRef = {
   kind: "row" | "column" | "cell";
@@ -137,7 +139,11 @@ export type SponsorTotals = {
   bruin: { checksRun: number; checksFailed: number };
   runware: { lines: number; cost: number };
   glasser: { calls: number };
+  /** The front end may ignore this. */
+  teamily?: { posts: number };
 };
 
 /** The recorded session the backend picked for the demo, or `session: null` when there is none. `start` and `end` are seconds since that session began. */
 export type DemoInfo = { session: string | null; start: number; end: number; speed: number };
+
+export type Health = { ok: boolean; mock: boolean; band: "live" | "local" };

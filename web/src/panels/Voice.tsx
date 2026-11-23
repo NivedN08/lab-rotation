@@ -1,36 +1,56 @@
 import { useEffect } from "react";
-import { audioUrl, subscribeEvents, subscribeJump } from "../api/client";
+import { audioUrl, getRotation, subscribeEvents, subscribeJump, type LabEvent } from "../api/client";
 import { useMuted, voiceMute } from "./voiceMute";
 import "./panels.css";
 
-// One audio element at a time: lines wait their turn instead of talking over each other.
-let queue: string[] = [];
-let current: HTMLAudioElement | null = null;
+// One line at a time: lines wait their turn instead of talking over each other.
+type Line = { file: string } | { say: string };
+let queue: Line[] = [];
+let current: { stop: () => void } | null = null;
 
 function next() {
   current = null;
-  const file = queue.shift();
-  if (!file) return;
-  const a = new Audio(audioUrl(file));
-  current = a;
+  const line = queue.shift();
+  if (!line) return;
+  if ("say" in line) {
+    // provider "browser": no audio file, so the browser speaks the text itself.
+    const synth = window.speechSynthesis;
+    if (!synth) return next();
+    const u = new SpeechSynthesisUtterance(line.say);
+    u.onend = next;
+    u.onerror = next;
+    current = { stop: () => synth.cancel() };
+    synth.speak(u);
+    return;
+  }
+  const a = new Audio(audioUrl(line.file));
+  current = {
+    stop: () => {
+      a.onended = null;
+      a.onerror = null;
+      a.pause();
+    },
+  };
   a.onended = next;
   a.onerror = next;
   a.play().catch(next); // a browser may block sound until the first click; skip the line then
 }
 
-function enqueue(file: string) {
-  queue.push(file);
+function enqueue(line: Line) {
+  queue.push(line);
   if (!current) next();
 }
 
 function silence() {
   queue = [];
-  if (current) {
-    current.onended = null;
-    current.onerror = null;
-    current.pause();
-    current = null;
-  }
+  current?.stop();
+  current = null;
+}
+
+/** The text of the agent.say event a voice.line speaks (`lineOf` is its seq). */
+function spoken(lineOf: number | undefined, batch: LabEvent[]): string | undefined {
+  if (lineOf === undefined) return undefined;
+  return [...getRotation().events, ...batch].find((e) => e.seq === lineOf)?.text;
 }
 
 /** Plays each voice.line's audio as it arrives. Draws nothing. Mount it once. */
@@ -39,8 +59,13 @@ export function Voice() {
     const offEvents = subscribeEvents((events) => {
       if (voiceMute.get()) return;
       for (const e of events) {
-        const file = (e.data as { file?: string } | undefined)?.file;
-        if (e.k === "voice.line" && file) enqueue(file);
+        if (e.k !== "voice.line") continue;
+        const d = (e.data ?? {}) as { file?: string; provider?: string; lineOf?: number };
+        if (d.file) enqueue({ file: d.file });
+        else if (d.provider === "browser") {
+          const say = spoken(d.lineOf, events);
+          if (say) enqueue({ say });
+        }
       }
     });
     // A seek or loop in the demo: whatever was being said no longer applies.

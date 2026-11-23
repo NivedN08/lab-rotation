@@ -7,6 +7,7 @@ import { evidence } from "./evidence";
 import { lastQuery } from "./lastQuery";
 import { SqlBox } from "./SqlBox";
 import { TableBrowser } from "./TableBrowser";
+import { Markdown } from "./Markdown";
 import { Timer } from "./Timer";
 import "./workspace.css";
 
@@ -79,7 +80,7 @@ export default function Workspace({ onTaskChange }: Props) {
             <div className="ws-task-head">
               <h2 className="ws-title">
                 {task.title}
-                {task.tier && <span className="ws-tier">{task.tier}</span>}
+                {task.tier !== undefined && <span className="ws-tier">Tier {task.tier}</span>}
               </h2>
               <Timer startedAt={startedAt} seconds={task.seconds} />
             </div>
@@ -89,9 +90,15 @@ export default function Workspace({ onTaskChange }: Props) {
               </p>
             )}
             <p className="ws-brief">{task.brief}</p>
+            {task.dictionary && (
+              <details className="ws-dict">
+                <summary>Data dictionary</summary>
+                <Markdown text={task.dictionary} />
+              </details>
+            )}
           </div>
           <TableBrowser sessionId={sessionId} tables={tables} />
-          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} />
+          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} firstTable={tables[0]?.name ?? "visits"} />
           <ChartBuilder sessionId={sessionId} tables={tables} />
           <EvidenceTray />
           {!watching && <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />}
