@@ -32,7 +32,7 @@ Each stream is one Claude Code session in its own git worktree and branch.
 
 | Stream | Who | Branch | Owns |
 |---|---|---|---|
-| Lead | Nived | `main` | `CLAUDE.md`, `.gitignore`, `requests/README.md` |
+| Lead | Nived | `main` | `CLAUDE.md`, `.gitignore`, `requests/README.md`, `briefs/` |
 | N1 Session engine | Nived | `n1-session` | `lab/session/`, `lab/prompts/`, `lab/server.py`, `lab/env.py`, `lab/__init__.py`, `contract/`, `pyproject.toml`, `uv.lock`, `.python-version`, `.env.example` |
 | N2 Sponsor clients | Nived | `n2-sponsors` | `lab/sponsors/` |
 | N3 Data and learning | Nived | `n3-data` | `lab/tasks/`, `lab/learner/`, `lab/workspace_sql.py`, `bruin/`, `.bruin.yml` |
