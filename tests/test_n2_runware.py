@@ -182,3 +182,53 @@ def test_default_models_and_env_override(monkeypatch):
     monkeypatch.setenv("RUNWARE_TEXT_MODEL", "google:gemma@4-31b")
     rw = Runware(offline=True)
     assert (rw.tts_model, rw.text_model) == ("inworld:tts@1.5-mini", "google:gemma@4-31b")
+
+
+# -- natural speech: clean text, per-family settings ------------------------------------------
+
+@pytest.mark.parametrize("raw,said", [
+    ("You answered cant_tell; the trap was duplicate_rows.", "You answered can't tell; the trap was duplicate rows."),
+    ("**Right verdict.** *nods* Check the `spend` column [laughs] (smiles warmly) now.",
+     "Right verdict. Check the spend column now."),
+    ("Members (loyalty) spend $45.86 per visit.", "Members (loyalty) spend $45.86 per visit."),
+])
+def test_speakable(raw, said):
+    assert rwmod.speakable(raw) == said
+
+
+def test_speech_settings_per_family(monkeypatch):
+    monkeypatch.delenv("RUNWARE_TTS_SPEED", raising=False)
+    assert rwmod.speech_settings("vale", "inworld:tts@2") == {}
+    assert rwmod.speech_settings("vale", "minimax:speech@2.8") == {"emotion": "calm", "speed": 0.95}
+    assert rwmod.speech_settings("riley", "minimax:speech@2.8")["emotion"] == "happy"
+    monkeypatch.setenv("RUNWARE_TTS_SPEED", "0.9")
+    assert rwmod.speech_settings("sam", "inworld:tts@2") == {"speed": 0.9}
+    assert rwmod.speech_settings("sam", "google:gemini@3.8-flash-tts") == {}  # text and voice only
+
+
+def test_every_family_voices_every_agent_distinctly(monkeypatch):
+    for agent in rwmod.PORTRAIT_PROMPTS:
+        monkeypatch.delenv(f"RUNWARE_VOICE_{agent.upper()}", raising=False)
+    for model in ("inworld:tts@2", "minimax:speech@2.8", "google:gemini@3.8-flash-tts"):
+        voices = [rwmod.voice_for(a, model) for a in rwmod.PORTRAIT_PROMPTS]
+        assert len(set(voices)) == len(voices), model
+    assert rwmod.voice_for("vale", "minimax:speech@2.8") == "English_Trustworth_Man"
+    assert rwmod.voice_for("sam", "google:gemini@3.8-flash-tts") == "Achird"
+
+
+def test_tts_sends_clean_text_and_settings(tmp_path, monkeypatch):
+    monkeypatch.delenv("RUNWARE_TTS_SPEED", raising=False)
+    monkeypatch.setenv("RUNWARE_TTS_MODEL", "minimax:speech@2.8")
+    rw, client = make(tmp_path)
+    line = rw.tts("ines", "You answered **cant_tell**.")
+    sp = client.requests[0].speech
+    assert (sp.text, sp.emotion, sp.speed) == ("You answered can't tell.", "calm", 0.95)
+    assert line["provider"] == "runware"
+    monkeypatch.setenv("RUNWARE_TTS_SPEED", "0.9")  # new settings, new file: no stale cache hit
+    rw.tts("ines", "You answered **cant_tell**.")
+    assert len(client.requests) == 2 and client.requests[1].speech.speed == 0.9
+
+
+def test_line_with_nothing_to_say_goes_to_browser(tmp_path):
+    rw, client = make(tmp_path)
+    assert rw.tts("sam", "*nods*")["provider"] == "browser" and client.requests == []
