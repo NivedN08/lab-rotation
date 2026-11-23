@@ -336,9 +336,15 @@ def test_useful_is_held_back_until_the_verdict(env):
     call("POST", f"/api/session/{sid}/sql", {"sql": "select region, max(spend) from visits join stores "
                                                     "using (store_id) group by 1"})
     call("POST", f"/api/session/{sid}/sql", {"sql": "select count(*) from visits"})
+    call("POST", f"/api/session/{sid}/sql", {"sql": "select nope from visits"})
+    s = env.get(sid)
+    with s.lock:
+        s.do_tick()   # a tick may move the meter too
     evs = events(sid)
     qs = [e for e in evs if e["k"] == "learner.query"]
-    assert len(qs) == 2 and all("useful" not in e["data"] for e in qs)
-    assert {e["why"] for e in qs} == {"the learner ran a query in the SQL box"}
+    assert len(qs) == 3 and all("useful" not in e["data"] for e in qs)
+    assert [e["why"] for e in qs] == ["the learner ran a query in the SQL box"] * 2 + ["the query failed"]
+    assert any(e["data"]["useful"] for e in s.log.of_kind("learner.query"))   # the jsonl keeps it
     meters = [e for e in evs if e["k"] == "meter.update"]
-    assert len(meters) == 2 and {e["why"] for e in meters} == {"the learner ran a query"}
+    assert len(meters) >= 3 and {e["why"] for e in meters} <= set(meter.WHY.values())
+    assert [e["why"] for e in meters[:3]] == ["the learner ran a query"] * 2 + ["a query failed"]

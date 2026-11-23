@@ -65,7 +65,11 @@ def query(t, qid, sql, rows, ms, ok=True, error=None):
         d["error"] = error
     ev(t, "learner.query", "learner", "the learner ran a query in the SQL box" if ok else "the query failed",
        task=T, text=sql, data=d)
+# The same fixed lines as lab/session/meter.py WHY: a meter why never says whether a query
+# was useful.
+METER_WHY = {"the learner ran a query", "a query failed", "the meter moved"}
 def meter(t, value, idle, dead, wrong, level, why):
+    assert why in METER_WHY, why
     ev(t, "meter.update", "system", why, task=T,
        data={"value": value, "idleSeconds": idle, "deadEnds": dead, "wrongGuesses": wrong, "hintLevel": level})
 whispers = []  # (seq, agent, to, text) for the panel.transcript after the verdict
@@ -125,10 +129,10 @@ query(55, "q2", "select loyalty_member, avg(spend) from visits join customers us
 meter(56, 0.1, 1, 0, 0, 0, "the learner ran a query")
 query(80, "q3", "select loyalty_member, median(spend) from visits group by 1", 0, 2,
       ok=False, error='Binder Error: Referenced column "loyalty_member" not found in FROM clause')
-meter(80.5, 0.3, 25, 1, 0, 0, "the learner ran a query")
+meter(80.5, 0.3, 25, 1, 0, 0, "a query failed")
 query(98, "q4", "select loyalty_member, avg(spend) as avg_spend from visits join customers using (customer_id) group by 1 order by 1", 2, 5)
 meter(98.5, 0.45, 43, 2, 0, 0, "the learner ran a query")
-meter(130, 0.62, 75, 2, 0, 1, "2 dead ends and 75 s without a useful query")
+meter(130, 0.62, 75, 2, 0, 1, "the meter moved")
 whisper(131, "sam", ["vale", "ines"], "The learner has repeated the member comparison twice and not looked at units or regions. I'd like to give a level 1 hint.",
         "hint_ask")
 whisper(132, "ines", ["sam"], "Steer them here, as a question: Is every row of spend in the same unit? What does spend look like store by store?",

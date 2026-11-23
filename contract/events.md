@@ -95,8 +95,9 @@ are there for the lab log, the verdict card and the people reading them.
   `evidence` (`[Evidence]`).
 - `meter.update` (system): `value` (0 to 1), `idleSeconds`, `deadEnds`,
   `wrongGuesses`, `hintLevel` (0 to 3). Sent after every query (and when the reading
-  changes), so its timing says nothing about the query; its `why` never says whether a
-  query was useful.
+  changes), so its timing says nothing about the query. Its `why` is one of three fixed
+  lines: "the learner ran a query", "a query failed", "the meter moved"; it never says
+  whether a query was useful. The reading itself is in `data`.
 
 ### Rival (riley)
 - `rival.answer`: **`verdict`**, **`trap`**, `note`, `model`, `provider` (`runware` or
@@ -160,6 +161,6 @@ clean twin (the same task with no trap). The engine enforces it:
   replaced by a fixed line if they name *any* trap, so a replacement says nothing either.
 - Telem's pre-answer search uses only the claim; the real case of the trap comes after the
   verdict (see `search`).
-- Whisper text and `learner.query.useful` wait for `panel.transcript`; whisper `why`s
-  are fixed templates.
+- Whisper text and `learner.query.useful` wait for `panel.transcript` (the session's
+  jsonl on disk keeps both); whisper and meter `why`s are fixed templates.
 - Sam's hints are the exception: they point the way on purpose, as questions.

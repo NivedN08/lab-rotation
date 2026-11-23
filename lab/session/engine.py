@@ -303,10 +303,10 @@ class Session:
         if m["hintLevel"] > s.hints and s.hints < 3 and now - s.last_hint_t >= HINT_GAP_S:
             self.give_hint(s.hints + 1, m)
 
-    def emit_meter(self, m: dict, after_query: bool = False) -> None:
+    def emit_meter(self, m: dict, cause: str = "moved") -> None:
         s = self.slot
         s.last_meter, s.last_meter_t = m, self.log.now()
-        self.emit("meter.update", "system", meter.why(m, after_query), task=s.id, data=m)
+        self.emit("meter.update", "system", meter.why(cause), task=s.id, data=m)
 
     def do_brief(self) -> None:
         s = self.slot
@@ -761,7 +761,7 @@ class Engine:
             why = "the learner ran a query in the SQL box" if ok else "the query failed"
             s.emit("learner.query", "learner", why, task=slot.id, text=sql[:300], data=data)
             if slot.phase == "analysis":   # after every query, so the timing says nothing either
-                s.emit_meter(s.meter_now(), after_query=True)
+                s.emit_meter(s.meter_now(), cause="query" if ok else "failed")
             s.save()
         return {"error": res["error"]} if not ok else {k: res[k] for k in ("columns", "rows", "ms", "truncated")}
 

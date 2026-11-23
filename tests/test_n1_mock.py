@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from lab.session import api
+from lab.session import api, meter
 from lab.session.engine import LEAK, WHISPER_WHY
 from lab.session.mock import MockEngine
 from lab.session.tables import TaskTables
@@ -227,3 +227,5 @@ def test_mock_holds_back_useful_until_the_verdict(mock):
     qs = [e for e in evs if e["k"] == "learner.query"]
     assert qs and all("useful" not in e["data"] for e in qs)
     assert {e["why"] for e in qs} <= {"the learner ran a query in the SQL box", "the query failed"}
+    meters = [e for e in evs if e["k"] == "meter.update"]
+    assert meters and {e["why"] for e in meters} <= set(meter.WHY.values())
