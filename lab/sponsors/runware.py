@@ -9,6 +9,17 @@ What Runware serves (checked 2026-11-23 with modelSearch and test calls):
 - Text: open models Gemma 4 31B (`google:gemma@4-31b`), DeepSeek V4 Flash, gpt-oss-
   safeguard-20b, also Qwen 4, Kimi K3, MiniMax M3.1. Same $5 rule.
 
+Chosen (from Runware's model docs and schemas, before any paid call):
+- Voice: Inworld TTS-1.5 Mini (`inworld:tts@1.5-mini`), $0.000025 per character, so a
+  100-160 character line is $0.0025-0.004; Runware's examples show 1.8-4.1 s per line. One
+  voice per agent from its 73-voice list (INWORLD_VOICES). `RUNWARE_TTS_MODEL=inworld:tts@2`
+  ($0.000035 per character) takes the same voices.
+- Riley: Gemma 4 31B (`google:gemma@4-31b`), Google's open-weights model, $0.102 in and
+  $0.297 out per million tokens. `RUNWARE_TEXT_MODEL=deepseek:v4@flash` is the cheaper spare.
+
+After the credit lands, `uv run python -m lab.sponsors.runware check` voices one line per
+agent and asks Riley once, then prints cost per line and Riley's latency (about $0.02 all in).
+
 Fallbacks: a line Runware can't voice comes back as `provider: "browser"` with an empty
 file (the browser speaks the `agent.say` text); Riley runs on `claude -p` with no tools
 (`provider: "claude_fallback"`); a portrait falls back to the file already on disk.
@@ -35,14 +46,35 @@ from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, report
 
 AUDIO = DATA / "audio"
 PORTRAITS = DATA / "portraits"
-TTS_MODEL = "alibaba:qwen@3-tts-1.7b-customvoice"
+TTS_MODEL = "inworld:tts@1.5-mini"
 TEXT_MODEL = "google:gemma@4-31b"
 IMAGE_MODEL = "runware:100@1"
 TIMEOUT_S = 45
+TTS_MAX_CHARS = 2000  # Inworld's limit per line; longer lines go to browser speech
 WORDS_PER_S = 2.6
 
-# One voice per agent (Qwen3-TTS CustomVoice speakers). Override with RUNWARE_VOICE_<AGENT>.
-VOICES = {"vale": "eric", "ines": "serena", "sam": "ryan", "telem": "vivian", "riley": "dylan"}
+# One voice per agent, per TTS family. Override one with RUNWARE_VOICE_<AGENT>.
+VOICE_SETS = {
+    "inworld:": {"vale": "Elizabeth", "ines": "Serena", "sam": "Dennis", "telem": "Theodore", "riley": "Timothy"},
+    "alibaba:qwen@3-tts": {"vale": "eric", "ines": "serena", "sam": "ryan", "telem": "vivian", "riley": "dylan"},
+}
+# Inworld TTS-1.5 voices, from Runware's schema for inworld:tts@1.5-mini (TTS-2 accepts all of these).
+INWORLD_VOICES = frozenset(
+    "Loretta Darlene Marlene Hank Evelyn Celeste Pippa Tessa Liam Callum Hamish Abby Graham Rupert Mortimer "
+    "Snik Anjali Saanvi Arjun Claire Oliver Simon Elliot James Serena Gareth Vinny Lauren Jessica Ethan Tyler "
+    "Jason Chloe Veronica Victoria Miranda Sebastian Victor Malcolm Kayla Nate Jake Brian Amina Kelsey Derek "
+    "Grant Evan Alex Ashley Craig Deborah Dennis Edward Elizabeth Hades Julia Pixie Mark Olivia Priya Ronald "
+    "Sarah Shaun Theodore Timothy Wendy Dominus Hana Clive Carter Blake Luna".split())
+
+
+def voice_for(agent: str, model: str) -> str:
+    override = os.environ.get(f"RUNWARE_VOICE_{agent.upper()}")
+    if override:
+        return override
+    for prefix, voices in VOICE_SETS.items():
+        if model.startswith(prefix):
+            return voices.get(agent, next(iter(voices.values())))
+    return VOICE_SETS["inworld:"].get(agent, "Dennis")
 
 PORTRAIT_PROMPTS = {
     "vale": "head of a retail analytics lab, calm and exacting, reading glasses, warm office light",
@@ -165,7 +197,7 @@ class Runware:
 
     def tts(self, agent: str, text: str, *, line_of: Optional[int] = None) -> dict:
         """{file, seconds, cost, provider, lineOf}: the `voice.line` data. Cached by text and voice."""
-        voice = os.environ.get(f"RUNWARE_VOICE_{agent.upper()}", VOICES.get(agent, "ryan"))
+        voice = voice_for(agent, self.tts_model)
         name = hashlib.sha1(f"{self.tts_model}|{voice}|{text}".encode()).hexdigest()[:16] + ".mp3"
         path = self.audio_dir / name
         label = f"Voiced a line for {agent.capitalize()}"
@@ -174,7 +206,7 @@ class Runware:
             report(self.on_call, SponsorCall("runware", "tts", label + " (saved audio)", by=agent, fallback=True))
             return dict(base, file=name, seconds=mp3_seconds(path) or speech_seconds(text), cost=0.0,
                         provider="runware")
-        if not self.offline and "tts" not in self.no_credit:
+        if not self.offline and "tts" not in self.no_credit and len(text) <= TTS_MAX_CHARS:
             from runware import IAudioInference
 
             t = Timer()
@@ -253,7 +285,41 @@ class Runware:
         return {"text": text, "model": "claude", "provider": "claude_fallback", "cost": None}
 
 
+CHECK_LINES = {
+    "vale": "Welcome to the lab. Your first task is on your desk.",
+    "ines": "Your answer says the claim holds, but the spend check failed for the West region.",
+    "sam": "Try comparing average spend by region before you trust the total.",
+    "telem": "I found a real case where a retailer counted the same receipts twice.",
+    "riley": "Easy one. Spend went up, so the claim holds. Next!",
+}
+CHECK_RILEY = ("You are Riley, an eager AI intern who answers fast and checks nothing. Reply in two short "
+               "sentences and end with a verdict word: holds, fails or cant_tell.",
+               "Claim: average spend per visit rose 12% in the West region last quarter. The visits table has "
+               "300 rows with store, region, visit_date and spend.")
+
+
+def check(rw: "Runware") -> dict:
+    """Live check after a top-up: one voice line per agent and one Riley answer (about $0.02)."""
+    import time
+
+    lines = {}
+    for agent, text in CHECK_LINES.items():
+        t0 = time.monotonic()
+        line = rw.tts(agent, text)
+        lines[agent] = dict(line, chars=len(text), voice=voice_for(agent, rw.tts_model),
+                            ms=int((time.monotonic() - t0) * 1000))
+    t0 = time.monotonic()
+    riley = rw.riley(system=CHECK_RILEY[0], user=CHECK_RILEY[1])
+    riley_ms = int((time.monotonic() - t0) * 1000)
+    paid = [x for x in lines.values() if x["provider"] == "runware" and x.get("cost")]
+    return {"ttsModel": rw.tts_model, "textModel": rw.text_model, "lines": lines,
+            "costPerLine": round(sum(x["cost"] for x in paid) / len(paid), 5) if paid else None,
+            "costPerChar": round(sum(x["cost"] for x in paid) / sum(x["chars"] for x in paid), 7) if paid else None,
+            "riley": dict(riley, ms=riley_ms)}
+
+
 if __name__ == "__main__":
+    import json
     import sys
 
     rw = Runware(on_call=lambda c: print(c.event_data()))
@@ -262,5 +328,7 @@ if __name__ == "__main__":
             print(a, rw.portrait(a, force="--force" in sys.argv))
     elif sys.argv[1:2] == ["say"] and len(sys.argv) >= 4:
         print(rw.tts(sys.argv[2], " ".join(sys.argv[3:])))
+    elif sys.argv[1:2] == ["check"]:
+        print(json.dumps(check(rw), indent=2))
     else:
-        print("usage: python -m lab.sponsors.runware portraits [--force] | say <agent> <text>")
+        print("usage: python -m lab.sponsors.runware portraits [--force] | say <agent> <text> | check")

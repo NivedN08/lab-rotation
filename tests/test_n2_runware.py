@@ -68,7 +68,7 @@ def test_tts_saves_mp3_with_cost_and_caches(tmp_path):
     assert line["seconds"] == 1.0 and line["cost"] == 0.0215
     assert (tmp_path / "audio" / line["file"]).exists()
     sp = client.requests[0].speech
-    assert (sp.text, sp.voice) == ("Check spend by region.", "serena")
+    assert (sp.text, sp.voice) == ("Check spend by region.", "Serena")
     assert calls[0].event_data() == {"sponsor": "runware", "label": "Voiced a line for Ines", "count": 1,
                                      "op": "tts", "by": "ines", "ms": calls[0].ms, "fallback": False, "cost": 0.0215}
     again = rw.tts("ines", "Check spend by region.")
@@ -138,3 +138,28 @@ def test_live_portrait(tmp_path):
     if rw.offline:
         pytest.skip("no Runware key")
     assert rw.portrait("sam")["provider"] == "runware"
+
+
+def test_voices_are_valid_and_distinct(monkeypatch):
+    for agent in rwmod.PORTRAIT_PROMPTS:
+        monkeypatch.delenv(f"RUNWARE_VOICE_{agent.upper()}", raising=False)
+    inworld = [rwmod.voice_for(a, "inworld:tts@1.5-mini") for a in rwmod.PORTRAIT_PROMPTS]
+    assert set(inworld) <= rwmod.INWORLD_VOICES and len(set(inworld)) == len(inworld)
+    assert rwmod.voice_for("riley", "inworld:tts@2") == "Timothy"
+    assert rwmod.voice_for("sam", "alibaba:qwen@3-tts-1.7b-customvoice") == "ryan"
+    monkeypatch.setenv("RUNWARE_VOICE_SAM", "Craig")
+    assert rwmod.voice_for("sam", "inworld:tts@1.5-mini") == "Craig"
+
+
+def test_check_reports_cost_per_line_and_riley_latency(tmp_path):
+    rw, client = make(tmp_path)
+    out = rwmod.check(rw)
+    assert set(out["lines"]) == set(rwmod.CHECK_LINES) and out["costPerLine"] == 0.0215
+    assert out["riley"]["provider"] == "runware" and out["riley"]["ms"] >= 0
+    assert [r.speech.voice for r in client.requests[:5]] == [rwmod.voice_for(a, rw.tts_model) for a in rwmod.CHECK_LINES]
+
+
+def test_overlong_line_goes_to_browser_without_a_call(tmp_path):
+    rw, client = make(tmp_path)
+    line = rw.tts("vale", "word " * 500)
+    assert line["provider"] == "browser" and client.requests == []

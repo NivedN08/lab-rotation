@@ -27,7 +27,9 @@ import json
 import os
 import re
 import statistics
+import threading
 import uuid
+from concurrent.futures import Future
 from typing import Optional
 
 from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, load_recorded, report, save_recorded, short_error
@@ -69,6 +71,9 @@ class Glasser:
         self.budget = float(os.environ.get("GLASSER_BUDGET_USD", "0.25")) if budget_usd is None else budget_usd
         self.spent = 0.0
         self._bought: dict = {}  # this session's Runs by (provider, endpoint, input): repeats are free
+        self._inflight: dict = {}  # Runs being bought now, as Futures: a second caller waits, not pays
+        self._reserved = 0.0  # listed prices of in-flight Runs, counted against the budget
+        self._lock = threading.Lock()
 
     # -- transport --------------------------------------------------------------
 
@@ -97,32 +102,63 @@ class Glasser:
         """One paid Run. Returns {output, cost, runUrl, repeat}; reports cost and run link.
 
         The same Run again in this session is free: it reports `count: 0`, cost 0, the same link.
+        Thread-safe: concurrent calls for the same Run share one paid lookup (the first caller
+        buys, the others wait for it), and in-flight prices count against the budget.
         """
         key = (provider, endpoint, json.dumps(input, sort_keys=True))
-        if key in self._bought:
-            prev = self._bought[key]
+        price = PRICES.get((provider, endpoint), 0.0)
+        over_budget = False
+        with self._lock:
+            prev = self._bought.get(key)
+            pending = self._inflight.get(key) if prev is None else None
+            owner = prev is None and pending is None
+            if owner:
+                if self.spent + self._reserved + price > self.budget + 1e-9:
+                    owner, over_budget = False, True
+                else:
+                    pending = self._inflight[key] = Future()
+                    self._reserved += price
+        if prev is None and pending is not None and not owner:
+            prev = pending.result()  # re-raises the buyer's failure, so this caller falls back too
+        if prev is not None:
             report(self.on_call, SponsorCall("glasser", "run", label + " (already bought)", by=by, cost_usd=0.0,
                                              trace=prev["runUrl"], count=0))
             return dict(prev, cost=0.0, repeat=True)
-        if self.spent + PRICES.get((provider, endpoint), 0.0) > self.budget + 1e-9:
+        if over_budget:
             report(self.on_call, SponsorCall("glasser", "run", label + " (budget spent)", ok=False, by=by,
                                              fallback=True, error="budget"))
             raise GlasserError("budget spent")
+        try:
+            out = self._buy(provider, endpoint, input, label=label, by=by)
+        except BaseException as exc:
+            with self._lock:
+                self._reserved -= price
+                self._inflight.pop(key, None)
+            pending.set_exception(exc)
+            raise
+        with self._lock:
+            self._reserved -= price
+            self.spent += out["cost"]
+            self._bought[key] = out
+            self._inflight.pop(key, None)
+        pending.set_result(out)
+        return out
+
+    def _buy(self, provider: str, endpoint: str, input: dict, *, label: str, by: str) -> dict:
         t = Timer()
         try:
             r = self._tool("run", {"provider": provider, "endpoint": endpoint, "input": input,
                                    "idempotency_key": str(uuid.uuid4())})
             cost = float(r.get("charge_usd") or 0.0)
-            self.spent += cost
             if r.get("status") != "COMPLETED":
+                with self._lock:
+                    self.spent += cost  # a failed Run can still be charged
                 report(self.on_call, SponsorCall("glasser", "run", label, ok=False, ms=t.ms, by=by, fallback=True,
                                                  cost_usd=cost, trace=r.get("run_url"), error=str(r.get("status"))))
                 raise GlasserError(f"run {r.get('status')}")
             report(self.on_call, SponsorCall("glasser", "run", label, ms=t.ms, by=by, cost_usd=cost,
                                              trace=r.get("run_url")))
-            out = {"output": r.get("output") or {}, "cost": cost, "runUrl": r.get("run_url", ""), "repeat": False}
-            self._bought[key] = out
-            return out
+            return {"output": r.get("output") or {}, "cost": cost, "runUrl": r.get("run_url", ""), "repeat": False}
         except GlasserError:
             raise
         except Exception as exc:  # noqa: BLE001
