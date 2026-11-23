@@ -48,6 +48,7 @@ right after its verdict), `panel.whisper` events have no `text` and carry `seale
 | Voice audio | `GET /api/audio/:file` | | the audio file (not JSON) | static, from `data/audio/` |
 | Sponsor totals | `GET /api/session/:id/sponsors` | | `SponsorTotals` (below) | `engine.sponsor_totals` |
 | Demo replay | `GET /api/demo` | | `{session, start, end, speed}`, or `{session: null}` | `engine.demo` |
+| Bench | `GET /api/bench` | | `{source: "bruin" \| "csv" \| "none", rows: [{split, dimension, system, macro_f1, n, record}], lines: [3 strings]}` | `lab.session.bench.results` |
 | Health | `GET /api/health` | | `{ok, mock, band: "live" \| "local"}` | |
 
 ## Shapes
@@ -141,9 +142,13 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
 
 ## Additions (N1, after the freeze; all optional)
 
-- `task` query on `tables`, `rows` and `profile`: the slot id (`t1`, `t2`, `t3`) whose
-  tables to read, so a replay can show any task of a finished session. Without it the
-  routes use the current task, or the last one when the session is over.
+- `task` query on `tables`, `rows` and `profile` (`?task=t2`): the slot id (`t1`, `t2`,
+  `t3`) whose tables to read, so the front end can re-read the tables when the task
+  changes. Without it the routes use the current task (the last one when the session is
+  over). Only the current task or one already finished in this session is served; a
+  future or unknown task returns `409 {error}`, so task 3's tables wait their turn. In a
+  finished session (a replay) every task works. A malformed id is `400`. `POST /sql`
+  always runs on the current task.
 - `GET /api/agents` items also carry `title` ("Lab head", "Examiner", ...).
   `portrait` is `/api/portraits/<agent>.png` when that file exists.
 - Roles in `GET /api/agents`: `vale` director, `ines` referee, `sam` head, `telem`
@@ -157,3 +162,11 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
   `events.md`.
 - `ask` to `telem` runs a live Telem search with the learner's question; the reply adds
   `links` (`[{title, url}]`) and `trace`.
+
+**Bench**: `GET /api/bench` gives N4's MRBench results for the examiner panel. Rows come
+from Bruin's `learn.bench_results` (`source: "bruin"`), else N4's `data/bench/results.csv`
+(`"csv"`), else none. `split` is `dev-A`, `dev-B` or `test` as recorded: never show a dev
+number as a test number. `macro_f1` is a percent, `null` for `test` until CodaBench scores
+it; `n` is replies scored (or predicted, for `test`); `record` is the best BEA 2025
+test-set score for that dimension. `lines` are the three on-screen demo lines from
+`bench/README.md`, each naming its split.

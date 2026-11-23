@@ -354,9 +354,11 @@ def test_useful_is_held_back_until_the_verdict(env):
 NEWS = {"title": "A grocer restates sales after an export used cents", "url": "https://example.com/news",
         "trace": "https://app.telem.ai/traces/t1", "summary": "One region's export switched units.",
         "cached": False}
-BENCH = {"kind": "basket", "label": "Average grocery basket", "value": 38, "low": 30, "high": 45,
-         "unit": "USD per visit", "source": "https://app.glasser.ai/runs/b1", "cost": 0.002,
+BENCH = {"kind": "basket", "label": "A basket of 4 staples (milk, bread, coffee, paper towels), US online prices",
+         "value": 33.87, "low": 25.62, "high": 67.04, "unit": "USD",
+         "source": "Google Shopping via Glasser (serper /shopping)", "cost": 0.008,
          "trace": "https://app.glasser.ai/runs/b1", "cached": False}
+STAPLES = "a basket of 4 staples (milk, bread, coffee, paper towels), US online prices: about $34 ($26 to $67)"
 
 
 def run_with_news(monkeypatch, trap, learner, clean=False):
@@ -424,7 +426,7 @@ def test_telem_answers_from_a_search(env, monkeypatch):
 
 def test_glasser_fact_in_the_level_2_hint_and_the_verdict(env, monkeypatch):
     calls = []
-    monkeypatch.setattr(sources, "glasser_benchmark", lambda on_call, kind, by: calls.append((kind, by)) or BENCH)
+    monkeypatch.setattr(sources, "glasser_benchmark", lambda sp, kind, by: calls.append((kind, by)) or BENCH)
     sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
     wait_for(sid, opened("t1"))
     s = env.get(sid)
@@ -434,11 +436,158 @@ def test_glasser_fact_in_the_level_2_hint_and_the_verdict(env, monkeypatch):
     call("POST", f"/api/session/{sid}/answer", ANSWER)
     evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
     hint2 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 2)
-    assert hint2["text"].startswith("I spent $0.002 to check: average grocery basket is typically $30 to $45 per visit.")
-    assert hint2["data"]["bought"]["cost"] == 0.002 and hint2["data"]["bought"]["trace"] == BENCH["trace"]
+    assert hint2["text"].startswith(f"I spent $0.008 to check: {STAPLES}. ")
+    assert hint2["data"]["bought"]["cost"] == 0.008 and hint2["data"]["bought"]["trace"] == BENCH["trace"]
     hint1 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 1)
     assert "bought" not in hint1["data"]
     verdict = next(e for e in evs if e["k"] == "verdict")["data"]
-    assert verdict["benchmark"]["low"] == 30 and verdict["text"].endswith(
-        "Reality check: average grocery basket is typically $30 to $45 per visit (Glasser, $0.002).")
+    assert verdict["benchmark"]["low"] == 25.62 and verdict["text"].endswith(
+        f"Reality check: {STAPLES}, from Glasser ($0.008). The $1,067 a quick read gives (members' average "
+        "spend per visit, before the fix) should have looked wrong: fixed, it is $37.")
     assert calls == [("basket", "sam"), ("basket", "ines")]
+
+
+def test_real_n3_bank_checks_and_learner(env, monkeypatch):
+    """With N3 there: a real bank task, N3's checks and N3's learner model, and a replay after restart."""
+    pytest.importorskip("lab.tasks.bank")
+    monkeypatch.delenv("LAB_N3", raising=False)
+    sid = call("POST", "/api/session/start", {"mode": "judge", "learner": "n3-real"})[1]["sessionId"]
+    wait_for(sid, opened("t1"), timeout=120)   # the first run may build the bank
+    s = env.get(sid)
+    assert not s.slot.task.stub and s.slot.task.n3 is not None
+    picked = next(e for e in events(sid) if e["k"] == "task.picked")["data"]
+    assert picked["fallback"] is False
+    trap = s.slot.task.key["trap"]
+    call("POST", f"/api/session/{sid}/answer", {**ANSWER, "trap": trap,
+                                               "verdict": "holds" if trap == "none" else "fails"})
+    evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs), timeout=120)
+    checks = [e["data"] for e in evs if e["k"] == "check.result"]
+    assert len(checks) == 5 and sum(not c["passed"] for c in checks) == (0 if trap == "none" else 1)
+    traps = {m["trap"]: m for m in call("GET", f"/api/session/{sid}/mastery")[1]["traps"]}
+    assert traps[trap]["attempts"] == 1
+    api.set_engines(real=Engine())   # a restarted server reads the same task back from N3's bank
+    assert call("GET", f"/api/session/{sid}/events", query="since=0")[1]["events"] == evs
+    assert call("GET", f"/api/session/{sid}/mastery")[1]["traps"] == list(traps.values())
+
+
+def test_task_query_opens_only_the_current_or_a_finished_task(env):
+    sid = call("POST", "/api/session/start")[1]["sessionId"]   # a rotation: t1, t2, t3
+    wait_for(sid, opened("t1"))
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t1")[0] == 200
+    for path in ("tables", "tables/visits/rows", "tables/visits/profile"):
+        status, reply = call("GET", f"/api/session/{sid}/{path}", query="task=t3")
+        assert status == 409 and reply["error"], path   # a future task
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t9")[0] == 409   # no such task
+    assert call("GET", f"/api/session/{sid}/tables", query="task=x")[0] == 400
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    wait_for(sid, opened("t2"))
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t1")[0] == 200   # finished
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t2")[0] == 200   # current
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t3")[0] == 409
+
+
+def test_benchmark_lines_are_built_from_the_numbers():
+    free = {**BENCH, "cost": 0.0}
+    assert sources.benchmark_source(free) == "Glasser"   # a repeat in the same session is free
+    assert sources.benchmark_source({**BENCH, "cost": 0, "cached": True}) == "Glasser (recorded)"
+    assert sources.benchmark_source({"source": "fixed value (not from Glasser)", "cost": 0}).startswith("a recorded")
+    kpi = {"label": "Target stores, FY 2025", "value": 1995, "low": None, "high": None, "unit": "stores"}
+    assert sources.benchmark_range(kpi) == "1,995 stores"
+    assert sources.benchmark_range({"low": 30, "high": 45, "unit": "USD per visit"}) == "$30 to $45 per visit"
+
+
+def test_one_glasser_per_session(monkeypatch):
+    monkeypatch.setenv("LAB_SPONSORS", "on")
+    made = []
+
+    class FakeGlasser:
+        def __init__(self, on_call=None):
+            made.append(self)
+            self.on_call = on_call
+
+        def benchmark(self, kind, by="system"):
+            first = len(made[0].__dict__.setdefault("bought", [])) == 0
+            made[0].bought.append(kind)
+            self.on_call({"sponsor": "glasser", "label": "Benchmark", "count": 1 if first else 0,
+                          "cost": 0.008 if first else 0.0})
+            return {**BENCH, "cost": 0.008 if first else 0.0}
+
+    import types, sys
+    monkeypatch.setitem(sys.modules, "lab.sponsors.glasser", types.SimpleNamespace(Glasser=FakeGlasser))
+    # The real Telem and Runware clients would read .env into this process; keep them out.
+    monkeypatch.setitem(sys.modules, "lab.sponsors.telem", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "lab.sponsors.runware", types.SimpleNamespace())
+    seen = []
+    sp = sources.Sponsors(seen.append)
+    a = sources.glasser_benchmark(sp, "basket", "sam")
+    b = sources.glasser_benchmark(sp, "basket", "ines")
+    assert len(made) == 1 and a["cost"] == 0.008 and b["cost"] == 0.0
+    assert [c["count"] for c in seen] == [1, 0]   # the repeat is reported, free
+
+
+def test_naive_sentence_only_when_the_quick_number_is_clearly_off():
+    from lab.session.engine import naive_sentence
+    unit = {"value": 1632.71, "unit": "USD per visit", "label": "members' average spend per visit, before the fix",
+            "group": "members", "fixed": 42.53}
+    assert naive_sentence({"trap": "unit_mismatch", "naive": unit}) == (
+        "The $1,633 a quick read gives (members' average spend per visit, before the fix) should have looked "
+        "wrong: fixed, it is $43.")
+    assert naive_sentence({"trap": "confounder", "naive": {**unit, "value": 42.53}}) == ""      # value == fixed
+    assert naive_sentence({"trap": "duplicate_rows", "naive": {**unit, "value": 47.1}}) == ""   # a few dollars
+    assert naive_sentence({"trap": "hidden_variable"}) == ""                                   # no naive key
+    assert naive_sentence({"trap": "none", "naive": unit}) == ""
+    assert naive_sentence({"trap": "unit_mismatch", "naive": {**unit, "fixed": 0}}) == ""
+
+
+def test_session_end_comes_after_the_last_voice_line(env):
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+    time.sleep(0.5)
+    evs = events(sid)
+    assert evs[-1]["k"] == "session.end", [e["k"] for e in evs[-4:]]
+
+
+def test_riley_states_the_planted_careless_verdict():
+    from lab.session.engine import rival_line, rival_prompt, verdicts_said
+    assert verdicts_said("That doesn't hold up.") == {"fails"}
+    assert verdicts_said("Members $45.86 vs $37.04, so the claim holds.") == {"holds"}
+    assert verdicts_said("No loyalty column, so I can't tell.") == {"cant_tell"}
+    assert verdicts_said("I can\u2019t tell from this data.") == {"cant_tell"}
+    suspicion = "One store's baskets look far too big; probably a unit problem."
+    p = rival_prompt("Members spend more.", "visits (10 rows)", "cant_tell", suspicion)
+    assert "Your verdict: you can't tell" in p and "number" in p and "your number" not in p
+    assert "Your verdict: the claim fails" in rival_prompt("c", "t", "fails", "Members $1. The claim fails.")
+    # A can't-tell answer that invents a number or a verdict falls back to the planted suspicion.
+    assert rival_line("Members spend $52 vs $40, so it looks true.", "cant_tell", suspicion) == (
+        suspicion + " So I can't tell from this data.")
+    assert rival_line("Members average $52, but one store looks off, so I can't tell.", "cant_tell",
+                      suspicion).startswith(suspicion)
+    kept = "One store looks off, probably cents, so I can't tell."
+    assert rival_line(kept, "cant_tell", suspicion) == kept
+    planted = "I averaged spend over all 425 visits: members $44.84, others $37.42. The claim holds."
+    assert rival_line("Members $44.84 vs $37.42: the claim fails.", "holds", planted) == planted
+    assert rival_line("Members $44.84 vs $37.42, so it holds.", "holds", planted).endswith("so it holds.")
+
+
+def test_rival_answer_keeps_the_key_verdict_when_the_model_disagrees(env, monkeypatch):
+    from lab.session import engine as engine_mod
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    s = env.get(sid)
+    suspicion = "There's no loyalty column in visits or customers, so the claim can't be checked."
+    monkeypatch.setitem(s.slot.task.key, "careless", {"verdict": "cant_tell", "trap": "hidden_variable",
+                                                     "note": suspicion})
+    prompts = []
+    monkeypatch.setattr(engine_mod.speaker, "canned", lambda: False)
+    monkeypatch.setattr(sources, "riley_model", lambda sp, system, user: prompts.append(user) or
+                        {"text": "Members $48 vs $41 per visit, so the claim looks true.", "model": "m",
+                         "provider": "runware"})
+    text, model, provider = s.rival_text()
+    assert text == suspicion and provider == "runware"
+    assert "Your verdict: you can't tell" in prompts[0] and "your number" not in prompts[0]
+    monkeypatch.setattr(engine_mod.speaker, "canned", lambda: True)
+    s.emit_rival(text, model, provider)
+    rival = [e for e in events(sid) if e["k"] == "rival.answer"][-1]["data"]
+    assert rival["verdict"] == "cant_tell" and rival["trap"] == "hidden_variable" and rival["note"] == suspicion

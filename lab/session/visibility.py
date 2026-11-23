@@ -115,6 +115,11 @@ def search_results(s) -> tuple[str, str]:
     found = (s.slot.case or s.slot.search) if s.slot else None
     if not found:
         return ("Telem's search results", "none")
+    try:   # N2's wrapper marks web text as untrusted data for the prompt
+        from lab.sponsors.telem import quote_results
+        return ("Telem's search results", quote_results(found))
+    except Exception:
+        pass
     lines = [f"- {r.get('title', '')}: {r.get('snippet', '')} ({r.get('url', '')})" for r in found.get("results", [])]
     return ("Telem's search results", "\n".join(lines) or "no results")
 

@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "lab" / "prompts"
-POOL = ThreadPoolExecutor(max_workers=int(os.environ.get("LAB_AGENT_WORKERS") or 4), thread_name_prefix="agent")
+POOL = ThreadPoolExecutor(max_workers=int(os.environ.get("LAB_AGENT_WORKERS") or 6), thread_name_prefix="agent")
 TIMEOUT_S = float(os.environ.get("LAB_AGENT_TIMEOUT") or 45)
 _prompt_cache: dict[str, str] = {}
 _lock = threading.Lock()
@@ -53,7 +53,8 @@ def _fence(text: str) -> str:
 
 def clean(text: str, max_words: int) -> str:
     text = re.sub(r"^\s*(\*\*?[^*]+\*\*?:|[A-Z][a-z]+:)\s*", "", text.strip())   # "Vale:" prefixes
-    text = text.replace("**", "").strip().strip('"').strip()
+    text = text.replace("**", "").replace("`", "").strip().strip('"').strip()
+    text = text[:1].upper() + text[1:]   # a stripped "Riley:" can leave a lower-case start
     words = text.split()
     if len(words) > max_words * 1.5:
         text = " ".join(words[: int(max_words * 1.5)]).rstrip(",;:") + "..."

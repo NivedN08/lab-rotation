@@ -89,13 +89,21 @@ class MockEngine:
         done = any(e["k"] == "session.end" for e in self.released(session_id))
         return None if done else self.task
 
+    def _check_task(self, task: str | None) -> None:
+        if task not in (None, self.task["id"]):   # the mock session has one task
+            from lab.session.engine import EngineError
+            raise EngineError(409, "no such task in this session")
+
     def tables(self, session_id: str, task: str | None = None) -> list[dict]:
+        self._check_task(task)
         return self.tables_box.tables()
 
     def rows(self, session_id: str, table: str, offset: int, limit: int, task: str | None = None) -> dict:
+        self._check_task(task)
         return self.tables_box.rows(table, offset, limit)
 
     def profile(self, session_id: str, table: str, task: str | None = None) -> dict:
+        self._check_task(task)
         return self.tables_box.profile(table)
 
     def events_since(self, session_id: str, since: int) -> dict:

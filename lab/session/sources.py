@@ -398,11 +398,22 @@ def sponsors_on() -> bool:
 class Sponsors:
     """One session's sponsor clients (N2), each reporting to that session's log."""
 
+    def _gl_report(self, call) -> None:
+        self.gl_reports += 1
+        if self.on_call:
+            self.on_call(call)
+
     def __init__(self, on_call):
         self.on_call = on_call
-        self.lib = self.rw = None
+        self.lib = self.rw = self.gl = None
+        self.gl_reports = 0   # Glasser calls reported so far (a cache hit reports none)
         if not sponsors_on():
             return
+        try:
+            from lab.sponsors.glasser import Glasser   # N2: one per session, its "already bought" memo
+            self.gl = Glasser(on_call=self._gl_report)
+        except Exception as e:
+            _log(f"Glasser client unavailable ({type(e).__name__})")
         try:
             from lab.sponsors.telem import Librarian   # N2
             self.lib = Librarian(on_call=on_call)
@@ -518,61 +529,44 @@ def teamily_post(session: str, tasks: list, mastery_: dict, learner: str, on_cal
         return None
 
 
-def glasser_params(on_call) -> dict | None:
+def glasser_params(sp: Sponsors) -> dict | None:
     """Glasser's retail numbers (N2 caches them per day), logged as one sponsor.call.
 
     N2's client reports live calls itself; a cache hit reports nothing, so this logs it.
     """
-    if not sponsors_on():
+    if not sp.gl:
         return None
-    reported = []
-
-    def relay(call):
-        reported.append(call)
-        if on_call:
-            on_call(call)
+    before, start = sp.gl_reports, time.monotonic()
     try:
-        from lab.sponsors.glasser import Glasser   # N2
-        start = time.monotonic()
-        got = Glasser(on_call=relay).retail_params()
+        got = sp.gl.retail_params()
     except Exception as e:
         _log(f"Glasser unavailable ({type(e).__name__})")
         return None
-    if not reported and on_call:
-        on_call({"sponsor": "glasser", "label": "read today's retail numbers (cached)", "count": 1, "op": "run",
-                 "by": "system", "ms": int((time.monotonic() - start) * 1000), "fallback": True})
+    if sp.gl_reports == before and sp.on_call:
+        sp.on_call({"sponsor": "glasser", "label": "read today's retail numbers (cached)", "count": 1, "op": "run",
+                    "by": "system", "ms": int((time.monotonic() - start) * 1000), "fallback": True})
     return got if isinstance(got, dict) else None
 
 
-def glasser_benchmark(on_call, kind: str, by: str) -> dict | None:
-    """{kind, label, value?, low, high, unit, source, cost, trace, cached} from N2's
-    Glasser.benchmark, or None (then no reality check is shown: numbers are never made up)."""
-    if not sponsors_on():
+def glasser_benchmark(sp: Sponsors, kind: str, by: str) -> dict | None:
+    """{kind, label, value, low, high, unit, source, cost, trace, cached} from N2's
+    Glasser.benchmark on the session's one Glasser (a repeat in the session is free), or None:
+    then no reality check is shown, since numbers are never made up."""
+    if not sp.gl or not hasattr(sp.gl, "benchmark"):
         return None
-    reported = []
-
-    def relay(call):
-        reported.append(call)
-        if on_call:
-            on_call(call)
+    before, start = sp.gl_reports, time.monotonic()
     try:
-        from lab.sponsors.glasser import Glasser   # N2
-        g = Glasser(on_call=relay)
-        fn = getattr(g, "benchmark", None)
-        if fn is None:
-            return None
-        start = time.monotonic()
-        got = dict(fn(kind, by=by) or {})
+        got = dict(sp.gl.benchmark(kind, by=by) or {})
     except Exception as e:
         _log(f"Glasser benchmark unavailable ({type(e).__name__})")
         return None
-    if got.get("low") is None or got.get("high") is None:
+    if got.get("value") is None and (got.get("low") is None or got.get("high") is None):
         return None
     out = {"kind": kind, **{k: got.get(k) for k in ("label", "value", "low", "high", "unit", "source", "cost",
                                                      "trace", "cached")}}
-    if not reported and on_call:
-        on_call({"sponsor": "glasser", "label": f"read the {kind} benchmark (cached)", "count": 1, "op": "run",
-                 "by": by, "ms": int((time.monotonic() - start) * 1000), "fallback": True})
+    if sp.gl_reports == before and sp.on_call:
+        sp.on_call({"sponsor": "glasser", "label": f"read the {kind} benchmark (cached)", "count": 1, "op": "run",
+                    "by": by, "ms": int((time.monotonic() - start) * 1000), "fallback": True})
     return out
 
 
@@ -588,19 +582,32 @@ def _amount(x: float, money: bool) -> str:
     return f"{x:,.4g}"
 
 
+def _money(unit: str) -> tuple[bool, str]:
+    unit = str(unit or "").strip()
+    if unit.upper().startswith("USD"):
+        return True, unit[3:].strip()
+    if unit.startswith("$"):
+        return True, unit[1:].strip()
+    return False, unit
+
+
 def benchmark_range(b: dict) -> str:
-    """'$30 to $45 per visit' from a benchmark; built in code so the numbers are exact."""
-    unit = str(b.get("unit") or "").strip()
-    money = unit.upper().startswith("USD") or unit.startswith("$")
-    rest = unit[3:].strip() if unit.upper().startswith("USD") else unit[1:].strip() if money else unit
-    lo, hi = _amount(float(b["low"]), money), _amount(float(b["high"]), money)
-    return f"{lo} to {hi}" + (f" {rest}" if rest else "")
+    """'about $34 ($26 to $67)', '$30 to $45 per visit' or '1,995 stores'; built in code so the
+    numbers are exactly Glasser's."""
+    money, rest = _money(b.get("unit"))
+    tail = f" {rest}" if rest else ""
+    has_range = b.get("low") is not None and b.get("high") is not None
+    rng = f"{_amount(float(b['low']), money)} to {_amount(float(b['high']), money)}" if has_range else ""
+    if b.get("value") is not None:
+        val = _amount(float(b["value"]), money) + tail
+        return f"about {val} ({rng})" if rng else val
+    return rng + tail
 
 
 def benchmark_source(b: dict) -> str:
-    """'Glasser, $0.002' or 'a recorded planning value'."""
+    """'Glasser ($0.008)', 'Glasser (recorded)', 'Glasser' (a free repeat) or 'a recorded planning value'."""
     if not from_glasser(b):
         return "a recorded planning value, not a live lookup"
     cost = b.get("cost")
-    return "Glasser" + (f", ${float(cost):.3f}" if cost else ", cached")
+    return "Glasser" + (f" (${float(cost):.3f})" if cost else " (recorded)" if b.get("cached") else "")
 

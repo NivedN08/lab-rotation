@@ -89,7 +89,7 @@ def test_totals_and_mastery_follow_the_replay(mock):
     assert totals["bruin"] == {"checksRun": 5, "checksFailed": 1}
     assert totals["runware"]["lines"] == 7
     assert totals["telem"]["searches"] == 3 and totals["telem"]["monitorHits"] == 1
-    assert totals["glasser"]["calls"] == 4
+    assert totals["glasser"]["calls"] == 3   # Ines's repeat of Sam's lookup is free (count 0)
     _, mastery = call("GET", f"/api/session/{sid}/mastery")
     by_trap = {m["trap"]: m for m in mastery["traps"]}
     assert len(by_trap) == 6 and by_trap["unit_mismatch"] == {"trap": "unit_mismatch", "score": 0.61, "attempts": 1}
@@ -112,6 +112,8 @@ def test_tables_rows_profile_sql(mock):
     status, res = call("POST", f"/api/session/{sid}/sql", {"sql": "select * from nope"})
     assert status == 200 and "error" in res
     assert call("GET", f"/api/session/{sid}/tables/nope/rows")[0] == 404
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t1")[0] == 200
+    assert call("GET", f"/api/session/{sid}/tables", query="task=t2")[0] == 409
 
 
 def test_canned_posts(mock):
@@ -245,7 +247,8 @@ def test_mock_shows_the_telem_and_glasser_additions(mock):
     ask = next(e for e in evs if e["k"] == "ask.answer" and e["agent"] == "telem")
     assert ask["data"]["links"] and ask["data"]["trace"] and ask["seq"] < kinds_.index("learner.answer")
     hint2 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 2)
-    assert hint2["data"]["bought"]["sponsor"] == "glasser" and "$30 to $45" in hint2["text"]
+    assert hint2["data"]["bought"]["sponsor"] == "glasser" and "($26 to $67)" in hint2["text"]
     verdict = next(e for e in evs if e["k"] == "verdict")["data"]
-    assert verdict["benchmark"]["low"] == 30 and verdict["text"].endswith(verdict["benchmark"]["unit"].split(" ", 1)[1]
-                                                                          + " (Glasser, $0.002).")
+    assert verdict["benchmark"]["low"] == 25.62 and "($26 to $67), from Glasser. The $1,067 a quick read gives" in verdict["text"]
+    repeat = [e for e in evs if e["k"] == "sponsor.call" and e["data"]["sponsor"] == "glasser" and e["data"]["by"] == "ines"]
+    assert repeat[0]["data"]["count"] == 0 and repeat[0]["data"]["cost"] == 0   # bought once per session

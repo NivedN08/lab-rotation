@@ -24,16 +24,20 @@ import os
 import pathlib
 import queue
 import random
+import re
 import secrets
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, wait as wait_all
 from dataclasses import dataclass, field
 
 from lab import ledger
 from lab.session import fallback, grade as grading, meter, quotes, sources, speaker, summary
 from lab.session.log import SessionLog, read_events, session_path, sessions_dir
 from lab.session.visibility import sources_used, view
+
+VOICE_POOL = ThreadPoolExecutor(max_workers=3, thread_name_prefix="voice")   # TTS, apart from agent turns
 
 TICK_S = 2.0
 HINT_GAP_S = 20.0
@@ -72,9 +76,34 @@ WHISPER_WHY = {
 }
 
 
+NAIVE_RATIO = 3   # the careless number must be this many times the fixed one to "look wrong"
+
+
+def naive_sentence(key: dict) -> str:
+    """'The $1,633 a quick read gives (...) should have looked wrong: fixed, it is $43.' Only
+    when N3's careless number is clearly off (value / fixed > 3, in practice unit mix-ups);
+    for a confounder the two match and duplicates move it a few dollars, so say nothing."""
+    n = key.get("naive")
+    if not isinstance(n, dict) or key.get("trap") == "none":
+        return ""
+    try:
+        value, fixed = float(n["value"]), float(n["fixed"])
+    except (KeyError, TypeError, ValueError):
+        return ""
+    if fixed <= 0 or value / fixed <= NAIVE_RATIO:
+        return ""
+    money = str(n.get("unit") or "USD").upper().startswith("USD")
+    label = str(n.get("label") or "").strip()
+    about = f" ({label})" if label else ""
+    return (f"The {sources._amount(value, money)} a quick read gives{about} should have looked wrong: "
+            f"fixed, it is {sources._amount(fixed, money)}.")
+
+
 def _label(b: dict) -> str:
     lab_ = str(b.get("label") or f"a typical {b.get('kind', 'basket')}").strip()
-    return lab_[0].lower() + lab_[1:] if lab_[:1].isupper() and lab_[1:2].islower() else lab_
+    first = lab_.split(" ", 1)[0]
+    # Only a leading article goes lower case mid-sentence; names ("Target stores") stay.
+    return lab_[0].lower() + lab_[1:] if first in ("A", "An", "The") else lab_
 
 
 def telem_reply(found: dict) -> str:
@@ -127,6 +156,50 @@ NEWS_BRIEF = "Telem's monitor read the news this morning; I'll tell you after th
 NEWS_WAIT_S = 3.0
 
 
+# Riley's verdict comes from the key's careless answer; the model only words it.
+_NEGATED = re.compile(r"\b(doesn'?t|does not|didn'?t|won'?t|isn'?t|is not|not)\s+(hold( up)?|true|right|correct|stand( up)?)\b",
+                      re.I)
+_SAYS = {
+    "fails": re.compile(r"\b(fails|falls apart|looks (wrong|false|off)|is (wrong|false)|untrue|debunked)\b", re.I),
+    "holds": re.compile(r"\b(holds|holds up|looks (true|right|correct|solid|legit)|is (true|right|correct)|checks out|"
+                        r"confirmed|stands up)\b", re.I),
+    "cant_tell": re.compile(r"\b(can'?t tell|cannot tell|can not tell|not sure|unclear|hard to say|can'?t say|"
+                            r"inconclusive|can'?t be (checked|sure|told)|no way to tell)\b", re.I),
+}
+
+
+_MONEY = re.compile(r"\$\s?\d")
+
+
+def verdicts_said(text: str) -> set[str]:
+    """Which verdicts a line states ('doesn't hold' counts as fails, not holds)."""
+    text = text.replace("\u2019", "'")   # models write a curly "can’t"
+    said = {"fails"} if _NEGATED.search(text) else set()
+    rest = _NEGATED.sub(" ", text)
+    return said | {v for v, rx in _SAYS.items() if rx.search(rest)}
+
+
+def rival_prompt(claim: str, tables: str, verdict: str, note: str) -> str:
+    """Riley's user prompt: the planted verdict is stated, and a can't-tell answer has no number."""
+    head = f"Claim: {claim}\nPublic tables:\n{tables}\nYour quick analysis: {note}\n"
+    if verdict == "cant_tell":
+        return head + ("Your verdict: you can't tell from this data. Say your suspicion and that you can't tell, "
+                       "in one or two breezy sentences. Give no number and do not say whether the claim holds.")
+    return head + (f"Your verdict: the claim {verdict}. Say that verdict and the numbers from your quick analysis, "
+                   "in one or two breezy sentences. Use no other numbers.")
+
+
+def rival_line(text: str, verdict: str, note: str) -> str:
+    """The model's wording, unless it states a verdict other than the planted one: then the note."""
+    said = verdicts_said(text or "")
+    made_up = verdict == "cant_tell" and _MONEY.search(text or "") and not _MONEY.search(note)
+    if text and (not said or verdict in said) and not made_up:
+        return text
+    if verdict == "cant_tell" and "cant_tell" not in verdicts_said(note):
+        return f"{note} So I can't tell from this data."
+    return note
+
+
 def topic_query(claim: str) -> str:
     """Telem's pre-answer search: built from the public claim only, so a clean twin with the
     same claim gets the same search."""
@@ -154,6 +227,7 @@ class Slot:
     last_meter: dict | None = None
     last_meter_t: float = -1e9
     ledger: dict | None = None
+    bench_f: object = None           # Sam's Glasser lookup, started after hint 1 (not saved)
 
     def public(self) -> dict | None:
         if not self.task:
@@ -184,6 +258,7 @@ class Session:
         self.thread: threading.Thread | None = None
         self.worker_lock = threading.Lock()   # the worker's exit and a restart never cross
         self.save_lock = threading.Lock()
+        self.voices: list = []   # pending voice.line jobs; session.end waits a little for them
 
     @property
     def sponsors(self) -> sources.Sponsors:
@@ -228,7 +303,7 @@ class Session:
     def say(self, agent: str, text: str, why: str, to: str | None = "learner", task: str | None = None,
             data: dict | None = None) -> dict:
         e = self.emit("agent.say", agent, why, to=to, text=text, task=task, data=data)
-        speaker.POOL.submit(self._voice, agent, text, e["seq"], task)
+        self.voices.append(VOICE_POOL.submit(self._voice, agent, text, e["seq"], task))
         return e
 
     def _voice(self, agent: str, text: str, line_of: int, task: str | None) -> None:
@@ -373,6 +448,12 @@ class Session:
         vale_f = speaker.submit("vale", vale_job, view("vale", self), brief_fallback, 55)
         query = topic_query(p["claim"])
         search_f = speaker.POOL.submit(sources.telem_topic, self.sponsors, query)
+        telem_fb = "Some background on claims like this one: the sources are on the card."
+        found = search_f.result()
+        s.search = found   # Telem's view reads it; the search event still goes out after Vale speaks
+        telem_f = speaker.submit("telem", "Before the learner starts, give one or two sentences of background on "
+                                          "the claim's topic from your search results. Say nothing about what "
+                                          "could be wrong with any dataset.", view("telem", self), telem_fb, 45)
         line, used_fb = vale_f.result()
         if leaks_any(line):
             line = brief_fallback
@@ -380,17 +461,12 @@ class Session:
             line = f"{line} {NEWS_BRIEF}"
         self.say("vale", line, "deliver the brief and the claim", task=s.id)
         self.move("telem", "shelves", "look up background on the claim")
-        found = search_f.result()
-        s.search = found
         self.emit("search", "telem", "background on the claim's topic; the search uses only the public claim",
                   task=s.id, text="Telem looked up background on the claim.",
                   data={"phase": "topic", "query": found.get("query", query), "results": found.get("results", []),
                         "trace": found.get("trace", ""), "cached": bool(found.get("cached"))})
         self.move("telem", "learner_desk", "bring background on the claim", to="learner")
-        telem_fb = "Some background on claims like this one: the sources are on the card."
-        tline, _ = speaker.call("telem", "Before the learner starts, give one or two sentences of background on "
-                                         "the claim's topic from your search results. Say nothing about what "
-                                         "could be wrong with any dataset.", view("telem", self), telem_fb, 45)
+        tline, _ = telem_f.result()
         if leaks_any(tline):
             tline = telem_fb
         self.say("telem", tline, "background on the claim's topic, with its sources", task=s.id)
@@ -407,22 +483,33 @@ class Session:
         hint = ladder[min(level, len(ladder)) - 1] if ladder else "What would you check first if this were your data?"
         sam_fb = (f"The learner has {m['deadEnds']} dead ends and {m['idleSeconds']} s without a useful query. "
                   f"I'd like to give a level {level} hint.")
-        sam_line, _ = speaker.call("sam", f"Tell Vale and Ines privately, in one sentence, what the learner has "
-                                          f"tried and that you want to give a level {level} hint.",
-                                   view("sam", self), sam_fb, 40)
-        self.whisper("sam", "vale", sam_line, "hint_ask", cc=["ines"])
+        # Sam's private ask and his question to the learner run at once: the question needs only
+        # Ines's steer, which is the key's hint ladder, not the ask.
+        ask_f = speaker.submit("sam", f"Tell Vale and Ines privately, in one sentence, what the learner has "
+                                      f"tried and that you want to give a level {level} hint.",
+                               view("sam", self), sam_fb, 40)
+        kind = key.get("benchmark") or "basket"
+        if level == 2 and s.bench_f is None:
+            s.bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.sponsors, kind, "sam")
+        line_f = speaker.submit(   # at level 2 it is used only when Glasser has no number
+            "sam", f"Ask the learner one short question that points here, without giving the answer: {hint}",
+            view("sam", self), hint, 30)
+        self.whisper("sam", "vale", ask_f.result()[0], "hint_ask", cc=["ines"])
         self.whisper("ines", "sam", f"Steer them here, as a question: {hint}", "hint_steer")
         self.whisper("vale", "sam", "Go ahead, keep it a question.", "hint_ok")
         self.move("sam", "learner_desk", f"the struggle meter reached {m['value']}", to="learner")
-        bought = sources.glasser_benchmark(self.on_call, key.get("benchmark") or "basket", "sam") \
-            if level == 2 else None
+        bought = None
+        if level == 2:
+            try:
+                bought = s.bench_f.result(timeout=20)
+            except Exception as e:
+                self.engine.log_error(self, "benchmark", e)
         if bought:   # built in code so the numbers are exactly Glasser's
             paid = (f"I spent ${float(bought['cost']):.3f} to check" if bought.get("cost") and
                     sources.from_glasser(bought) else "I checked")
-            line = f"{paid}: {_label(bought)} is typically {sources.benchmark_range(bought)}. {hint}"
+            line = f"{paid}: {_label(bought)}: {sources.benchmark_range(bought)}. {hint}"
         else:
-            line, _ = speaker.call("sam", "Ask the learner one short question that points where Ines suggested. "
-                                          "Do not give the answer.", view("sam", self), hint, 30)
+            line, _ = line_f.result()
         if leaks(line, key["trap"]):
             line = hint
         s.hints, s.last_hint_t = level, self.log.now()
@@ -433,30 +520,36 @@ class Session:
         self.say("sam", line, f"struggle meter {m['value']}; hint level {level}, as a question"
                  + ("; Sam bought a fact from Glasser" if bought else ""), task=s.id, data=data)
         self.move("sam", "whiteboard", "back to the whiteboard to watch")
+        if level == 1 and s.bench_f is None:   # hint 2 brings a real number; buy it while they work
+            s.bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.sponsors, kind, "sam")
         self.save()
 
     # ------------------------------------------------------------------------- grading
     def do_grade(self) -> None:
         s = self.slot
         key, ans = s.task.key, s.answer
-        bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.on_call, key.get("benchmark") or "basket",
+        bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.sponsors, key.get("benchmark") or "basket",
                                       "ines")   # after the answer, so the lookup tells nothing
-        self.rival_answer()
-        for agent in ("vale", "ines", "sam"):
-            self.move(agent, "panel_table", "the panel confers before the verdict")
-        s.checks, bruin_call = sources.run_checks(s.task)
+        checks_f = speaker.POOL.submit(sources.run_checks, s.task)
+        sam_fb = (f"They needed {s.hints} hint{'s' if s.hints != 1 else ''}." if s.hints else
+                  "They needed no hints.")
+        sam_f = speaker.submit("sam", "Tell Ines and Vale privately, in one sentence, how the learner worked: "
+                                      "hints needed, dead ends, recoveries.", view("sam", self), sam_fb, 35)
+        riley_f = speaker.POOL.submit(self.rival_text)
+        s.checks, bruin_call = checks_f.result()
         g = grading.grade(ans, key, s.hints)
+        failing = next((c["check"] for c in s.checks if not c["passed"]), None)
         facts = (f"Score {g['score']} ({g['result']}); verdict part {g['parts']['verdict']}, trap part "
                  f"{g['parts']['trap']}, evidence part {g['parts']['evidence']}, hints {g['parts']['hints']}.")
         ines_fb = (f"The key says {key['trap']}, verdict {key['verdict']}. The learner said {ans['trap']}, "
                    f"{ans['verdict']}. {facts}")
-        sam_fb = (f"They needed {s.hints} hint{'s' if s.hints != 1 else ''}." if s.hints else
-                  "They needed no hints.")
         ines_f = speaker.submit("ines", "Tell Vale and Sam privately what the key says and how the learner's "
                                         "answer compares, in one or two sentences. " + facts,
                                 view("ines", self), ines_fb, 45)
-        sam_f = speaker.submit("sam", "Tell Ines and Vale privately, in one sentence, how the learner worked: "
-                                      "hints needed, dead ends, recoveries.", view("sam", self), sam_fb, 35)
+        fb_f = speaker.POOL.submit(self.feedback, g, failing)
+        self.emit_rival(*riley_f.result())
+        for agent in ("vale", "ines", "sam"):
+            self.move(agent, "panel_table", "the panel confers before the verdict")
         self.whisper("ines", "vale", ines_f.result()[0], "grade_basis", cc=["sam"])
         self.whisper("sam", "ines", sam_f.result()[0], "coaching", cc=["vale"])
         vale_line, _ = speaker.call("vale", "Decide with the panel in one or two sentences and ask Ines to deliver "
@@ -470,14 +563,13 @@ class Session:
             self.emit("check.result", "ines", ("the planted trap shows here" if not c["passed"]
                                                else "this check passes on this data"), task=s.id,
                       text=f"Check {'passed' if c['passed'] else 'failed'}: {c['detail']}"[:200], data=c)
-        failing = next((c["check"] for c in s.checks if not c["passed"]), None)
         record = {"session": self.id, "taskId": s.id, "score": g["score"], "verdict": ans["verdict"],
                   "trap": ans["trap"]}
         entry = ledger.append("grade.sealed", record, path=ledger_path())
         s.ledger = {"index": entry["seq"], "hash": entry["sha"][:12], "prev": entry["prev_sha"][:12]}
         self.emit("ledger.seal", "system", "seal the grade in the hash chain", task=s.id,
                   data={**s.ledger, "record": {k: record[k] for k in ("taskId", "score", "verdict", "trap")}})
-        text, qs = self.feedback(g, failing)
+        text, qs = fb_f.result()
         bench = None
         try:
             bench = bench_f.result(timeout=20)
@@ -509,7 +601,7 @@ class Session:
         news = {}
         if s.id == "t1" and self.news:
             news = {"news": {**{k: self.news.get(k, "") for k in ("title", "url", "trace")},
-                             "trap": self.news.get("trap"), "steered": bool(pick.get("nudged"))}}
+                             "trap": self.news.get("trap"), "steered": bool(pick.get("nudgeDecided"))}}
         full = pick.get("pickReason") or pick.get("reason") or "picked by the rules"
         self.emit("task.end", "system", "the verdict is in", task=s.id,
                   data={"taskId": s.id, "score": g["score"], "beatRival": g["score"] > rival_g["score"],
@@ -560,49 +652,55 @@ class Session:
     def reality_line(self, b: dict) -> str:
         """One sentence from Glasser's numbers, built in code (an agent could misstate them)."""
         key = self.slot.task.key
-        line = f"Reality check: {_label(b)} is typically {sources.benchmark_range(b)} ({sources.benchmark_source(b)})."
-        naive = key.get("naive")
-        unit = str(b.get("unit") or "")
-        if isinstance(naive, (int, float)) and key["trap"] != "none" and naive > 3 * float(b["high"]):
-            money = unit.upper().startswith("USD") or unit.startswith("$")
-            line += f" The quick answer's {sources._amount(float(naive), money)} should have looked wrong."
-        return line
+        line = f"Reality check: {_label(b)}: {sources.benchmark_range(b)}, from {sources.benchmark_source(b)}."
+        tail = naive_sentence(key)
+        return f"{line} {tail}" if tail else line
 
     def reveal_news(self) -> None:
         """After t1's verdict: the case of the day, and whether it steered the pick."""
         s, n = self.slot, self.news
-        steered = bool((s.pick or {}).get("nudged"))
+        steered = bool((s.pick or {}).get("nudgeDecided"))   # the news changed the pick
         title = n.get("title", "") or "a data error in the news"
+        spoken = title.rsplit(" | ", 1)[0].strip() or title
         self.emit("monitor.hit", "telem", "Telem's monitor found today's case; held until the first verdict "
                                           "because it can steer the pick", task=s.id,
                   text=f"Case of the day: {title}"[:200],
                   data={**{k: n.get(k, "") for k in ("title", "url", "trace", "summary")},
                         "trap": n.get("trap"), "steered": steered})
         self.move("vale", "learner_desk", "explain what shaped the pick", to="learner")
-        line = (f"I picked this task because Telem's monitor caught a story this morning: {title}. "
+        line = (f"I picked this task because Telem's monitor caught a story this morning: {spoken}. "
                 "The source and the trace are on the card." if steered else
-                f"Telem's monitor caught a story this morning: {title}. It didn't decide this pick; "
+                f"Telem's monitor caught a story this morning: {spoken}. It didn't decide this pick; "
                 "your learner profile did.")
         self.say("vale", line, "the news behind the pick, now that the verdict is in" if steered
                  else "the morning's news, which did not decide this pick", task=s.id)
 
     def rival_answer(self) -> None:
+        self.emit_rival(*self.rival_text())
+
+    def rival_text(self) -> tuple[str, str, str]:
+        """(text, model, provider) of Riley's quick answer; blocking, safe to run in the pool."""
         s, key = self.slot, self.slot.task.key
         careless = key.get("careless") or {}
-        verdict, trap = careless.get("verdict", "holds"), careless.get("trap", "none")
-        note = careless.get("note", "")
+        note, verdict = careless.get("note", ""), careless.get("verdict", "holds")
         tables = dict(view("riley", self))["public tables"]
-        got = None if speaker.canned() else sources.riley_model(self.sponsors, speaker.system_prompt("riley"),
-                                  f"Claim: {s.public()['claim']}\nPublic tables:\n{tables}\n"
-                                  f"Your quick analysis: {note}\nSay your answer and your number in one or two "
-                                  "breezy sentences.")
+        prompt = rival_prompt(s.public()["claim"], tables, verdict, note)
+        got = None if speaker.canned() else sources.riley_model(self.sponsors, speaker.system_prompt("riley"), prompt)
         if got:
-            text, model, provider = got["text"], got["model"], got["provider"]
+            text, model, provider = speaker.clean(got["text"], 60), got["model"], got["provider"]
         else:
             parts = view("riley", self) + [("your quick analysis", note)]
-            text, fb = speaker.call("riley", "Give your quick answer to the claim: your number and your verdict.",
+            text, fb = speaker.call("riley", "Give your quick answer to the claim. " + prompt.rsplit("\n", 1)[-1],
                                     parts, note, 40)
             model, provider = ("claude -p (careless prompt)" if not fb else "careless analysis"), "claude_fallback"
+        line = rival_line(text, verdict, note)
+        if line != text:
+            self.engine.note(self, "Riley's line stated another verdict; using the planted analysis")
+        return line, model, provider
+
+    def emit_rival(self, text: str, model: str, provider: str) -> None:
+        s, careless = self.slot, self.slot.task.key.get("careless") or {}
+        verdict, trap = careless.get("verdict", "holds"), careless.get("trap", "none")
         s.rival = {"verdict": verdict, "trap": trap, "note": text}
         self.emit("rival.answer", "riley", "the intern took the first number that answered the question",
                   task=s.id, text=f"Riley answered: {verdict}.",
@@ -649,17 +747,16 @@ class Session:
                      "score": x.grade["score"], "result": x.grade["result"]} for x in self.slots if x.grade]
             sources.teamily_post(self.id, done, self.mastery_now(), self.learner, self.on_call)
         refresh = speaker.POOL.submit(sources.learner_refresh, self.on_call)   # N3's Bruin learner tables
-        try:   # wait a little so session.end stays last; a slow refresh reports when it is done
-            refresh.result(timeout=20)
-        except Exception:
-            pass
+        # Wait a little so session.end stays last: the refresh, and the last lines' voices (a slow
+        # one still reports when it is done).
+        wait_all([refresh, *self.voices], timeout=20)
         self.finished = True
         self.emit("session.end", "system", "judge mode is one task" if self.mode == "judge"
                   else "all three rotation tasks are graded", data={"tasks": len(self.slots), "totalScore": total})
         self.save()
 
     def retail_numbers(self) -> None:
-        self.retail = sources.glasser_params(self.on_call)
+        self.retail = sources.glasser_params(self.sponsors)
 
     def read_news(self) -> None:
         """Telem's case of the day, before the first pick (it may nudge it). Its monitor.hit
@@ -845,10 +942,13 @@ class Engine:
         return s.slot.public() if s.slot else None
 
     def _folder(self, sid: str, task: str | None) -> str:
+        """The tables of the current task, or of a task already finished (any task once the
+        session is over). A future or unknown task is a 409: task 3's tables wait their turn."""
         s = self.get(sid)
         slot = s.slot_by_id(task)
-        if slot is None or slot.task is None:
-            raise EngineError(404, "no such task in this session")
+        if slot is None or slot.task is None or not (
+                s.finished or slot is s.slot or slot.phase == "done" or slot.grade is not None):
+            raise EngineError(409, "that task is not open yet" if slot else "no such task in this session")
         return slot.task.dir
 
     def tables(self, sid: str, task: str | None = None) -> list[dict]:
