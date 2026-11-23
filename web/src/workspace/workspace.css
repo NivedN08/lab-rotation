@@ -769,7 +769,16 @@
   gap: 8px;
 }
 
-/* The clock has stopped at the verdict. */
+/* The clock has stopped: the answer is in. */
 .ws-timer.done .ws-timer-num {
   color: var(--mist);
+}
+
+.ws-timer.done .ws-timer-note {
+  color: var(--mist);
+  font-size: 13px;
+}
+
+.ws-timer.done .ws-timer-num {
+  font-size: 16px;
 }
