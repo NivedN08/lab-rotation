@@ -42,5 +42,6 @@ logs/
 
 .bruin.yml
 logs/runs
+logs/queries
 logs/*.log
 *.py[cod]
