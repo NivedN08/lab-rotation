@@ -166,11 +166,13 @@ whisper(144, "sam", ["vale", "ines"], "Still no region or unit query after the f
         "hint_ask")
 whisper(145, "ines", ["sam"], "Steer them here, as a question: Compare the range of spend across regions.", "hint_steer")
 whisper(146, "vale", ["sam"], "Go ahead, keep it a question.", "hint_ok")
-BENCH = {"kind": "basket", "label": "Average grocery basket", "cost": 0.002, "source": "https://app.glasser.ai/runs/mock-b1",
+# Glasser.benchmark("basket"): the sum of 4 staples' median US online prices, quartile sums as the range.
+BENCH = {"kind": "basket", "label": "A basket of 4 staples (milk, bread, coffee, paper towels), US online prices",
+         "cost": 0.008, "source": "Google Shopping via Glasser (serper /shopping)",
          "trace": "https://app.glasser.ai/runs/mock-b1"}
-call(146.5, "sam", "glasser", "run", "Benchmark: average grocery basket", 690, "real retail numbers come from Glasser",
-     cost=0.002, trace=BENCH["trace"])
-say(147, "sam", "learner", "I spent $0.002 to check: average grocery basket is typically $30 to $45 per visit. Compare the range of spend across regions.",
+call(146.5, "sam", "glasser", "run", "Benchmark: a basket of 4 staples", 690, "real retail numbers come from Glasser",
+     cost=0.008, trace=BENCH["trace"])
+say(147, "sam", "learner", "I spent $0.008 to check: a basket of 4 staples (milk, bread, coffee, paper towels), US online prices: about $34 ($26 to $67). Compare the range of spend across regions.",
     "struggle meter 0.66; hint level 2, as a question; Sam bought a fact from Glasser", hintLevel=2,
     bought={"sponsor": "glasser", **BENCH})
 query(150, "q5", "select region, min(spend), max(spend) from visits join stores using (store_id) group by 1 order by 1", 4, 7)
@@ -205,8 +207,9 @@ whisper(206, "ines", ["vale", "sam"], "The key says unit_mismatch, verdict fails
         "grade_basis")
 whisper(208, "sam", ["ines", "vale"], "They needed two hints (levels 1 and 2). Credit the recovery.", "coaching")
 whisper(210, "vale", ["ines", "sam"], "Full marks on verdict and trap, less two hints. Ines, deliver it with the failing check.", "decide")
-call(211, "ines", "glasser", "run", "Benchmark: average grocery basket", 640, "real retail numbers come from Glasser",
-     cost=0.002, trace=BENCH["trace"])
+# The same Run again in the session is free: count 0, cost 0, same trace.
+call(211, "ines", "glasser", "run", "Benchmark: a basket of 4 staples (already bought)", 3, "real retail numbers come from Glasser",
+     count=0, cost=0.0, trace=BENCH["trace"])
 move(212, "ines", "panel_table", "terminal", "run the Bruin checks at the terminal")
 call(213, "ines", "bruin", "check", "ran 5 quality checks", 2600, "Bruin's checks prove the planted trap")
 ev(215.5, "check.result", "ines", "no duplicate visits, so this check passes", task=T, text="Check passed: visit ids are unique.",
@@ -235,7 +238,8 @@ ev(218, "ledger.seal", "system", "seal the grade in the hash chain", task=T,
 quotes = [{"text": "its max is 5600 while other regions top out near 74", "source": "note"},
           {"text": "spend / 100", "source": q6}]
 # The reality check is built in code from Glasser's numbers, after the quote check.
-reality = "Reality check: average grocery basket is typically $30 to $45 per visit (Glasser, $0.002)."
+reality = ("Reality check: a basket of 4 staples (milk, bread, coffee, paper towels), US online prices: "
+           "about $34 ($26 to $67), from Glasser.")
 verdict_text = ("Right verdict, right trap. You wrote \"its max is 5600 while other regions top out near 74\", which is exactly "
                 "what the failing check shows. Your fix, spend / 100, is the right one. You lose a little for needing two hints. "
                 + reality)
@@ -245,7 +249,8 @@ ev(220, "verdict", "ines", "graded against the answer key, with the failing Brui
          "correctVerdict": "fails", "correctTrap": "unit_mismatch", "text": verdict_text, "quotes": quotes,
          "failingCheck": "unit_mismatch.spend_range_by_region",
          "ledger": {"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000"},
-         "benchmark": {**BENCH, "value": 38, "low": 30, "high": 45, "unit": "USD per visit", "cached": False}})
+         "benchmark": {**BENCH, "value": 33.87, "low": 25.62, "high": 67.04, "unit": "USD", "cost": 0.0,
+                       "cached": False}})
 ev(220.2, "panel.transcript", "ines", "the verdict is in, so the panel's whispers are open", task=T,
    data={"taskId": T, "whispers": whispers})
 say(221, "ines", "learner", verdict_text, "deliver the verdict out loud", quotes=quotes)
@@ -273,10 +278,10 @@ say(227, "vale", "learner", "I picked this task because Telem's monitor caught a
     + ". The source and the trace are on the card.", "the news behind the pick, now that the verdict is in")
 ev(229, "task.end", "system", "the verdict is in", task=T,
    data={"taskId": T, "score": 0.8, "beatRival": True, "trap": "unit_mismatch",
-         "pickReason": "no history, so every trap sat at 0.15; the bandit's draw was highest for unit mix-ups (0.71). "
+         "pickReason": "no history, so every trap sat at 0.15; the bandit's draw was highest for unit mix-ups (0.41). "
                        "Telem's case of the day (\"" + NEWS["title"] + "\") pointed at unit mix-ups, so its draw got "
-                       "+0.15; it was ahead without the boost; it was a unit mix-up task at tier 1",
-         "bandit": {"unit_mismatch": {"mean": 0.15, "sample": 0.71, "boost": 0.15},
+                       "+0.15; that boost decided the pick; it was a unit mix-up task at tier 1",
+         "bandit": {"unit_mismatch": {"mean": 0.15, "sample": 0.41, "boost": 0.15},
                     "duplicate_rows": {"mean": 0.15, "sample": 0.52},
                     "dictionary_flip": {"mean": 0.15, "sample": 0.33}, "confounder": {"mean": 0.15, "sample": 0.48},
                     "hidden_variable": {"mean": 0.15, "sample": 0.29}, "none": {"mean": 0.15, "sample": 0.44}},
@@ -303,8 +308,8 @@ ev(244, "appeal.ruling", "ines", "the event log shows the hints came before the 
          "reason": "q5, the first region query, ran 3 s after Sam's second hint, so the deduction stands."})
 ev(250, "ask", "learner", "the learner asked an agent why", to="vale", text="Why did I get this task first?")
 ev(253, "ask.answer", "vale", "answered only from what Vale saw: the learner profile and the bandit draw", to="learner",
-   text="You were new, so every skill sat at 0.15. Telem's monitor caught a unit mix-up in the news this morning, which "
-        "nudged the draw; it was already highest for unit mix-ups.",
+   text="You were new, so every skill sat at 0.15. Telem's monitor caught a unit mix-up in the news this morning, and "
+        "that boost tipped the draw from duplicated rows to unit mix-ups.",
    data={"sources": ["your learner profile", "the bandit's draw for this task"]})
 # N3's Bruin refresh of the learner tables runs as the session ends.
 call(256, "system", "bruin", "run", "refreshed the learner model (learn.bkt_mastery)", 7400,

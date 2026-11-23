@@ -74,7 +74,9 @@ WHISPER_WHY = {
 
 def _label(b: dict) -> str:
     lab_ = str(b.get("label") or f"a typical {b.get('kind', 'basket')}").strip()
-    return lab_[0].lower() + lab_[1:] if lab_[:1].isupper() and lab_[1:2].islower() else lab_
+    first = lab_.split(" ", 1)[0]
+    # Only a leading article goes lower case mid-sentence; names ("Target stores") stay.
+    return lab_[0].lower() + lab_[1:] if first in ("A", "An", "The") else lab_
 
 
 def telem_reply(found: dict) -> str:
@@ -414,12 +416,12 @@ class Session:
         self.whisper("ines", "sam", f"Steer them here, as a question: {hint}", "hint_steer")
         self.whisper("vale", "sam", "Go ahead, keep it a question.", "hint_ok")
         self.move("sam", "learner_desk", f"the struggle meter reached {m['value']}", to="learner")
-        bought = sources.glasser_benchmark(self.on_call, key.get("benchmark") or "basket", "sam") \
+        bought = sources.glasser_benchmark(self.sponsors, key.get("benchmark") or "basket", "sam") \
             if level == 2 else None
         if bought:   # built in code so the numbers are exactly Glasser's
             paid = (f"I spent ${float(bought['cost']):.3f} to check" if bought.get("cost") and
                     sources.from_glasser(bought) else "I checked")
-            line = f"{paid}: {_label(bought)} is typically {sources.benchmark_range(bought)}. {hint}"
+            line = f"{paid}: {_label(bought)}: {sources.benchmark_range(bought)}. {hint}"
         else:
             line, _ = speaker.call("sam", "Ask the learner one short question that points where Ines suggested. "
                                           "Do not give the answer.", view("sam", self), hint, 30)
@@ -439,7 +441,7 @@ class Session:
     def do_grade(self) -> None:
         s = self.slot
         key, ans = s.task.key, s.answer
-        bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.on_call, key.get("benchmark") or "basket",
+        bench_f = speaker.POOL.submit(sources.glasser_benchmark, self.sponsors, key.get("benchmark") or "basket",
                                       "ines")   # after the answer, so the lookup tells nothing
         self.rival_answer()
         for agent in ("vale", "ines", "sam"):
@@ -509,7 +511,7 @@ class Session:
         news = {}
         if s.id == "t1" and self.news:
             news = {"news": {**{k: self.news.get(k, "") for k in ("title", "url", "trace")},
-                             "trap": self.news.get("trap"), "steered": bool(pick.get("nudged"))}}
+                             "trap": self.news.get("trap"), "steered": bool(pick.get("nudgeDecided"))}}
         full = pick.get("pickReason") or pick.get("reason") or "picked by the rules"
         self.emit("task.end", "system", "the verdict is in", task=s.id,
                   data={"taskId": s.id, "score": g["score"], "beatRival": g["score"] > rival_g["score"],
@@ -560,7 +562,7 @@ class Session:
     def reality_line(self, b: dict) -> str:
         """One sentence from Glasser's numbers, built in code (an agent could misstate them)."""
         key = self.slot.task.key
-        line = f"Reality check: {_label(b)} is typically {sources.benchmark_range(b)} ({sources.benchmark_source(b)})."
+        line = f"Reality check: {_label(b)}: {sources.benchmark_range(b)}, from {sources.benchmark_source(b)}."
         naive = key.get("naive")
         unit = str(b.get("unit") or "")
         if isinstance(naive, (int, float)) and key["trap"] != "none" and naive > 3 * float(b["high"]):
@@ -571,7 +573,7 @@ class Session:
     def reveal_news(self) -> None:
         """After t1's verdict: the case of the day, and whether it steered the pick."""
         s, n = self.slot, self.news
-        steered = bool((s.pick or {}).get("nudged"))
+        steered = bool((s.pick or {}).get("nudgeDecided"))   # the news changed the pick
         title = n.get("title", "") or "a data error in the news"
         self.emit("monitor.hit", "telem", "Telem's monitor found today's case; held until the first verdict "
                                           "because it can steer the pick", task=s.id,
@@ -659,7 +661,7 @@ class Session:
         self.save()
 
     def retail_numbers(self) -> None:
-        self.retail = sources.glasser_params(self.on_call)
+        self.retail = sources.glasser_params(self.sponsors)
 
     def read_news(self) -> None:
         """Telem's case of the day, before the first pick (it may nudge it). Its monitor.hit
@@ -845,10 +847,13 @@ class Engine:
         return s.slot.public() if s.slot else None
 
     def _folder(self, sid: str, task: str | None) -> str:
+        """The tables of the current task, or of a task already finished (any task once the
+        session is over). A future or unknown task is a 409: task 3's tables wait their turn."""
         s = self.get(sid)
         slot = s.slot_by_id(task)
-        if slot is None or slot.task is None:
-            raise EngineError(404, "no such task in this session")
+        if slot is None or slot.task is None or not (
+                s.finished or slot is s.slot or slot.phase == "done" or slot.grade is not None):
+            raise EngineError(409, "that task is not open yet" if slot else "no such task in this session")
         return slot.task.dir
 
     def tables(self, sid: str, task: str | None = None) -> list[dict]:

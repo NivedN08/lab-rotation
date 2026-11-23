@@ -83,7 +83,8 @@ are there for the lab log, the verdict card and the people reading them.
     happens in real life"), or on a clean task (`trap: none`) a case of trusting a clean
     result. The search runs only after the verdict, since its query names the trap.
 - `monitor.hit`: `title`, `url`, **`trace`**, `summary` (the case of the day), `trap?`
-  (the trap the headline is about), `steered?` (true when it steered the first pick).
+  (the trap the headline is about), `steered?` (true only when the news boost decided the first pick:
+  without it a different trap would have won the draw).
   Telem's monitor is read before the first pick, which it may nudge toward that trap, so
   the headline points at the trap: `monitor.hit` goes out right after the first task's
   `panel.transcript`, followed by Vale saying whether it decided the pick.
@@ -148,7 +149,8 @@ are there for the lab log, the verdict card and the people reading them.
 ### Sponsors
 - `sponsor.call` (agent `system`): **`sponsor`** (`band`, `telem`, `bruin`, `runware`,
   `glasser`, `teamily`), **`label`** (what was done, in plain words), **`count`**
-  (calls in this event, usually 1), **`failed?`**, **`cost?`** (dollars), **`trace?`**
+  (calls in this event, usually 1; 0 with `cost: 0` when Glasser answers a lookup already
+  bought this session), **`failed?`**, **`cost?`** (dollars), **`trace?`**
   (link). It also has `op` (`search`, `fetch`, `tts`, `image`, `chat`, `send_message`,
   `run`, `check`, ...), `by` (the agent that made the call), `ms` and `fallback` (true
   when a recorded fallback answered).
