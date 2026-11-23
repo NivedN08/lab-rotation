@@ -4,7 +4,7 @@
 // Mock mode is on by default for now. Add ?mock=0 to the URL to call the real /api routes.
 
 import { mock } from "./mock";
-import type { AnswerSubmission, Cell, CurrentTask, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 export * from "./types";
 export * from "./traps";
@@ -39,8 +39,9 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
 
 const enc = encodeURIComponent;
 
-/** Start (or resume) a rotation session. Comes back with the current task. */
-export const startSession = (): Promise<SessionInfo> => (useMock() ? mock.startSession() : call("POST", "/api/session/start"));
+/** Start (or resume) a session. Comes back with the whole rotation and the current task. Sending nothing means rotation mode. */
+export const startSession = (options?: StartOptions): Promise<SessionInfo> =>
+  useMock() ? mock.startSession(options) : call("POST", "/api/session/start", options);
 
 /** The task the learner is on now, or null when all are done. Poll this after submitting to get the next one. */
 export const getCurrentTask = (sessionId: string): Promise<CurrentTask> =>
@@ -100,3 +101,21 @@ export const sendAppealMessage = (sessionId: string, appealId: string, text: str
 /** The learner's mastery, one score per trap type. */
 export const getMastery = (sessionId: string): Promise<Mastery> =>
   useMock() ? mock.getMastery() : call("GET", `/api/session/${enc(sessionId)}/mastery`);
+
+/** Column profiles for one table: counts, nulls, distinct values, min, max, mean and the most common values. */
+export const getProfile = (sessionId: string, table: string): Promise<TableProfile> =>
+  useMock() ? mock.getProfile(table) : call("GET", `/api/session/${enc(sessionId)}/tables/${enc(table)}/profile`);
+
+/** Ask one agent a question. The agent answers only from what it could see. */
+export const askAgent = (sessionId: string, q: AskRequest): Promise<AskReply> =>
+  useMock() ? mock.ask(q) : call("POST", `/api/session/${enc(sessionId)}/ask`, q);
+
+/** Names, floor roles, what each can read, and portrait URLs. Not tied to a session. */
+export const getAgents = (): Promise<AgentInfo[]> => (useMock() ? mock.getAgents() : call("GET", "/api/agents"));
+
+/** URL to play a voice line from (the `file` in a voice.line event's data). Use it as an audio element's src. */
+export const audioUrl = (file: string): string => (useMock() ? mock.audioUrl(file) : `/api/audio/${enc(file)}`);
+
+/** Totals for the sponsor strip. */
+export const getSponsors = (sessionId: string): Promise<SponsorTotals> =>
+  useMock() ? mock.getSponsors() : call("GET", `/api/session/${enc(sessionId)}/sponsors`);

@@ -1,8 +1,8 @@
 // Fake backend: same shapes as client.ts returns, used until Nived's routes exist.
 // This stands in for the server only. Nothing outside this file should interpret SQL or invent data.
 
-import { scriptedEvents } from "./mockSession";
-import type { AnswerSubmission, Cell, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import { eventsSoFar, scriptedEvents } from "./mockSession";
+import type { AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -127,7 +127,7 @@ function advanceTask(afterMs: number) {
 const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => res(v), ms));
 
 export const mock = {
-  startSession: () =>
+  startSession: (_o?: StartOptions) =>
     wait<SessionInfo>({ sessionId: "mock-session", tasks: TASKS.map(({ id, title }) => ({ id, title })), task: TASKS[taskIndex()] ?? null }),
 
   getCurrentTask: () => wait<CurrentTask>({ task: TASKS[taskIndex()] ?? null }, 50),
@@ -186,11 +186,90 @@ export const mock = {
   getMastery: () =>
     wait<Mastery>({
       traps: [
-        { trap: "duplicates", score: 0.4, attempts: 2 },
-        { trap: "missing values", score: 0.7, attempts: 3 },
-        { trap: "unit mix-up", score: 0.2, attempts: 1 },
+        { trap: "duplicate_rows", score: 0.4, attempts: 2 },
+        { trap: "unit_mismatch", score: 0.2, attempts: 1 },
+        { trap: "dictionary_flip", score: 0.0, attempts: 0 },
+        { trap: "confounder", score: 0.7, attempts: 3 },
+        { trap: "hidden_variable", score: 0.1, attempts: 1 },
+        { trap: "none", score: 0.5, attempts: 2 },
       ],
     }),
+
+  getProfile(table: string): Promise<TableProfile> {
+    const t = FAKE_TABLES.find((x) => x.name === table);
+    if (!t) return Promise.reject(new Error(`No such table: ${table}.`));
+    const columns: ColumnProfile[] = t.columns.map((c, j) => {
+      const vals = t.rows.map((r) => r[j]);
+      const present = vals.filter((v): v is string | number | boolean => v !== null);
+      const counts = new Map<Cell, number>();
+      present.forEach((v) => counts.set(v, (counts.get(v) ?? 0) + 1));
+      const top = [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([value, count]) => ({ value, count }));
+      const nums = present.filter((v): v is number => typeof v === "number");
+      const sorted = [...present].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+      return {
+        column: c.name,
+        type: c.type,
+        count: vals.length,
+        nulls: vals.length - present.length,
+        distinct: counts.size,
+        ...(c.type !== "text" && sorted.length ? { min: sorted[0], max: sorted[sorted.length - 1] } : {}),
+        ...(nums.length ? { mean: Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100 } : {}),
+        top,
+      };
+    });
+    return wait({ table, columns });
+  },
+
+  ask: (q: AskRequest): Promise<AskReply> =>
+    wait({
+      agent: q.agent,
+      text: `(Sample answer) I can only speak to what I could see. You asked: "${q.text}".`,
+      sources: ["samples", "trace://telem/1"],
+    }, 400),
+
+  getAgents: () =>
+    wait<AgentInfo[]>([
+      { id: "vale", name: "Dr. Vale", role: "director", reads: "The task list and your learner profile.", portrait: null },
+      { id: "ines", name: "Ines", role: "referee", reads: "The answers, the checks and the key.", portrait: null },
+      { id: "sam", name: "Sam", role: "head", reads: "What you have queried and cited so far.", portrait: null },
+      { id: "telem", name: "Telem", role: "library", reads: "Search results and monitor hits.", portrait: null },
+      { id: "riley", name: "Riley", role: "team-b", reads: "The same tables you see, worked separately.", portrait: null },
+      { id: "learner", name: "You", role: "team-a", reads: "Everything you open in the workspace.", portrait: null },
+    ]),
+
+  // A short silent clip so the audio element has something to play.
+  audioUrl: (_file: string): string =>
+    "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=",
+
+  getSponsors(): Promise<SponsorTotals> {
+    const t: SponsorTotals = {
+      band: { messages: 0 },
+      telem: { searches: 0, monitorHits: 0, traces: [] },
+      bruin: { checksRun: 0, checksFailed: 0 },
+      runware: { lines: 0, cost: 0 },
+      glasser: { calls: 0 },
+    };
+    for (const e of eventsSoFar()) {
+      if (e.k !== "sponsor.call") continue;
+      const d = e.data as { sponsor: string; label: string; count: number; failed?: number; cost?: number; trace?: string };
+      if (d.sponsor === "band") t.band.messages += d.count;
+      if (d.sponsor === "telem") {
+        if (d.label === "Search") t.telem.searches += d.count;
+        else t.telem.monitorHits += d.count;
+        if (d.trace) t.telem.traces.push(d.trace);
+      }
+      if (d.sponsor === "bruin") {
+        t.bruin.checksRun += d.count;
+        t.bruin.checksFailed += d.failed ?? 0;
+      }
+      if (d.sponsor === "runware") {
+        t.runware.lines += d.count;
+        t.runware.cost = Math.round((t.runware.cost + (d.cost ?? 0)) * 1e6) / 1e6;
+      }
+      if (d.sponsor === "glasser") t.glasser.calls += d.count;
+    }
+    return wait(t, 50);
+  },
 };
 
 export type { EvidenceRef };

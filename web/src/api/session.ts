@@ -4,7 +4,7 @@
 
 import { useSyncExternalStore } from "react";
 import { getCurrentTask, getEvents, startSession } from "./client";
-import type { LabEvent, TaskInfo } from "./types";
+import type { LabEvent, StartOptions, TaskInfo } from "./types";
 
 export type TaskResult = "passed" | "failed";
 
@@ -35,6 +35,7 @@ const eventSubs = new Set<(events: LabEvent[]) => void>();
 let since = 0;
 let running = false;
 let starting = false;
+let startOptions: StartOptions | undefined;
 
 function set(patch: Partial<RotationState>) {
   state = { ...state, ...patch };
@@ -91,7 +92,7 @@ function begin() {
   (async () => {
     try {
       if (!state.sessionId) {
-        const s = await startSession();
+        const s = await startSession(startOptions);
         set({ sessionId: s.sessionId, tasks: s.tasks, ...taskPatch(s.task), error: null });
       }
       running = true;
@@ -105,6 +106,10 @@ function begin() {
 }
 
 export const rotation = {
+  /** Choose rotation or judge mode (and the learner's name) before the session starts. Has no effect once it has. */
+  configure(options: StartOptions) {
+    if (!state.sessionId) startOptions = options;
+  },
   /** Try again after a failed start. */
   retry() {
     set({ error: null });

@@ -8,30 +8,36 @@ type Props = {
   columns: { name: string; type?: string }[];
   rows: Cell[][];
   label: string;
+  /**
+   * How many table rows come before the first row given. Table rows are numbered from the table's first row
+   * (1-based, absolute); a SQL result is numbered within itself, so leave this at 0 there.
+   */
+  rowOffset?: number;
 };
 
 /** A table whose rows, columns and cells can be clicked to cite them as evidence. */
-export function Grid({ source, sql, columns, rows, label }: Props) {
+export function Grid({ source, sql, columns, rows, label, rowOffset = 0 }: Props) {
+  const rowNo = (i: number) => i + 1 + rowOffset;
   const cited = new Set(useEvidence().filter((e) => e.source === source && e.sql === sql).map((e) => e.key));
   const base = { source, sql };
   const k = (kind: string, row?: number, col?: string) => `${source}|${sql ?? ""}|${kind}|${row ?? ""}|${col ?? ""}`;
 
   const citeRow = (i: number): Evidence => ({
     ...base,
-    key: k("row", i + 1),
+    key: k("row", rowNo(i)),
     kind: "row",
-    row: i + 1,
-    label: `${source}, row ${i + 1} (${rows[i].slice(0, 3).map(show).join(", ")}${columns.length > 3 ? ", …" : ""})`,
+    row: rowNo(i),
+    label: `${source}, row ${rowNo(i)} (${rows[i].slice(0, 3).map(show).join(", ")}${columns.length > 3 ? ", …" : ""})`,
   });
   const citeColumn = (name: string): Evidence => ({ ...base, key: k("column", undefined, name), kind: "column", column: name, label: `${source}, column ${name}` });
   const citeCell = (i: number, j: number): Evidence => ({
     ...base,
-    key: k("cell", i + 1, columns[j].name),
+    key: k("cell", rowNo(i), columns[j].name),
     kind: "cell",
-    row: i + 1,
+    row: rowNo(i),
     column: columns[j].name,
     value: rows[i][j],
-    label: `${source}, row ${i + 1}, ${columns[j].name} = ${show(rows[i][j])}`,
+    label: `${source}, row ${rowNo(i)}, ${columns[j].name} = ${show(rows[i][j])}`,
   });
 
   return (
@@ -59,16 +65,16 @@ export function Grid({ source, sql, columns, rows, label }: Props) {
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const rowOn = cited.has(k("row", i + 1));
+            const rowOn = cited.has(k("row", rowNo(i)));
             return (
               <tr key={i} className={rowOn ? "ws-cited" : undefined}>
                 <td className="ws-rownum">
-                  <button className="ws-hit" aria-pressed={rowOn} title="Cite this row" aria-label={`Cite row ${i + 1}`} onClick={() => evidence.toggle(citeRow(i))}>
-                    {i + 1}
+                  <button className="ws-hit" aria-pressed={rowOn} title="Cite this row" aria-label={`Cite row ${rowNo(i)}`} onClick={() => evidence.toggle(citeRow(i))}>
+                    {rowNo(i)}
                   </button>
                 </td>
                 {row.map((cell, j) => {
-                  const on = cited.has(k("cell", i + 1, columns[j].name));
+                  const on = cited.has(k("cell", rowNo(i), columns[j].name));
                   const cls = [cell === null ? "ws-null" : typeof cell === "number" ? "ws-num" : "", on ? "ws-cited" : "", "ws-cell"].filter(Boolean).join(" ");
                   return (
                     <td

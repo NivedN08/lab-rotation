@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { submitAnswer, TRAPS, type TaskInfo, type Verdict } from "../api/client";
+import { submitAnswer, TRAPS, type TaskInfo, type TrapId, type Verdict } from "../api/client";
 import { useEvidence } from "./evidence";
 
 const VERDICTS: { id: Verdict; label: string; hint: string }[] = [
@@ -8,7 +8,7 @@ const VERDICTS: { id: Verdict; label: string; hint: string }[] = [
   { id: "cant_tell", label: "Can't tell", hint: "Not enough to say" },
 ];
 
-type Draft = { verdict: Verdict | ""; trap: string; note: string; sent: boolean };
+type Draft = { verdict: Verdict | ""; trap: TrapId | ""; note: string; sent: boolean };
 const empty: Draft = { verdict: "", trap: "", note: "", sent: false };
 const keyFor = (id: string) => `lab-rotation.workspace.answer.${id}`;
 
@@ -52,7 +52,7 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
       await submitAnswer(sessionId, {
         taskId: task.id,
         verdict: draft.verdict,
-        trap: draft.trap,
+        trap: draft.trap as TrapId,
         evidence: cited.map(({ key: _k, ...rest }) => rest),
         note: draft.note.trim(),
       });
@@ -90,11 +90,11 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
 
       <label className="ws-field">
         <span className="ws-legend">The trap you found</span>
-        <select className="ws-select" value={draft.trap} disabled={locked} onChange={(e) => update({ trap: e.target.value })}>
+        <select className="ws-select" value={draft.trap} disabled={locked} onChange={(e) => update({ trap: e.target.value as TrapId | "" })}>
           <option value="">Choose one…</option>
           {TRAPS.map((t) => (
-            <option key={t} value={t}>
-              {t}
+            <option key={t.id} value={t.id}>
+              {t.label}
             </option>
           ))}
         </select>

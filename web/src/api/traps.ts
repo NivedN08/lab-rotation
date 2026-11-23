@@ -1,12 +1,15 @@
-// The trap types a learner can name. One list, so the labels can be matched to the backend's later.
+// The trap types a learner can name. The answer form sends the `id`; the `label` is display only.
+// Mastery uses the same ids in its `trap` field, including `none`.
 
 export const TRAPS = [
-  "Duplicated rows",
-  "Unit mix-up",
-  "Misleading data dictionary",
-  "Batch confounder",
-  "Hidden column in a second table",
-  "No trap (the data is clean)",
+  { id: "duplicate_rows", label: "Duplicated rows" },
+  { id: "unit_mismatch", label: "Unit mix-up" },
+  { id: "dictionary_flip", label: "Misleading data dictionary" },
+  { id: "confounder", label: "Batch confounder" },
+  { id: "hidden_variable", label: "Hidden column in a second table" },
+  { id: "none", label: "No trap (the data is clean)" },
 ] as const;
 
-export type Trap = (typeof TRAPS)[number];
+export type TrapId = (typeof TRAPS)[number]["id"];
+
+export const trapLabel = (id: string): string => TRAPS.find((t) => t.id === id)?.label ?? id;
