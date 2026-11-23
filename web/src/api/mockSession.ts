@@ -3,7 +3,6 @@
 
 import raw from "./mock/mock_session.jsonl?raw";
 import taskJson from "./mock/task.json";
-import { withholdWhispers } from "./visibility";
 import type { EventsPage, LabEvent } from "./types";
 
 type Step = LabEvent;
@@ -124,68 +123,8 @@ function upgrade(events: LabEvent[]): LabEvent[] {
 
 export const SCRIPT: Step[] = upgrade(rawEvents);
 
-// The sample session's clock. It runs at normal speed from the first look, and `hurry()` speeds it up after the
-// learner submits, so the verdict theatre does not take minutes. Kept in sessionStorage so a reload does not restart it.
-const KEY = "lab-rotation.mock.clock";
-type Clock = { anchor: number; base: number; rate: number };
-let memory: Clock = { anchor: Date.now(), base: 0, rate: 1 };
-
-function clock(): Clock {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as Clock | null;
-    if (saved && typeof saved.anchor === "number") return saved;
-    sessionStorage.setItem(KEY, JSON.stringify(memory));
-  } catch {
-    /* keep it in memory */
-  }
-  return memory;
-}
-
-const speed = (): number => {
-  try {
-    return Number(new URLSearchParams(window.location.search).get("mockspeed")) || 1;
-  } catch {
-    return 1;
-  }
-};
-
-/** Seconds into the sample session right now. */
-export function elapsedNow(): number {
-  const c = clock();
-  return c.base + ((Date.now() - c.anchor) / 1000) * c.rate * speed();
-}
-
-/** Play the rest of the sample session faster (after the learner submits). */
-export function hurry(rate = 8) {
-  const c: Clock = { anchor: Date.now(), base: elapsedNow(), rate };
-  memory = c;
-  try {
-    sessionStorage.setItem(KEY, JSON.stringify(c));
-  } catch {
-    /* keep it in memory */
-  }
-}
-
-/** When the sample task's verdict is in (its `task.end`), in session seconds. */
-export const taskEndTime = (): number => SCRIPT.find((e) => e.k === "task.end")?.t ?? SCRIPT[SCRIPT.length - 1].t;
-
 /** The whole script as a finished, recorded session: every event, from the beginning. */
 export function recordedEvents(): EventsPage {
   const events = SCRIPT;
   return { events, next: events.length };
 }
-
-/** Every scripted event that has happened so far, with its seq. */
-export function eventsSoFar(): (LabEvent & { seq: number })[] {
-  return withholdWhispers(SCRIPT.filter((e) => e.t <= elapsedNow()));
-}
-
-/** Everything that has happened so far with seq > since. Pass the previous page's `next`. */
-export function scriptedEvents(since: number): EventsPage {
-  // The server never sends whisper words before the verdict; neither does the sample.
-  const due: LabEventWithSeq[] = withholdWhispers(SCRIPT.filter((e) => e.t <= elapsedNow()));
-  const events = due.filter((e) => e.seq > since);
-  return { events, next: due.length ? due[due.length - 1].seq : since };
-}
-
-type LabEventWithSeq = LabEvent & { seq: number };

@@ -92,21 +92,21 @@ export function pollEvents(sessionId: string, onEvents: (events: LabEvent[]) => 
 
 /** Send a query to the server's SQL runner. Rejects with the server's error message. */
 export const runSql = (sessionId: string, sql: string): Promise<SqlResult> =>
-  fake(sessionId) ? mock.runSql(sql) : call("POST", `/api/session/${enc(sessionId)}/sql`, { sql });
+  fake(sessionId) ? mock.runSql(sessionId, sql) : call("POST", `/api/session/${enc(sessionId)}/sql`, { sql });
 
 /** Submit the answer with its cited evidence. The verdict comes back later as an event. */
 export const submitAnswer = (sessionId: string, answer: AnswerSubmission): Promise<{ accepted: boolean }> =>
-  fake(sessionId) ? mock.submitAnswer(answer) : call("POST", `/api/session/${enc(sessionId)}/answer`, answer);
+  fake(sessionId) ? mock.submitAnswer(sessionId, answer) : call("POST", `/api/session/${enc(sessionId)}/answer`, answer);
 
 export const openAppeal = (sessionId: string, taskId: string, reason: string): Promise<{ appealId: string }> =>
-  fake(sessionId) ? mock.openAppeal(taskId, reason) : call("POST", `/api/session/${enc(sessionId)}/appeal`, { taskId, reason });
+  fake(sessionId) ? mock.openAppeal(sessionId, taskId, reason) : call("POST", `/api/session/${enc(sessionId)}/appeal`, { taskId, reason });
 
 export const sendAppealMessage = (sessionId: string, appealId: string, text: string): Promise<{ ok: boolean }> =>
-  fake(sessionId) ? mock.sendAppealMessage(appealId, text) : call("POST", `/api/session/${enc(sessionId)}/appeal/${enc(appealId)}/message`, { text });
+  fake(sessionId) ? mock.sendAppealMessage(sessionId, appealId, text) : call("POST", `/api/session/${enc(sessionId)}/appeal/${enc(appealId)}/message`, { text });
 
 /** The learner's mastery, one score per trap type. */
 export const getMastery = (sessionId: string): Promise<Mastery> =>
-  fake(sessionId) ? mock.getMastery() : call("GET", `/api/session/${enc(sessionId)}/mastery`);
+  fake(sessionId) ? mock.getMastery(sessionId) : call("GET", `/api/session/${enc(sessionId)}/mastery`);
 
 /** Column profiles for one table: counts, nulls, distinct values, min, max, mean and the most common values. */
 export const getProfile = (sessionId: string, table: string): Promise<TableProfile> =>
@@ -114,7 +114,7 @@ export const getProfile = (sessionId: string, table: string): Promise<TableProfi
 
 /** Ask one agent a question. The agent answers only from what it could see. */
 export const askAgent = (sessionId: string, q: AskRequest): Promise<AskReply> =>
-  fake(sessionId) ? mock.ask(q) : call("POST", `/api/session/${enc(sessionId)}/ask`, q);
+  fake(sessionId) ? mock.ask(sessionId, q) : call("POST", `/api/session/${enc(sessionId)}/ask`, q);
 
 /** Names, floor roles, what each can read, and portrait URLs. Not tied to a session. */
 export const getAgents = (): Promise<AgentInfo[]> => (useMock() ? mock.getAgents() : call("GET", "/api/agents"));

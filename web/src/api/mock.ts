@@ -4,12 +4,12 @@
 import customersCsv from "./mock/customers.csv?raw";
 import storesCsv from "./mock/stores.csv?raw";
 import tablesJson from "./mock/tables.json";
-import taskJson from "./mock/task.json";
 import visitsCsv from "./mock/visits.csv?raw";
-import { elapsedNow, eventsSoFar, hurry, recordedEvents, scriptedEvents, SCRIPT, taskEndTime } from "./mockSession";
+import { live } from "./mockLive";
+import type { TrapId } from "./traps";
+import { recordedEvents, SCRIPT } from "./mockSession";
 import { runMockSql } from "./mockSql";
-import { sponsorTotals } from "./sponsors";
-import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
+import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -34,35 +34,15 @@ const FAKE_TABLES: FakeTable[] = (tablesJson as (TableInfo & { key?: string })[]
 
 // ---- the fake routes ----
 
-// Slot t1 is the contract's sample task. Slots t2 and t3 reuse it so the one-task-at-a-time flow can be tried.
-const TASKS: TaskInfo[] = [taskJson as TaskInfo, { ...(taskJson as TaskInfo), id: "t2", title: "Loyalty spend check, again" }, { ...(taskJson as TaskInfo), id: "t3", title: "Loyalty spend check, once more" }];
-
-// How many answers the learner has sent. Kept in sessionStorage so a page reload does not restart the rotation.
-const TASK_KEY = "lab-rotation.mock.answered";
-function answered(): number {
-  try {
-    return Number(sessionStorage.getItem(TASK_KEY) ?? 0);
-  } catch {
-    return 0;
-  }
-}
-
-/** The task now: after an answer, the next one is handed out once the sample session reaches the verdict. */
-function currentTask(): TaskInfo | null {
-  const n = answered();
-  if (n === 0) return TASKS[0];
-  return elapsedNow() >= taskEndTime() ? TASKS[n] ?? null : TASKS[n - 1];
-}
-
 export const DEMO_SESSION = "mock-demo";
 
 const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => res(v), ms));
 
 export const mock = {
-  startSession: (_o?: StartOptions) =>
-    wait<SessionInfo>({ sessionId: "mock-session", tasks: TASKS.map(({ id, title }) => ({ id, title })), task: currentTask() }),
+  // The live sample is a small fake server that never acts for the learner (mockLive.ts).
+  startSession: (o?: StartOptions) => wait<SessionInfo>(live.start(o)),
 
-  getCurrentTask: () => wait<CurrentTask>({ task: currentTask() }, 50),
+  getCurrentTask: () => wait<CurrentTask>(live.currentTask(), 50),
 
   getTables: () => wait<TableInfo[]>(FAKE_TABLES.map(({ rows, ...info }) => ({ ...info, rowCount: rows.length }))),
 
@@ -74,46 +54,40 @@ export const mock = {
 
   getEvents: (since: number, sessionId?: string) =>
     wait<EventsPage>(
-      // The fake recorded session is finished: it hands out every event at once.
-      sessionId === DEMO_SESSION ? (since >= SCRIPT.length ? { events: [], next: since } : recordedEvents()) : scriptedEvents(since),
+      // The demo's recorded session is finished: it hands out every event at once. The live one grows as things happen.
+      sessionId === DEMO_SESSION ? (since >= SCRIPT.length ? { events: [], next: since } : recordedEvents()) : live.events(since),
       30,
     ),
 
   // Mock mode only: the fake session stands in for the one the backend would pick.
   getDemo: () => wait<DemoInfo>({ session: DEMO_SESSION, start: 0, end: SCRIPT[SCRIPT.length - 1].t + 6, speed: 1 }),
 
-  // Stand-in for the server's SQL runner (see mockSql.ts).
-  runSql(sql: string): Promise<SqlResult> {
+  // Stand-in for the server's SQL runner (see mockSql.ts). Every query by the person becomes a learner.query event.
+  runSql(sessionId: string, sql: string): Promise<SqlResult> {
+    const record = sessionId !== DEMO_SESSION;
     try {
       const r = runMockSql(FAKE_TABLES, sql);
+      if (record) live.query(sql, true, r.rows.length, 4);
       return wait({ ...r, ms: 4 });
     } catch (e) {
+      if (record) live.query(sql, false, 0, 2, (e as Error).message);
       return Promise.reject(e);
     }
   },
 
-  submitAnswer: (_a: AnswerSubmission) => {
-    try {
-      sessionStorage.setItem(TASK_KEY, String(answered() + 1));
-    } catch {
-      /* ignore */
-    }
-    hurry(); // the sample session plays on faster toward the verdict
-    return wait({ accepted: true });
+  // What the person does: the fake panel reacts to their actual answer, appeal and questions. The demo session ignores them.
+  submitAnswer: (sessionId: string, a: AnswerSubmission) => wait(sessionId === DEMO_SESSION ? { accepted: true } : live.answer(a)),
+  openAppeal: (sessionId: string, taskId: string, reason: string) => wait(sessionId === DEMO_SESSION ? { appealId: "demo-appeal" } : live.appeal(taskId, reason)),
+  sendAppealMessage: (sessionId: string, appealId: string, text: string) => {
+    if (sessionId !== DEMO_SESSION) live.appealMessage(appealId, text);
+    return wait({ ok: true });
   },
-  openAppeal: (_taskId: string, _reason: string) => wait({ appealId: "mock-appeal" }),
-  sendAppealMessage: (_appealId: string, _text: string) => wait({ ok: true }),
-  getMastery: () =>
-    wait<Mastery>({
-      traps: [
-        { trap: "duplicate_rows", score: 0.4, attempts: 2 },
-        { trap: "unit_mismatch", score: 0.2, attempts: 1 },
-        { trap: "dictionary_flip", score: 0.0, attempts: 0 },
-        { trap: "confounder", score: 0.7, attempts: 3 },
-        { trap: "hidden_variable", score: 0.1, attempts: 1 },
-        { trap: "none", score: 0.5, attempts: 2 },
-      ],
-    }),
+  getMastery: (sessionId: string) =>
+    wait<Mastery>(
+      sessionId === DEMO_SESSION
+        ? { traps: ["duplicate_rows", "unit_mismatch", "dictionary_flip", "confounder", "hidden_variable", "none"].map((trap) => ({ trap: trap as TrapId, score: 0.15, attempts: 0 })) }
+        : live.mastery(),
+    ),
 
   getProfile(table: string): Promise<TableProfile> {
     const t = FAKE_TABLES.find((x) => x.name === table);
@@ -140,12 +114,11 @@ export const mock = {
     return wait({ table, columns });
   },
 
-  ask: (q: AskRequest): Promise<AskReply> =>
-    wait({
-      agent: q.agent,
-      text: `(Sample answer) I can only speak to what I could see. You asked: "${q.text}".`,
-      sources: ["samples", "trace://telem/1"],
-    }, 400),
+  ask: (sessionId: string, q: AskRequest): Promise<AskReply> =>
+    wait(
+      sessionId === DEMO_SESSION ? { agent: q.agent, text: "This is a recording, so there is nobody to ask.", sources: [] } : live.ask(q),
+      400,
+    ),
 
   getAgents: () =>
     wait<AgentInfo[]>([
@@ -161,7 +134,7 @@ export const mock = {
   audioUrl: (_file: string): string =>
     "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=",
 
-  getSponsors: (): Promise<SponsorTotals> => wait(sponsorTotals(eventsSoFar()), 50),
+  getSponsors: (): Promise<SponsorTotals> => wait(live.sponsors(), 50),
 };
 
 export type { EvidenceRef };
