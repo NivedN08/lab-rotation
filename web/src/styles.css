@@ -1317,3 +1317,31 @@ a {
   color: var(--fog);
   font-size: 12px;
 }
+
+/* ---- Sponsor strip: a thin bar just above the timeline; the log and map buttons sit above it ----- */
+
+.strip-slot {
+  position: absolute;
+  z-index: 14;
+  left: 14px;
+  right: 14px;
+  bottom: 78px;
+}
+
+.with-strip .log,
+.with-strip .mapctl,
+.with-strip .side {
+  bottom: 112px;
+}
+
+@media (max-width: 860px) {
+  .strip-slot {
+    left: 8px;
+    right: 8px;
+    bottom: 70px;
+  }
+
+  .with-strip .side {
+    bottom: 104px;
+  }
+}

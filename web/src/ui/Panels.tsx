@@ -5,6 +5,7 @@ import { fmtElapsed, MODEL_NAME, ROLE_READS, roleLabel, roundWord, statusWord, t
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
+import { MasteryChart } from "../panels";
 import { Avatar } from "./Avatar";
 
 type Nav = {
@@ -126,6 +127,11 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
             Ask {R.name(id)} a question
           </button>
         </div>
+      )}
+      {id === "learner" && (
+        <Section title="Your mastery">
+          <MasteryChart />
+        </Section>
       )}
       <Section title="Decisions, and why" count={mine.length || undefined}>
         {!mine.length && <p className="empty">Nothing yet.</p>}

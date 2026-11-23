@@ -31,10 +31,10 @@
 - [x] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
 - [x] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
 - [x] 9. Verdict card, built from the results card: your verdict against the key, the failing Bruin check next to your evidence, your quoted words, Riley's answer, "sealed" (`App.tsx` or `ui/Verdict.tsx`)
-- [ ] 10. Sponsor strip: a thin bar above the timeline counting BAND messages, Telem searches (with trace links), Bruin checks run and failed, Runware lines and cost, Glasser calls (`ui/SponsorStrip.tsx`)
-- [ ] 11. Mastery chart: one bar per trap type; shown in your Details panel and on the verdict card (`ui/Mastery.tsx`, `ui/Panels.tsx`)
-- [ ] 12. Audio: play each voice line as it appears, with a mute button in the top bar
-- [ ] 13. Panel room tab in the side panel: the BAND transcript, opened after the verdict
+- [x] 10. Sponsor strip: a thin bar above the timeline counting BAND messages, Telem searches (with trace links), Bruin checks run and failed, Runware lines and cost, Glasser calls (`ui/SponsorStrip.tsx`)
+- [x] 11. Mastery chart: one bar per trap type; shown in your Details panel and on the verdict card (`ui/Mastery.tsx`, `ui/Panels.tsx`)
+- [x] 12. Audio: play each voice line as it appears, with a mute button in the top bar
+- [x] 13. Panel room tab in the side panel: the BAND transcript, opened after the verdict
 - [ ] 14. Live updates every second instead of every 8 (`App.tsx`), or the event stream if Nived ships it
 - [ ] 15.* Appeal view inside the Panel room tab
 - [ ] 16.* Runware portraits in the Details panel (`ui/Avatar.tsx`)
@@ -103,6 +103,7 @@ No new animation types are needed. Each new event reuses one that the original a
 - Demo: "Watch the demo" on the opening screen, a Demo button in the top bar and a Demo entry in the run picker play the backend's recorded session (getDemo, via the shared demo player) on a loop. The floor follows the player's clock and redraws after a seek or loop; the timeline drives the player; at the end it holds on the verdict card with "Watch again", replaying after 12 s unless you leave the card. The Sample data chip shows while it runs on fake data.
 - Framing and motion: the rotation and demo floors frame the rooms in use (Dr. Vale's office, library, Team A, Team B, referee, vault); the whole-lab button and the 0 key still show everything. Between events people at their desks show small working bubbles (reading, writing, searching, checking) and type; `agent.move` walks a person to where it says and they stay there.
 - Follow the action: in the rotation and the demo the camera glides slowly in to the room(s) where the latest event happens, holds while things happen, and drifts back out after 6 quiet seconds. It never moves while you drag, zoom, pinch or follow a person (and waits 4 s after); a Follow toggle above the zoom buttons turns it off.
+- 10-13: mounted the Workspace session's panels: the sponsor strip just above the timeline in the rotation and demo (the lab log, zoom buttons and side panel sit above it), the mastery chart in your Details panel, the panel room as the Panel room tab, and voice lines with a mute button in the top bar.
 - 8: top bar shows Task 1, 2, 3 with passed/failed marks and the time left, all read from the shared rotation state (same clock as the workspace timer); clicking a task opens the Workspace tab. Falls back to the study chips when there is no rotation.
 - 7: every rotation event from the shared poll plays one of the floor's existing animations on the cast (table above); the lab log shows the backend's own line for each event. Live animations keep moving while the replay is paused. The hatch shows "answers match" or "answers differ" by comparing the two answers as sent.
 - Rotation floor: the floor opens on your rotation, built from the backend's agent list and matched by id (vale, ines, sam, telem, riley, learner); recorded runs stay in the run picker with their timeline, tour and demo. Every event's why shows under its lab log line and in a person's Details panel ("Decisions, and why").

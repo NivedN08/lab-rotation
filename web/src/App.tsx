@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { demo as demoPlayer, getAgents, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, useRotation, type LabEvent } from "./api/client";
 import { SampleBadge } from "./api/SampleBadge";
+import { MuteButton, PanelRoom, SponsorStrip, Voice } from "./panels";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
@@ -441,7 +442,7 @@ export function App() {
 
   return (
     <>
-      <div className="lab" inert={view !== "lab" ? true : undefined}>
+      <div className={`lab${isRotation ? " with-strip" : ""}`} inert={view !== "lab" ? true : undefined}>
         <canvas ref={canvasRef} className="floor" aria-label="The lab floor. Click a person to see what they are working on." />
         {R && view !== "landing" && (
           <>
@@ -523,6 +524,7 @@ export function App() {
                   Tour
                 </button>
               )}
+              {isRotation && <MuteButton />}
               <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
                 Workspace
               </button>
@@ -565,7 +567,7 @@ export function App() {
                 </div>
                 {panel === "workspace" ? null : panel === "room" ? (
                   <div className="side-body">
-                    <p className="empty">The panel room opens after the verdict. Vale, Ines and Sam talk it over here.</p>
+                    <PanelRoom />
                   </div>
                 ) : panel === "chat" ? (
                   <Chat R={R} t={t} server={!!source?.server} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
@@ -725,6 +727,12 @@ export function App() {
               </div>
             )}
 
+            {isRotation && (
+              <div className="strip-slot">
+                <SponsorStrip />
+              </div>
+            )}
+
             <Timeline
               R={R}
               t={t}
@@ -759,6 +767,7 @@ export function App() {
         )}
       </div>
       <SampleBadge />
+      <Voice />
       {view !== "lab" && (
         <Landing
           onEnter={enter}
