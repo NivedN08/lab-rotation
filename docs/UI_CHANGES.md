@@ -23,7 +23,7 @@
 **Main session** (everything except `web/src/workspace/`)
 
 - [x] 1. Names: "Summit Lab" becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
-- [ ] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
+- [x] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
 - [ ] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
 - [ ] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
 - [ ] 5. Riley's desk in Team B, so both answers meet at the hatch (decide: or a desk next to you)
@@ -42,8 +42,8 @@
 
 **Workspace session** (only `web/src/workspace/`, own `workspace.css`)
 
-- [ ] W1. Table browser: tabs per table, rows with a row cap
-- [ ] W2. SQL box: runs on the server (Nived's runner), shows results and errors
+- [x] W1. Table browser: tabs per table, rows with a row cap
+- [x] W2. SQL box: runs on the server (Nived's runner), shows results and errors
 - [ ] W3. Evidence picker: click rows, columns or cells to cite them
 - [ ] W4. Answer form: holds / fails / can't tell, the trap you found, your evidence, submit
 - [ ] W5. Timer and the empty, loading and error states
@@ -94,3 +94,4 @@ No new animation types are needed. Each new event reuses one that summit-lab alr
 
 - 6: side panel tabs are now Workspace, Details, Ask, Panel room; Workspace mounts `web/src/workspace/index.tsx` (default or `Workspace` export, props in `ui/WorkspaceTab.tsx`), stays mounted across tab switches, widens to 720px while `onTaskChange(true)`; Workspace button in the top bar opens it. Shots: `06-before.png`, `06-after.png`.
 - 1: "Summit Lab" is "Lab Rotation" on the landing wordmark, top bar, error screen and browser tab title. Shots: `01-before.png`, `01-after.png`, `01-before-topbar.png`, `01-after-topbar.png`.
+- 2: cast names by role (first agent per role): director Dr. Vale, head of Team A Sam, librarian Telem, referee Ines, Team A You, Team B Riley; others keep random names. New role labels and "what it can read" lines. No shots (screenshots dropped from the process).

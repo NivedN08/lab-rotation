@@ -7,27 +7,27 @@ export const ROLE_LABEL: Record<Role, string> = {
   director: "Lab director",
   head: "Department head",
   library: "Research librarian",
-  "team-a": "Scientist, Team A",
-  "team-b": "Scientist, Team B",
+  "team-a": "Rotation student, Team A",
+  "team-b": "Rival student, Team B",
   "team-c": "Scientist, Team C",
-  referee: "Referee",
+  referee: "Referee, runs the Bruin checks",
   solo: "Solo scientist",
   other: "Visitor",
 };
 
 export const ROLE_READS: Record<Role, string> = {
-  director: "Reads every department's memory. Decides what crosses from one team to another.",
-  head: "Reads every department's memory, the other heads' notes and the study's event log. Its notes reach only its own department, after the lab's leak check, and may not draw on the other team.",
-  library: "Reads and writes only its own study's library notes.",
-  "team-a": "Reads only Team A's notes for this study, plus what the director passes down. Never Team B's.",
-  "team-b": "Reads only Team B's notes for this study, plus what the director passes down. Never Team A's.",
+  director: "Reads your answer, Riley's answer and the answer key. Picks your task and sits on the panel.",
+  head: "Reads your work as you go and the panel's notes. Can hint, but never gives the answer or shows you Riley's work.",
+  library: "Searches papers and the web for the method your task needs. Reads and writes only its own library notes.",
+  "team-a": "Reads the task's tables, what Telem finds and Sam's hints. Never Riley's work.",
+  "team-b": "Reads the same tables you do, working blind. Never sees your work, and you never see Riley's until the verdict.",
   "team-c": "Called only if the referee cannot settle a disagreement. Reads only its own notes and the warning signs passed to it.",
-  referee: "Sees two answers labelled X and Y without knowing which team wrote which. Must run a test, not vote.",
+  referee: "Sees your answer and Riley's labelled X and Y, without knowing whose is whose. Runs the Bruin checks; must run a test, not vote.",
   solo: "Works alone with no lab, no memory and no library. A comparison arm for the lab.",
   other: "",
 };
 
-const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Head of Team A", "team-b": "Head of Team B", "team-c": "Head of Team C" };
+const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Head of Team A, your mentor", "team-b": "Head of Team B", "team-c": "Head of Team C" };
 
 /** The label under a person's name: a head says which department it runs. */
 export function roleLabel(id: string, role: Role): string {
@@ -42,8 +42,19 @@ export const MODEL_NAME: Record<string, string> = {
   sonnet: "Sonnet 5.5",
 };
 
+/** The Lab Rotation cast, by role (a head by its id). The first agent in each role takes the name. */
+const CAST: Record<string, string> = {
+  director: "Dr. Vale",
+  "head-team-a": "Sam",
+  library: "Telem",
+  referee: "Ines",
+  "team-a": "You",
+  "team-b": "Riley",
+};
+
+/** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */
 const NAMES = [
-  "Ada", "Bram", "Chidi", "Dana", "Elif", "Femi", "Gia", "Hana", "Ines", "Jun", "Kofi", "Lena", "Mateo",
+  "Ada", "Bram", "Chidi", "Dana", "Elif", "Femi", "Gia", "Hana", "Jun", "Kofi", "Lena", "Mateo",
   "Noor", "Oren", "Priya", "Quinn", "Rafa", "Sana", "Tomas", "Uma", "Vik", "Wen", "Xavi", "Yara", "Zane",
   "Amara", "Basil", "Cleo", "Dev", "Esme", "Farid", "Greta", "Hugo", "Ivy", "Jonas", "Kira", "Leo", "Mina",
   "Nils", "Olu", "Pia", "Rumi", "Taro", "Una", "Vera", "Wren", "Yusuf", "Zoe", "Aiko", "Bodhi", "Cyra",
@@ -95,10 +106,18 @@ export class Replay {
     this.studies = new Map(run.studies.map((s) => [s.id, s]));
     run.studies.forEach((s, i) => this.studyIndex.set(s.id, i));
 
-    // Names: the director is the director; everyone else gets a first name, stable per run.
+    // Names: the first agent in each cast role takes the cast name; everyone else gets a first
+    // name, stable per run.
     let n = 0;
+    const cast = new Set<string>();
     const order = [...run.agents].sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || (a.study ?? "").localeCompare(b.study ?? "") || a.id.localeCompare(b.id));
-    for (const a of order) this.names.set(a.id, a.role === "director" ? "The Director" : NAMES[n++ % NAMES.length]);
+    for (const a of order) {
+      const key = a.role === "head" ? a.id : a.role;
+      if (CAST[key] && !cast.has(key)) {
+        cast.add(key);
+        this.names.set(a.id, CAST[key]);
+      } else this.names.set(a.id, NAMES[n++ % NAMES.length]);
+    }
 
     for (const e of run.events) {
       if (e.a) push(this.byAgent, e.a, e);
