@@ -1,0 +1,116 @@
+/* Workspace tab. Only uses the lab's variables from styles.css. */
+
+.ws-root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.ws-title {
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ws-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.ws-tabs {
+  display: flex;
+  gap: 2px;
+  box-shadow: inset 0 -2px 0 var(--line);
+}
+
+.ws-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--fog);
+  font-family: var(--pixel);
+}
+
+.ws-about {
+  line-height: 1.4;
+}
+
+.ws-grid-wrap {
+  max-height: 46vh;
+  overflow: auto;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.ws-grid {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12.5px;
+}
+
+.ws-grid th,
+.ws-grid td {
+  padding: 4px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--night-3);
+}
+
+.ws-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--night-3);
+  color: var(--snow);
+  font-weight: 700;
+  z-index: 1;
+}
+
+.ws-type {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--fog);
+  text-transform: uppercase;
+}
+
+.ws-grid tbody tr:hover {
+  background: var(--night-2);
+}
+
+.ws-rownum {
+  color: var(--fog);
+  text-align: right !important;
+  font-family: var(--pixel);
+  font-size: 11px;
+}
+
+.ws-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-null {
+  color: var(--fog);
+  font-style: italic;
+}
+
+.ws-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mist);
+  font-size: 13px;
+}
