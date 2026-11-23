@@ -151,3 +151,7 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
 - Answering a task that is not open, or appealing a task twice or before its verdict,
   returns `409 {error}`. In judge mode (and when a rotation task's `seconds` run out) the
   server answers for the learner with `cant_tell`, and `learner.answer`'s `why` says so.
+- Before a task's verdict, `GET /events` holds back whisper text and
+  `learner.query.useful` (they arrive with the task's `panel.transcript`), and nothing in
+  the stream tells the trap apart from a clean twin. See "Before the verdict" in
+  `events.md`.

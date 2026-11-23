@@ -5,6 +5,7 @@ import json
 import pytest
 
 from lab.session import api
+from lab.session.engine import LEAK, WHISPER_WHY
 from lab.session.mock import MockEngine
 from lab.session.tables import TaskTables
 from tests.test_n1_contract import CONTRACT
@@ -84,9 +85,10 @@ def test_totals_and_mastery_follow_the_replay(mock):
     sid = start()["sessionId"]
     mock.now += 1000
     _, totals = call("GET", f"/api/session/{sid}/sponsors")
-    assert totals["band"]["messages"] == 6
+    assert totals["band"]["messages"] == 7
     assert totals["bruin"] == {"checksRun": 5, "checksFailed": 1}
-    assert totals["runware"]["lines"] == 4
+    assert totals["runware"]["lines"] == 5
+    assert totals["telem"]["searches"] == 2
     assert totals["glasser"]["calls"] == 2
     _, mastery = call("GET", f"/api/session/{sid}/mastery")
     by_trap = {m["trap"]: m for m in mastery["traps"]}
@@ -164,3 +166,64 @@ def test_mock_whispers_sealed_until_the_transcript(mock):
     assert transcript["taskId"] == "t1" and [w["seq"] for w in transcript["whispers"]] == [e["seq"] for e in ws]
     opened = [e for e in after["events"] if e["k"] == "panel.whisper"]
     assert all(e["data"]["text"] and "sealed" not in e["data"] for e in opened)
+
+
+GENERIC = {"learner", "verdict", "panel", "grade", "check", "level", "hint", "hints"}
+
+
+def shared_words(why, text):
+    """Words of five or more letters in a whisper's why that also appear in its text."""
+    def words(x):
+        return {w for w in "".join(c if c.isalpha() else " " for c in x.lower()).split() if len(w) >= 5}
+    return (words(why) - GENERIC) & words(text)
+
+
+def names_a_trap(text):
+    low = text.lower()
+    return [w for ws in LEAK.values() for w in ws if w in low]
+
+
+def test_whisper_whys_are_fixed_templates():
+    for (agent, purpose), why in WHISPER_WHY.items():
+        assert why.lower().startswith(agent) and not names_a_trap(why), why
+
+
+def test_mock_whisper_whys_come_from_the_table(mock):
+    sid = start()["sessionId"]
+    mock.now += 1000
+    evs = call("GET", f"/api/session/{sid}/events", query="since=0")[1]["events"]
+    texts = {w["seq"]: w["text"] for w in next(e for e in evs if e["k"] == "panel.transcript")["data"]["whispers"]}
+    whys = set(WHISPER_WHY.values())
+    ws = [e for e in evs if e["k"] == "panel.whisper"]
+    assert len(ws) == 6
+    for e in ws:
+        assert e["why"] in whys, e["why"]
+        assert not shared_words(e["why"], texts[e["seq"]]), e
+
+
+def test_mock_says_nothing_of_the_trap_before_the_answer(mock):
+    sid = start()["sessionId"]
+    mock.now += 1000
+    evs = call("GET", f"/api/session/{sid}/events", query="since=0")[1]["events"]
+    answered = next(e["seq"] for e in evs if e["k"] == "learner.answer")
+    for e in evs:
+        if e["seq"] >= answered:
+            break
+        if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel"):
+            continue   # Sam's hints point the way on purpose
+        assert not names_a_trap(json.dumps(e)), e
+    searches = [e for e in evs if e["k"] == "search"]
+    assert [e["data"]["phase"] for e in searches] == ["topic", "case"]
+    claim = json.loads((CONTRACT / "mock_task" / "task.json").read_text())["claim"]
+    assert claim in searches[0]["data"]["query"]
+    kinds_ = [e["k"] for e in evs]
+    assert evs.index(searches[1]) > kinds_.index("panel.transcript") and searches[1]["data"]["trap"] == "unit_mismatch"
+
+
+def test_mock_holds_back_useful_until_the_verdict(mock):
+    sid = start()["sessionId"]
+    mock.now += 1000
+    evs = call("GET", f"/api/session/{sid}/events", query="since=0")[1]["events"]
+    qs = [e for e in evs if e["k"] == "learner.query"]
+    assert qs and all("useful" not in e["data"] for e in qs)
+    assert {e["why"] for e in qs} <= {"the learner ran a query in the SQL box", "the query failed"}

@@ -18,7 +18,7 @@ announced to both of us. Ask for changes in `requests/<your stream>.md`.
 | `t` | number | yes | Seconds since the session started (millisecond precision). |
 | `k` | string | yes | The kind, from the list below. |
 | `agent` | string | yes | Who did it, or who it is about: an agent id. `system` when no agent did. |
-| `why` | string | yes | The reason, in plain words. Never empty. This is the decision log the judges read. |
+| `why` | string | yes | The reason, in plain words. Never empty. This is the decision log the judges read. Before a task's verdict no `why` names its trap or the columns that matter (see "Before the verdict" below). |
 | `to` | string | no | The second agent, for events between two (whispers, moves toward someone, appeal messages). |
 | `task` | string | no | The task slot id (`t1`, `t2`, `t3`). |
 | `text` | string | no | A plain-words line for the lab log, or the words spoken. |
@@ -72,19 +72,31 @@ are there for the lab log, the verdict card and the people reading them.
 
 ### Librarian (telem)
 - `search`: `query`, `results` (`[{title, url, snippet}]`), **`trace`** (a Telem AI
-  trace link), `cached` (true when a recorded result answered).
+  trace link), `cached` (true when a recorded result answered), `phase?` (`topic` or
+  `case`), `trap?` (only with `case`). Each task has two:
+  - `topic`, during the brief: background on the claim. The query is built from the
+    public claim alone, so a clean twin with the same claim gets the same search, and
+    Telem's line says nothing about what could be wrong.
+  - `case`, after the task's `panel.transcript`: a real case of this task's trap ("this
+    happens in real life"), or on a clean task (`trap: none`) a case of trusting a clean
+    result. The search runs only after the verdict, since its query names the trap.
 - `monitor.hit`: `title`, `url`, **`trace`**, `summary` (the case of the day).
 
 ### Learner
 - `learner.query`: `queryId` (`q1`, `q2` ...), `sql`, `ok`, `rowCount`, `ms`, `error?`,
-  `useful` (set by the struggle meter: did the query touch a column that matters?).
+  `useful?` (set by the struggle meter: did the query touch a column that matters?).
+  `useful` names the columns that matter, so the server holds it back until the task's
+  `panel.transcript`, as it does whisper text. `why` is the same for every query
+  ("the learner ran a query in the SQL box", or "the query failed").
 - `learner.evidence`: `action` (`add` or `remove`), `items` (`[Evidence]`). The server
   sends it when the answer arrives, listing the cited items (there is no separate
   evidence route).
 - `learner.answer`: **`verdict`**, **`trap`**, `note` (the learner's own words),
   `evidence` (`[Evidence]`).
 - `meter.update` (system): `value` (0 to 1), `idleSeconds`, `deadEnds`,
-  `wrongGuesses`, `hintLevel` (0 to 3).
+  `wrongGuesses`, `hintLevel` (0 to 3). Sent after every query (and when the reading
+  changes), so its timing says nothing about the query; its `why` never says whether a
+  query was useful.
 
 ### Rival (riley)
 - `rival.answer`: **`verdict`**, **`trap`**, `note`, `model`, `provider` (`runware` or
@@ -96,7 +108,10 @@ are there for the lab log, the verdict card and the people reading them.
   flies an envelope to each. `data`: `text?`, `sealed?`, `bandMessageId?`, `local`
   (true when BAND was down and the local room carried it). The server holds the text
   back: until the task's `panel.transcript`, a whisper has no `text` and has
-  `sealed: true`. Once the transcript is out (and in any replay of a finished task, read
+  `sealed: true`. Its `why` is shown all along, so it comes from a fixed set of
+  templates by speaker and purpose, never from agent output: "Sam asks the panel before
+  a hint", "Ines gives Sam a direction", "Vale approves the hint level", "Ines shares the
+  basis for the grade", "Sam reports the coaching history", "Vale decides the verdict". Once the transcript is out (and in any replay of a finished task, read
   from `since=0`), whispers arrive with `text` filled in; the front end hides it in a
   replay until the `verdict` event has played.
 - `panel.transcript` (ines): sent right after the `verdict`. `taskId`, `whispers`
@@ -133,3 +148,18 @@ are there for the lab log, the verdict card and the people reading them.
 - `ask` (learner): `to` is the agent asked, `text` the question.
 - `ask.answer`: `agent` is the one asked, `text` the answer, `data.sources` (in plain
   words) what it used.
+
+## Before the verdict
+
+Until a task's `verdict`, nothing the browser receives may tell its trap apart from a
+clean twin (the same task with no trap). The engine enforces it:
+
+- No `why`, `text` or `data` names the trap. The trap and the full pick reason arrive
+  with `task.end`; the check ids arrive with `check.result`, after the answer.
+- Pre-answer lines from agents (Vale's brief, Telem's background, answers to `ask`) are
+  replaced by a fixed line if they name *any* trap, so a replacement says nothing either.
+- Telem's pre-answer search uses only the claim; the real case of the trap comes after the
+  verdict (see `search`).
+- Whisper text and `learner.query.useful` wait for `panel.transcript`; whisper `why`s
+  are fixed templates.
+- Sam's hints are the exception: they point the way on purpose, as questions.

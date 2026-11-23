@@ -7,7 +7,8 @@ brief: it is on the learner's screen). Beyond that:
 - vale: the learner profile, the panel's whispers, the check results (after the answer)
 - ines: the answer key, the check output (after the answer), the learner's answer
 - sam: the learner's queries and actions, the answer, the struggle meter, the whispers
-- telem: only its own search results
+- telem: only its own search results (topic background before the verdict, the real
+  case of the task's trap after it)
 - riley: only the public tables
 
 No other agent's input ever contains the key, and no text built here reaches the browser
@@ -109,7 +110,8 @@ def meter(s) -> tuple[str, str]:
 
 
 def search_results(s) -> tuple[str, str]:
-    found = s.slot.search if s.slot else None
+    """Before the verdict, the topic search; after it, the real case of this trap."""
+    found = (s.slot.case or s.slot.search) if s.slot else None
     if not found:
         return ("Telem's search results", "none")
     lines = [f"- {r.get('title', '')}: {r.get('snippet', '')} ({r.get('url', '')})" for r in found.get("results", [])]

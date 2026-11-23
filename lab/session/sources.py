@@ -336,21 +336,41 @@ class Sponsors:
             _log(f"Runware client unavailable ({type(e).__name__})")
 
 
-def telem_search(sp: Sponsors, query: str, trap_for_fallback: str) -> dict:
-    """{query, results, trace, cached}. Results are untrusted text; callers quote them as data."""
-    on_call = sp.on_call
+def _telem_result(got: dict | None, query: str) -> dict | None:
+    if got and got.get("results"):
+        return {"query": got.get("query", query), "results": list(got["results"])[:3],
+                "trace": got.get("trace") or "", "cached": bool(got.get("cached", False))}
+    return None
+
+
+def telem_topic(sp: Sponsors, query: str) -> dict:
+    """Before the answer: background on the claim's topic. `query` comes from the public claim
+    only. {query, results, trace, cached}; results are untrusted text, quoted as data."""
     try:
-        got = sp.lib.case_for(trap_for_fallback) if sp.lib else None
-        if got and got.get("results"):
-            return {"query": got.get("query", query), "results": list(got["results"])[:3],
-                    "trace": got.get("trace") or "", "cached": bool(got.get("cached", False))}
+        got = _telem_result(sp.lib.search(query, goal="background on a retail claim") if sp.lib else None, query)
+        if got:
+            return got
+    except Exception as e:
+        _log(f"Telem unavailable ({type(e).__name__}); using recorded background")
+    if sp.on_call:
+        sp.on_call({"sponsor": "telem", "label": "used recorded background", "count": 1, "op": "search",
+                    "by": "telem", "ms": 0, "fallback": True})
+    return fallback.topic_for(query)
+
+
+def telem_case(sp: Sponsors, trap: str) -> dict:
+    """After the verdict: a real case of this trap (`none`: trusting a clean result)."""
+    try:
+        got = sp.lib.case_for(trap) if sp.lib else None
+        out = _telem_result(got, (got or {}).get("query", ""))
+        if out:
+            return out
     except Exception as e:
         _log(f"Telem unavailable ({type(e).__name__}); using a recorded case")
-    rec = fallback.case_for(trap_for_fallback)
-    if on_call:
-        on_call({"sponsor": "telem", "label": "used a recorded case", "count": 1, "op": "search",
-                 "by": "telem", "ms": 0, "fallback": True})
-    return rec
+    if sp.on_call:
+        sp.on_call({"sponsor": "telem", "label": "used a recorded case", "count": 1, "op": "search",
+                    "by": "telem", "ms": 0, "fallback": True})
+    return fallback.case_for(trap)
 
 
 def case_of_day(sp: Sponsors) -> dict | None:

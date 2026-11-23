@@ -60,10 +60,11 @@ def reading(events: list[dict], task: str, now: float, wrong_guesses: int = 0) -
             "wrongGuesses": wrong_guesses, "hintLevel": hint_level(value)}
 
 
-def why(reading_: dict, useful_now: bool = False) -> str:
-    """The reason for a meter.update, in plain words."""
-    if useful_now:
-        return "a useful query just ran"
+def why(reading_: dict, after_query: bool = False) -> str:
+    """The reason for a meter.update, in plain words. It never says whether the last query
+    was useful: that would tell the learner which columns matter."""
+    if after_query:
+        return "the learner ran a query"
     parts = []
     if reading_["deadEnds"]:
         parts.append(f"{reading_['deadEnds']} dead end{'s' if reading_['deadEnds'] != 1 else ''}")

@@ -58,6 +58,17 @@ SPONSOR_WHY = {"band": "the panel talks in its BAND room",
 
 HOME = {"vale": "vale_office", "ines": "terminal", "sam": "whiteboard", "telem": "door", "riley": "door"}
 
+# The `why` of a panel.whisper is shown before the verdict while its text is sealed, so it
+# comes only from this fixed table (by speaker and purpose), never from agent output.
+WHISPER_WHY = {
+    ("sam", "hint_ask"): "Sam asks the panel before a hint",
+    ("ines", "hint_steer"): "Ines gives Sam a direction",
+    ("vale", "hint_ok"): "Vale approves the hint level",
+    ("ines", "grade_basis"): "Ines shares the basis for the grade",
+    ("sam", "coaching"): "Sam reports the coaching history",
+    ("vale", "decide"): "Vale decides the verdict",
+}
+
 
 class EngineError(Exception):
     def __init__(self, status: int, message: str):
@@ -75,6 +86,19 @@ def leaks(text: str, trap: str) -> bool:
     return any(w in low for w in LEAK.get(trap, ()))
 
 
+def leaks_any(text: str) -> bool:
+    """True if the text names any trap. Pre-answer lines use this, not `leaks(text, trap)`:
+    replacing a line only when it names *this* task's trap would itself tell the trap apart
+    from a clean twin."""
+    return any(leaks(text, t) for t in LEAK)
+
+
+def topic_query(claim: str) -> str:
+    """Telem's pre-answer search: built from the public claim only, so a clean twin with the
+    same claim gets the same search."""
+    return f"retail data: {claim}"[:160]
+
+
 @dataclass
 class Slot:
     id: str
@@ -90,7 +114,8 @@ class Slot:
     hints: int = 0
     last_hint_t: float = -1e9
     checks: list = field(default_factory=list)
-    search: dict | None = None
+    search: dict | None = None       # Telem's topic search (before the answer)
+    case: dict | None = None         # Telem's real case of this trap (after the verdict)
     seen_cols: set = field(default_factory=set)
     last_meter: dict | None = None
     last_meter_t: float = -1e9
@@ -189,7 +214,8 @@ class Session:
         self.emit("agent.move", agent, why, to=to, task=self.slot.id if self.slot else None,
                   data={"from": frm, "place": place})
 
-    def whisper(self, agent: str, to: str, text: str, why: str, cc: list[str] = ()) -> dict:
+    def whisper(self, agent: str, to: str, text: str, purpose: str, cc: list[str] = ()) -> dict:
+        why = WHISPER_WHY[(agent, purpose)]   # a fixed template: never built from the text
         posted = sources.band_post(self.room, agent, text, [to, *cc])
         data = {"text": text, "cc": list(cc), "local": posted["local"]}
         if posted.get("id") and not posted["local"]:
@@ -204,7 +230,7 @@ class Session:
                  "slots": [{"id": s.id, "tier": s.tier, "bankId": s.task.bank_id if s.task else None,
                             "pick": s.pick, "phase": s.phase, "hints": s.hints, "seconds": s.seconds,
                             "openedT": s.opened_t, "answer": s.answer, "grade": s.grade,
-                            "checks": s.checks, "search": s.search, "seenCols": sorted(s.seen_cols),
+                            "checks": s.checks, "search": s.search, "case": s.case, "seenCols": sorted(s.seen_cols),
                             "ledger": s.ledger, "rival": s.rival} for s in self.slots]}
         path = self.log.path.with_suffix(".state.json")
         tmp = path.with_suffix(".tmp")
@@ -241,6 +267,9 @@ class Session:
         bank_id = sources.bank_pick(pick["skill"], s.tier, seen_ids)
         s.task = sources.bank_load(bank_id)
         s.pick = pick
+        public_text = " ".join(str(s.task.public.get(f) or "") for f in ("title", "brief", "claim"))
+        if leaks(public_text, s.task.key["trap"]):   # the bank's text is shown before the answer
+            self.engine.note(self, f"task {bank_id}: its title, brief or claim names its trap")
         s.seconds = JUDGE_SECONDS if self.mode == "judge" else int(s.task.public.get("seconds") or DEFAULT_SECONDS)
         s.phase = "brief"
         first = s.id == "t1"
@@ -274,40 +303,40 @@ class Session:
         if m["hintLevel"] > s.hints and s.hints < 3 and now - s.last_hint_t >= HINT_GAP_S:
             self.give_hint(s.hints + 1, m)
 
-    def emit_meter(self, m: dict, useful_now: bool = False) -> None:
+    def emit_meter(self, m: dict, after_query: bool = False) -> None:
         s = self.slot
         s.last_meter, s.last_meter_t = m, self.log.now()
-        self.emit("meter.update", "system", meter.why(m, useful_now), task=s.id, data=m)
+        self.emit("meter.update", "system", meter.why(m, after_query), task=s.id, data=m)
 
     def do_brief(self) -> None:
         s = self.slot
-        p, key = s.public(), s.task.key
+        p = s.public()
         self.move("vale", "learner_desk", "brief the learner in person", to="learner")
         brief_fallback = f"{p['brief']} The claim: {p['claim']} Check it before it goes any further."
         vale_job = ("Brief the learner on this task in two or three short sentences: the claim, who wants it, "
                     "and why it must be checked. Do not hint at what might be wrong.")
         vale_f = speaker.submit("vale", vale_job, view("vale", self), brief_fallback, 55)
-        case_trap = key["trap"] if (s.tier == 1 and key["trap"] != "none") else self.rng.choice(
-            [t for t in summary.TRAPS if t != "none"])
-        case_query = fallback.CASES[case_trap]["query"]
-        search_f = speaker.POOL.submit(sources.telem_search, self.sponsors, case_query, case_trap)
+        query = topic_query(p["claim"])
+        search_f = speaker.POOL.submit(sources.telem_topic, self.sponsors, query)
         line, used_fb = vale_f.result()
-        if leaks(line, key["trap"]):
+        if leaks_any(line):
             line = brief_fallback
         self.say("vale", line, "deliver the brief and the claim", task=s.id)
-        self.move("telem", "shelves", "look for real cases of claims like this going wrong")
+        self.move("telem", "shelves", "look up background on the claim")
         found = search_f.result()
         s.search = found
-        top = (found.get("results") or [{}])[0]
-        self.emit("search", "telem", "real cases help the learner know what to look for", task=s.id,
-                  text=f"Telem found a real case: {top.get('title', 'a related case')}"[:200],
-                  data={"query": found.get("query", case_query), "results": found.get("results", []),
+        self.emit("search", "telem", "background on the claim's topic; the search uses only the public claim",
+                  task=s.id, text="Telem looked up background on the claim.",
+                  data={"phase": "topic", "query": found.get("query", query), "results": found.get("results", []),
                         "trace": found.get("trace", ""), "cached": bool(found.get("cached"))})
-        self.move("telem", "learner_desk", "bring the case to the learner", to="learner")
-        telem_fb = f"A real case for you: {top.get('title', 'a related case')}. The source is on the card."
-        tline, _ = speaker.call("telem", "Share the one real case from your search results with the learner, "
-                                         "in one or two sentences.", view("telem", self), telem_fb, 45)
-        self.say("telem", tline, "share one real case with its source", task=s.id)
+        self.move("telem", "learner_desk", "bring background on the claim", to="learner")
+        telem_fb = "Some background on claims like this one: the sources are on the card."
+        tline, _ = speaker.call("telem", "Before the learner starts, give one or two sentences of background on "
+                                         "the claim's topic from your search results. Say nothing about what "
+                                         "could be wrong with any dataset.", view("telem", self), telem_fb, 45)
+        if leaks_any(tline):
+            tline = telem_fb
+        self.say("telem", tline, "background on the claim's topic, with its sources", task=s.id)
         self.move("vale", "vale_office", "brief done; let the learner work")
         self.move("telem", "shelves", "back to the shelves")
         self.move("riley", "riley_desk", "the intern races the learner on the same task")
@@ -324,10 +353,9 @@ class Session:
         sam_line, _ = speaker.call("sam", f"Tell Vale and Ines privately, in one sentence, what the learner has "
                                           f"tried and that you want to give a level {level} hint.",
                                    view("sam", self), sam_fb, 40)
-        self.whisper("sam", "vale", sam_line, "Sam checks with the panel before giving a hint", cc=["ines"])
-        self.whisper("ines", "sam", f"Point them here, as a question: {hint}",
-                     "Ines knows the key, so she says where to point without naming the trap")
-        self.whisper("vale", "sam", "Go ahead, keep it a question.", "Vale approves the hint level")
+        self.whisper("sam", "vale", sam_line, "hint_ask", cc=["ines"])
+        self.whisper("ines", "sam", f"Steer them here, as a question: {hint}", "hint_steer")
+        self.whisper("vale", "sam", "Go ahead, keep it a question.", "hint_ok")
         self.move("sam", "learner_desk", f"the struggle meter reached {m['value']}", to="learner")
         line, _ = speaker.call("sam", "Ask the learner one short question that points where Ines suggested. "
                                       "Do not give the answer.", view("sam", self), hint, 30)
@@ -359,14 +387,13 @@ class Session:
                                 view("ines", self), ines_fb, 45)
         sam_f = speaker.submit("sam", "Tell Ines and Vale privately, in one sentence, how the learner worked: "
                                       "hints needed, dead ends, recoveries.", view("sam", self), sam_fb, 35)
-        self.whisper("ines", "vale", ines_f.result()[0], "Ines shares the basis for the grade with the panel",
-                     cc=["sam"])
-        self.whisper("sam", "ines", sam_f.result()[0], "Sam reports the coaching history", cc=["vale"])
+        self.whisper("ines", "vale", ines_f.result()[0], "grade_basis", cc=["sam"])
+        self.whisper("sam", "ines", sam_f.result()[0], "coaching", cc=["vale"])
         vale_line, _ = speaker.call("vale", "Decide with the panel in one or two sentences and ask Ines to deliver "
                                             "the verdict with the failing check. " + facts, view("vale", self),
                                     f"{'Passed' if g['result'] == 'passed' else 'Not this time'}: {g['score']}. "
                                     "Ines, deliver it with the failing check.", 35)
-        self.whisper("vale", "ines", vale_line, "Vale decides the verdict", cc=["sam"])
+        self.whisper("vale", "ines", vale_line, "decide", cc=["sam"])
         self.move("ines", "terminal", "run the Bruin checks at the terminal")
         self.on_call(bruin_call)
         for c in s.checks:
@@ -392,6 +419,7 @@ class Session:
         self.emit("panel.transcript", "ines", "the verdict is in, so the panel's whispers are open", task=s.id,
                   data={"taskId": s.id, "whispers": opened})
         self.say("ines", text, "deliver the verdict out loud", task=s.id, data={"quotes": qs} if qs else None)
+        self.bring_case()
         correct = grading.correct_for_mastery(ans, key)
         if not correct:
             self.wrong_guesses += 1
@@ -417,6 +445,31 @@ class Session:
                           "op": "run", "by": "system", "ms": int(upd.get("ms") or 0), "fallback": False})
         s.phase = "done"
         self.next_task()
+
+    def bring_case(self) -> None:
+        """After the verdict: Telem brings a real case of this task's trap (or, on a clean task,
+        of trusting a clean result). The search starts only now: its sponsor.call names the trap."""
+        s, trap = self.slot, self.slot.task.key["trap"]
+        found = sources.telem_case(self.sponsors, trap)
+        s.case = found
+        top = (found.get("results") or [{}])[0]
+        clean = trap == "none"
+        self.move("telem", "learner_desk", "the verdict is in, so Telem brings a real case of "
+                  + ("trusting a clean result" if clean else "the same trap"), to="learner")
+        self.emit("search", "telem", "this happens in real life: a real case of "
+                  + ("trusting a clean result" if clean else f"a {TRAP_LABEL[trap]}"), task=s.id,
+                  text=f"Telem found a real case: {top.get('title', 'a related case')}"[:200],
+                  data={"phase": "case", "trap": trap, "query": found.get("query", ""),
+                        "results": found.get("results", []), "trace": found.get("trace", ""),
+                        "cached": bool(found.get("cached"))})
+        fb = (f"This happens in real life: {top.get('title', 'a related case')}. "
+              "The source and the trace are on the card.")
+        line, _ = speaker.call("telem", "The verdict is in. In one or two sentences, tell the learner that this "
+                                        "happens in real life: share the real case from your search results and "
+                                        "say the source and trace are on the card.", view("telem", self), fb, 45)
+        self.say("telem", line, "this happens in real life: a real case with its source", task=s.id)
+        self.move("telem", "shelves", "back to the shelves")
+        self.save()
 
     def rival_answer(self) -> None:
         s, key = self.slot, self.slot.task.key
@@ -623,6 +676,7 @@ class Engine:
             slot.seconds, slot.opened_t = st.get("seconds", DEFAULT_SECONDS), st.get("openedT")
             slot.answer, slot.grade, slot.checks = st.get("answer"), st.get("grade"), st.get("checks") or []
             slot.search, slot.seen_cols = st.get("search"), set(st.get("seenCols") or [])
+            slot.case = st.get("case")
             slot.ledger, slot.rival = st.get("ledger"), st.get("rival")
         s.finished = any(e["k"] == "session.end" for e in events)
         with self._lock:
@@ -682,7 +736,7 @@ class Engine:
 
     def events_since(self, sid: str, since: int) -> dict:
         s = self.get(sid)
-        out = [e for e in summary.seal_whispers(s.log.since(0)) if e["seq"] > since]
+        out = [e for e in summary.seal(s.log.since(0)) if e["seq"] > since]
         return {"events": out, "next": out[-1]["seq"] if out else min(since, s.log.last_seq)}
 
     def sql(self, sid: str, sql: str) -> dict:
@@ -702,12 +756,12 @@ class Engine:
                     "ms": res.get("ms", 0), "useful": useful}
             if not ok:
                 data["error"] = res["error"]
-            why = ("the query touched a column that matters for the first time" if useful else
-                   "the query failed" if not ok else "the query touched no new column that matters")
+            # `useful` names columns that matter, so the why stays generic and the server holds
+            # `data.useful` back until the task's verdict (summary.seal).
+            why = "the learner ran a query in the SQL box" if ok else "the query failed"
             s.emit("learner.query", "learner", why, task=slot.id, text=sql[:300], data=data)
-            if slot.phase == "analysis" and (useful or not ok or s.meter_now()["hintLevel"] != (
-                    slot.last_meter or {}).get("hintLevel")):
-                s.emit_meter(s.meter_now(), useful_now=useful)
+            if slot.phase == "analysis":   # after every query, so the timing says nothing either
+                s.emit_meter(s.meter_now(), after_query=True)
             s.save()
         return {"error": res["error"]} if not ok else {k: res[k] for k in ("columns", "rows", "ms", "truncated")}
 
@@ -783,8 +837,7 @@ class Engine:
                                        "sentences. If your records do not say, say so.",
                                 parts + [("the learner's question", text)],
                                 "I can't answer that from what I can see.", 60)
-        trap = slot.task.key["trap"] if slot and slot.task else "none"
-        if not graded and leaks(reply, trap):
+        if not graded and leaks_any(reply):
             reply = "I can't say that before the verdict."
         used = sources_used(agent, parts)
         with s.lock:

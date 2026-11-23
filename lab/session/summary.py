@@ -84,17 +84,19 @@ def demo() -> dict:
             "speed": _num("LAB_DEMO_SPEED") or 1.0}
 
 
-def seal_whispers(events: list[dict]) -> list[dict]:
-    """The events as the browser may see them: whisper text waits for the panel transcript.
+def seal(events: list[dict]) -> list[dict]:
+    """The events as the browser may see them: some parts wait for the task's panel transcript.
 
-    A `panel.whisper` goes out without `data.text` and with `data.sealed: true` until the
-    task's `panel.transcript` (sent right after its `verdict`) is among `events`; from then
-    on, and in any replay of a finished task, it goes out with its text. The transcript
-    carries the texts too. Events are copied, never changed in place.
+    Until the task's `panel.transcript` (sent right after its `verdict`) is among `events`:
+    a `panel.whisper` goes out without `data.text` and with `data.sealed: true`, and a
+    `learner.query` goes out without `data.useful` (it says which columns matter). From then
+    on, and in any replay of a finished task, both go out whole; the transcript carries the
+    whisper texts too. Events are copied, never changed in place.
     """
-    opened = {}
+    opened, done = {}, set()
     for e in events:
         if e.get("k") == "panel.transcript":
+            done.add((e.get("data") or {}).get("taskId") or e.get("task"))
             for w in (e.get("data") or {}).get("whispers") or []:
                 opened[w.get("seq")] = w.get("text", "")
     out = []
@@ -106,5 +108,10 @@ def seal_whispers(events: list[dict]) -> list[dict]:
             else:
                 d["sealed"] = True
             e = {**e, "data": d}
+        elif e.get("k") == "learner.query" and e.get("task") not in done:
+            e = {**e, "data": {k: v for k, v in (e.get("data") or {}).items() if k != "useful"}}
         out.append(e)
     return out
+
+
+seal_whispers = seal   # the earlier name

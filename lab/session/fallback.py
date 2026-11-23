@@ -90,14 +90,28 @@ CASES = {
     "hidden_variable": {"query": "sales analysis missed a variable in another table",
                         "title": "A promotion table explained a sales jump the main table could not",
                         "snippet": "The deciding factor sat in a table the analysts never joined."},
+    "none": {"query": "retail analysts checked a sales result and it held up",
+             "title": "A retailer ran its checks on a surprising sales result and shipped it unchanged",
+             "snippet": "Every check came back clean, so the team trusted the number instead of second-guessing it."},
 }
+
+# Telem's pre-answer background when the search is down: the same for every claim.
+TOPIC = {"title": "Checking a retail claim before it goes to the board",
+         "snippet": "Analysts trace a headline number back to the rows behind it, read how each column was "
+                    "recorded, and compare like with like before they repeat it."}
 
 
 def case_for(trap: str) -> dict:
-    """A recorded Telem result for one kind of trap (labelled cached)."""
-    c = CASES.get(trap) or CASES["unit_mismatch"]
+    """A recorded Telem result for one kind of trap, or for trusting a clean result (labelled cached)."""
+    c = CASES.get(trap) or CASES["none"]
     return {"query": c["query"], "cached": True, "trace": "",
             "results": [{"title": c["title"], "url": "", "snippet": c["snippet"]}]}
+
+
+def topic_for(query: str) -> dict:
+    """Recorded background for Telem's pre-answer search (labelled cached); claim-independent."""
+    return {"query": query, "cached": True, "trace": "", "results": [{"title": TOPIC["title"], "url": "",
+                                                                         "snippet": TOPIC["snippet"]}]}
 
 
 def stub_task(bank_id: str = STUB_ID) -> dict:

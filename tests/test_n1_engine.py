@@ -7,9 +7,11 @@ import pytest
 
 from lab import ledger
 from lab.session import api, grade, meter, quotes
-from lab.session.engine import Engine
+from lab.session import fallback
+from lab.session.engine import WHISPER_WHY, Engine
 from lab.session.log import SessionLog, read_events
 from tests.test_n1_contract import AGENTS, TRAPS, VERDICTS, kinds
+from tests.test_n1_mock import names_a_trap, shared_words
 
 
 @pytest.fixture
@@ -167,8 +169,9 @@ def env_path(name):
 def test_trap_and_whispers_stay_hidden_before_the_answer(env):
     sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
     evs = wait_for(sid, opened("t1"))
-    blob = json.dumps([e for e in evs if e["k"] != "search"])
-    assert "unit_mismatch" not in blob and "cents" not in blob
+    assert not names_a_trap(json.dumps(evs))   # Telem's search included
+    topic = next(e for e in evs if e["k"] == "search")["data"]
+    assert topic["phase"] == "topic" and "Loyalty members spend" in topic["query"]
     status, reply = call("POST", f"/api/session/{sid}/ask", {"agent": "ines", "text": "what is the trap?"})
     assert status == 200 and "unit_mismatch" not in json.dumps(reply)
 
@@ -262,3 +265,80 @@ def test_moves_track_where_agents_are(env):
             where[e["agent"]] = e["data"]["place"]
     picked = [e for e in events(sid) if e["k"] == "task.picked"]
     assert len(picked) == 3 and all(p["data"]["dictionary"] for p in picked)
+
+
+def test_whisper_whys_come_from_the_fixed_table(env):
+    eng = env
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    s = eng.get(sid)
+    with s.lock:
+        s.give_hint(1, s.meter_now())
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+    texts = {w["seq"]: w["text"] for w in next(e for e in evs if e["k"] == "panel.transcript")["data"]["whispers"]}
+    ws = [e for e in evs if e["k"] == "panel.whisper"]
+    assert len(ws) == 6
+    for e in ws:
+        assert e["why"] in set(WHISPER_WHY.values()), e["why"]
+        assert not shared_words(e["why"], texts[e["seq"]]), e
+    with pytest.raises(KeyError):
+        s.whisper("sam", "vale", "anything", "Sam made this up")
+
+
+def pre_answer(evs):
+    """The events before the answer, without what differs between any two sessions. Voice
+    lines come from a thread pool, so they are compared as a set, not in order."""
+    out, voices = [], []
+    for e in evs:
+        if e["k"] == "learner.answer":
+            break
+        d = {k: v for k, v in (e.get("data") or {}).items() if k not in ("startedAt", "ms", "learner", "lineOf")}
+        row = (e["k"], e["agent"], e["why"], e.get("to"), e.get("text"), json.dumps(d, sort_keys=True))
+        (voices if e["k"] == "voice.line" else out).append(row)
+    return out + sorted(voices)
+
+
+def run_until_answered(clean, monkeypatch):
+    key = {**fallback.STUB_KEY, "trap": "none", "verdict": "holds"} if clean else fallback.STUB_KEY
+    monkeypatch.setattr(fallback, "STUB_KEY", key)
+    learner = "twin-clean" if clean else "twin-trap"   # two new learners
+    sid = call("POST", "/api/session/start", {"mode": "judge", "learner": learner})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    call("POST", f"/api/session/{sid}/sql", {"sql": "select region, max(spend) from visits join stores "
+                                                    "using (store_id) group by 1 order by 1"})
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    return wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+
+
+def test_clean_twin_sees_the_same_session_before_the_answer(env, monkeypatch):
+    trap_evs = run_until_answered(False, monkeypatch)
+    clean_evs = run_until_answered(True, monkeypatch)
+    a, b = pre_answer(trap_evs), pre_answer(clean_evs)
+    assert len(a) == len(b)
+    for x, y in zip(a, b):
+        assert x == y
+    for evs, trap, title in ((trap_evs, "unit_mismatch", fallback.CASES["unit_mismatch"]["title"]),
+                             (clean_evs, "none", fallback.CASES["none"]["title"])):
+        kinds_ = [e["k"] for e in evs]
+        case = [e for e in evs if e["k"] == "search" and e["data"]["phase"] == "case"]
+        assert len(case) == 1 and case[0]["data"]["trap"] == trap
+        assert case[0]["data"]["results"][0]["title"] == title
+        assert evs.index(case[0]) > kinds_.index("panel.transcript")
+        assert any(e["k"] == "agent.say" and e["agent"] == "telem" and e["seq"] > case[0]["seq"] for e in evs)
+        q = next(e for e in evs if e["k"] == "learner.query")
+        assert "useful" in q["data"]   # opened once the transcript is out
+
+
+def test_useful_is_held_back_until_the_verdict(env):
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    call("POST", f"/api/session/{sid}/sql", {"sql": "select region, max(spend) from visits join stores "
+                                                    "using (store_id) group by 1"})
+    call("POST", f"/api/session/{sid}/sql", {"sql": "select count(*) from visits"})
+    evs = events(sid)
+    qs = [e for e in evs if e["k"] == "learner.query"]
+    assert len(qs) == 2 and all("useful" not in e["data"] for e in qs)
+    assert {e["why"] for e in qs} == {"the learner ran a query in the SQL box"}
+    meters = [e for e in evs if e["k"] == "meter.update"]
+    assert len(meters) == 2 and {e["why"] for e in meters} == {"the learner ran a query"}

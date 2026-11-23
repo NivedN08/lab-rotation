@@ -99,7 +99,7 @@ class MockEngine:
         return self.tables_box.profile(table)
 
     def events_since(self, session_id: str, since: int) -> dict:
-        out = [e for e in summary.seal_whispers(self.released(session_id)) if e["seq"] > since]
+        out = [e for e in summary.seal(self.released(session_id)) if e["seq"] > since]
         return {"events": out, "next": out[-1]["seq"] if out else since}
 
     def sql(self, session_id: str, sql: str) -> dict:
