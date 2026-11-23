@@ -1,37 +1,39 @@
 // What the lab looks like at any moment of a run: who is in, what they are doing, where each
 // study stands. Everything is derived from the run's events, so scrubbing is exact.
 
+import type { LabEvent } from "../api/types";
 import type { AgentRec, Ev, Note, Role, Run, Search, Study } from "../data/types";
+import { headDept } from "../world/palette";
 
 export const ROLE_LABEL: Record<Role, string> = {
   director: "Lab director",
   head: "Department head",
   library: "Research librarian",
-  "team-a": "Scientist, Team A",
-  "team-b": "Scientist, Team B",
+  "team-a": "Rotation student, Team A",
+  "team-b": "Rival student, Team B",
   "team-c": "Scientist, Team C",
-  referee: "Referee",
+  referee: "Referee, runs the Bruin checks",
   solo: "Solo scientist",
   other: "Visitor",
 };
 
 export const ROLE_READS: Record<Role, string> = {
-  director: "Reads every department's memory. Decides what crosses from one team to another.",
-  head: "Reads every department's memory, the other heads' notes and the study's event log. Its notes reach only its own department, after the lab's leak check, and may not draw on the other team.",
-  library: "Reads and writes only its own study's library notes.",
-  "team-a": "Reads only Team A's notes for this study, plus what the director passes down. Never Team B's.",
-  "team-b": "Reads only Team B's notes for this study, plus what the director passes down. Never Team A's.",
+  director: "Reads your answer, Riley's answer and the answer key. Picks your task and sits on the panel.",
+  head: "Reads your work as you go and the panel's notes. Can hint, but never gives the answer or shows you Riley's work.",
+  library: "Searches papers and the web for the method your task needs. Reads and writes only its own library notes.",
+  "team-a": "Reads the task's tables, what Telem finds and Sam's hints. Never Riley's work.",
+  "team-b": "Reads the same tables you do, working blind. Never sees your work, and you never see Riley's until the verdict.",
   "team-c": "Called only if the referee cannot settle a disagreement. Reads only its own notes and the warning signs passed to it.",
-  referee: "Sees two answers labelled X and Y without knowing which team wrote which. Must run a test, not vote.",
+  referee: "Sees your answer and Riley's labelled X and Y, without knowing whose is whose. Runs the Bruin checks; must run a test, not vote.",
   solo: "Works alone with no lab, no memory and no library. A comparison arm for the lab.",
   other: "",
 };
 
-const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Head of Team A", "team-b": "Head of Team B", "team-c": "Head of Team C" };
+const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Head of Team A, your mentor", "team-b": "Head of Team B", "team-c": "Head of Team C" };
 
 /** The label under a person's name: a head says which department it runs. */
 export function roleLabel(id: string, role: Role): string {
-  if (role === "head") return HEAD_OF[id.slice(5)] ?? ROLE_LABEL.head;
+  if (role === "head") return HEAD_OF[headDept(id) ?? ""] ?? ROLE_LABEL.head;
   return ROLE_LABEL[role];
 }
 
@@ -42,8 +44,44 @@ export const MODEL_NAME: Record<string, string> = {
   sonnet: "Sonnet 5.5",
 };
 
+/** The Lab Rotation cast, by role (a head by its id). The first agent in each role takes the name. */
+/** The rotation's cast, by the agent ids the backend uses. Names come from the backend's agent list. */
+export type CastId = "vale" | "ines" | "sam" | "telem" | "riley" | "learner";
+const CAST_IDS = new Set<string>(["vale", "ines", "sam", "telem", "riley", "learner"]);
+
+/** Rotation events that mark a moment on the timeline, and the tick colour each takes. */
+const LIVE_MOMENT: Record<string, Moment["kind"]> = {
+  "task.picked": "brief",
+  "agent.say": "questions",
+  "learner.answer": "challenge",
+  "rival.answer": "challenge",
+  "check.result": "agree",
+  verdict: "final",
+  "appeal.ruling": "referee",
+};
+
+/** Words for a moment when only its kind is known (the demo's timeline). */
+const MOMENT_WORDS: Record<string, string> = {
+  "task.picked": "Task picked",
+  "agent.say": "A hint",
+  "learner.answer": "Your answer",
+  "rival.answer": "Riley's answer",
+  "check.result": "A Bruin check",
+  verdict: "Verdict",
+  "appeal.ruling": "Ruling on the appeal",
+};
+
+/** A lab log line for a live event: the backend's own words, nothing added. */
+export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
+  if (!e.text || e.k === "sponsor.call") return null;
+  const d = (e.data ?? {}) as { passed?: boolean; correct?: boolean };
+  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.correct === false);
+  return { text: e.text, why: e.why, tone: bad ? "bad" : undefined };
+}
+
+/** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */
 const NAMES = [
-  "Ada", "Bram", "Chidi", "Dana", "Elif", "Femi", "Gia", "Hana", "Ines", "Jun", "Kofi", "Lena", "Mateo",
+  "Ada", "Bram", "Chidi", "Dana", "Elif", "Femi", "Gia", "Hana", "Jun", "Kofi", "Lena", "Mateo",
   "Noor", "Oren", "Priya", "Quinn", "Rafa", "Sana", "Tomas", "Uma", "Vik", "Wen", "Xavi", "Yara", "Zane",
   "Amara", "Basil", "Cleo", "Dev", "Esme", "Farid", "Greta", "Hugo", "Ivy", "Jonas", "Kira", "Leo", "Mina",
   "Nils", "Olu", "Pia", "Rumi", "Taro", "Una", "Vera", "Wren", "Yusuf", "Zoe", "Aiko", "Bodhi", "Cyra",
@@ -79,6 +117,12 @@ export class Replay {
   run: Run;
   agents: Map<string, AgentRec>;
   names = new Map<string, string>();
+  /** The rotation cast on this floor, by backend id. Empty for a recorded run. */
+  cast = new Set<string>();
+  /** The agent who is You, if this run has one. */
+  you: string | null = null;
+  /** The agent who is Riley, your rival in Team B, if this run has one. */
+  riley: string | null = null;
   studies: Map<string, Study>;
   studyIndex = new Map<string, number>();
   byAgent = new Map<string, Ev[]>();
@@ -95,10 +139,16 @@ export class Replay {
     this.studies = new Map(run.studies.map((s) => [s.id, s]));
     run.studies.forEach((s, i) => this.studyIndex.set(s.id, i));
 
-    // Names: the director is the director; everyone else gets a first name, stable per run.
+    // Names: the rotation cast is matched by id and named by the backend; everyone else in a
+    // recorded run gets a first name, stable per run.
     let n = 0;
     const order = [...run.agents].sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || (a.study ?? "").localeCompare(b.study ?? "") || a.id.localeCompare(b.id));
-    for (const a of order) this.names.set(a.id, a.role === "director" ? "The Director" : NAMES[n++ % NAMES.length]);
+    for (const a of order) {
+      if (CAST_IDS.has(a.id)) this.cast.add(a.id);
+      this.names.set(a.id, a.name ?? (a.role === "director" ? "The Director" : NAMES[n++ % NAMES.length]));
+    }
+    this.you = this.agents.has("learner") ? "learner" : null;
+    this.riley = this.agents.has("riley") ? "riley" : null;
 
     for (const e of run.events) {
       if (e.a) push(this.byAgent, e.a, e);
@@ -117,6 +167,32 @@ export class Replay {
     this.end = Math.min(run.duration, last + 20);
     if (!run.finished) this.end = run.duration;
     this.buildMoments();
+  }
+
+  /** A rotation grows as its events arrive: the session's end moves on and key events become moments. */
+  addLive(events: LabEvent[]) {
+    for (const e of events) {
+      this.end = Math.max(this.end, e.t);
+      if (this.fixedMoments) continue;
+      const kind = LIVE_MOMENT[e.k];
+      const d = (e.data ?? {}) as { passed?: boolean };
+      if (kind) this.moments.push({ t: e.t, kind: e.k === "check.result" ? (d.passed === false ? "disagree" : "agree") : kind, label: e.text ?? e.k });
+    }
+  }
+
+  /** Set once the whole recording's moments are known (the demo), so arriving events don't add them again. */
+  private fixedMoments = false;
+
+  /** The demo knows its whole recording up front: mark every moment and the end now. */
+  setRecording(timeline: { t: number; k: string }[], end: number) {
+    this.fixedMoments = true;
+    this.end = end;
+    this.moments = timeline.filter((x) => LIVE_MOMENT[x.k]).map((x) => ({ t: x.t, kind: LIVE_MOMENT[x.k], label: MOMENT_WORDS[x.k] ?? x.k }));
+  }
+
+  /** The floor agent with this backend id, if it is on this floor. */
+  liveAgent(id: string | undefined): string | undefined {
+    return id && this.cast.has(id) ? id : undefined;
   }
 
   name(id: string) {

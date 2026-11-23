@@ -56,6 +56,8 @@ def test_values_the_front_end_reads():
             assert d["verdict"] in VERDICTS and d["trap"] in TRAPS
         if e["k"] == "verdict":
             assert d["result"] in ("passed", "failed") and d["taskId"]
+        if e["k"] == "task.picked":
+            assert {"taskId", "title", "brief", "seconds"} <= set(d) and d["seconds"] > 0
         if e["k"] == "mastery.update":
             assert d["trap"] in TRAPS and 0 <= d["from"] <= 1 and 0 <= d["to"] <= 1
         if e["k"] == "sponsor.call":

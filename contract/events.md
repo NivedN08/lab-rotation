@@ -49,9 +49,12 @@ are there for the lab log, the verdict card and the people reading them.
 
 ### Session and task
 - `session.start` (system): `mode`, `learner`, `tasks` (the number of slots).
-- `task.picked` (vale): **`taskId`**, `title`, `tier`, `claim`, `reason` (why this
-  task, also in `why`; it never names the trap), `fallback` (true when the rules
-  fallback chose instead of the bandit). The trap is never sent before the verdict.
+- `task.picked` (vale): **`taskId`**, **`title`**, **`brief`** (the same text as
+  `GET /task`), **`seconds`** (the time allowed: 240 in judge mode), `tier`, `claim`,
+  `reason` (why this task, also in `why`), `fallback` (true when the rules fallback
+  chose instead of the bandit). None of these name the trap; the trap is never sent
+  before the verdict. In a replay `GET /task` is null, so the screen reads the task
+  from this event.
 - `task.end` (system): `taskId`, `score` (0 to 1), `beatRival`, `trap`, `pickReason`
   (the full reason for the pick, now that it can name the trap), `bandit?`
   (`{trap: {mean, sample}}`).
