@@ -1,0 +1,190 @@
+{
+  "search": {
+    "retail sales overstated by duplicated transactions in point of sale data": {
+      "query": "retail sales overstated by duplicated transactions in point of sale data",
+      "results": [
+        {
+          "title": "Sales Totals Protected From Duplicate POS Transactions",
+          "url": "https://en.kii.com/updates/duplicate-pos-transactions/",
+          "snippet": "Product Release· October 1, 2026 # Sales Totals Protected From Duplicate POS Transactions Transactions that a POS reports more than once in the same transaction log are now detected and counted only once, so fuel and dollar sales are not inflated. Sales figures are only as reliab"
+        },
+        {
+          "title": "What is a retail sales audit? POS checks before ERP reporting | Marksyte",
+          "url": "https://www.marksyte.com/blog/retail-pos-sales-audit/",
+          "snippet": "A retail sales audit checks POS transactions and totals before they feed ERP, inventory and financial reporting. Marksyte· Updated 17 August 2026· 8 min read A POS report can look complete and still contain duplicate receipts, missing store days, returns with the wrong sign or to"
+        },
+        {
+          "title": "Data Quality in Point-of-Sale Systems: Detection and Imputation Strategies for Missing and Erroneous Transactions | AskBiz Academy | AskBiz Academy",
+          "url": "https://askbiz.co/academy/pos-data-quality-missing-transactions",
+          "snippet": "## A Taxonomy of PoS Data Quality Failures Point-of-sale data, despite its reputation as a reliable transactional record, is subject to a diverse array of quality failures that can compromise downstream analytics. Missing transactions arise from hardware malfunctions (network out"
+        },
+        {
+          "title": "Why am I Seeing Duplicate Payment Information? – Help Center",
+          "url": "https://support.commercesync.com/hc/en-us/articles/205913653-Why-am-I-Seeing-Duplicate-Payment-Information",
+          "snippet": "Some merchants confuse this, thinking that these are duplicate entries. These numbers will be similar, they are complementary to each other. The bank transfers what was deposited into your bank, Commerce Sync transfers what was tendered as payments in your POS. You will reconcile"
+        },
+        {
+          "title": "What Is Point of Sale Data & Why It Matters",
+          "url": "https://insights.ehl.edu/pos-data",
+          "snippet": "Not all POS data is created equal. Modern systems capture dozens of different data points during each transaction, creating layers of information that serve different business purposes. While a simple cash register might only record the total sale amount, today's sophisticated PO"
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/606e00af-84b7-4d6f-9831-53c26a9e6c2c"
+    },
+    "retail sales data error amounts recorded in cents instead of dollars": {
+      "query": "retail sales data error amounts recorded in cents instead of dollars",
+      "results": [
+        {
+          "title": "The Census Bureau Needs to Significantly Revise Reporting and ...",
+          "url": "https://mitsloan.mit.edu/shared/ods/documents?DocumentID=2914",
+          "snippet": "David S. Evans, Scott Murray, and Richard Schmalensee * February 7, 2016 Abstract: This paper reports significant discrepancies in the Census’s methods and reports of online and physical retail sales in the United States. ... We released a paper on January 18, 2016 that reported "
+        },
+        {
+          "title": "Massive Online Retail Data Error Uncovered",
+          "url": "https://www.pymnts.com/commerce/ecommerce/2016/massive-online-retail-data-error-uncovered/",
+          "snippet": "Six months of analysis and some email correspondence with the Census folks later, they uncovered a data bombshell: online sales as a percentage of all retail sales has been undercounted – and by a lot. Online sales as a percentage of physical retail sales has been undercounted by"
+        },
+        {
+          "title": "Errors Associated with Period Reporters in Retail Trade Estimates",
+          "url": "http://www.asasrms.org/Proceedings/y2005/files/JSM2005-000441.pdf",
+          "snippet": "## Errors Associated with Period Reporters in Retail Trade Estimates 1 Kelly Dixon U.S. Census Bureau, SSSD, Room 2754-3, Washington DC 20233-6500 ### Abstract In MARTS, the Advanced Monthly Retail Trade Survey, the Census Bureau asks companies to report their sales for the prior"
+        },
+        {
+          "title": "ADVANCE MONTHLY SALES FOR RETAIL AND FOOD ...",
+          "url": "https://www.census.gov/retail/marts/www/marts_current.pdf",
+          "snippet": "(Estimates are shown as percents and are based on data from the Advance Monthly Retail Trade Survey and Monthly Retail Trade Survey) Median standard error(1) for Revision for month-Percent change to-month change(2) [...] estimate. This type of error can occur because of nonrespon"
+        },
+        {
+          "title": "U.S. retail sales decline despite a strong holiday season",
+          "url": "https://realeconomy.rsmus.com/u-s-retail-sales-decline-despite-a-strong-holiday-shopping-season",
+          "snippet": "Since the estimate for retail sales is based on advance data, it is often subject to revision. For retail sales in December, the margin of error for the top-line number was 0.5 percentage point, according to the report. But it is hard to predict the direction of revision, which w"
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/9175da64-12b2-4382-9d21-8add8c5439e1"
+    },
+    "survey or loyalty flag coded backwards in a data dictionary led to wrong result": {
+      "query": "survey or loyalty flag coded backwards in a data dictionary led to wrong result",
+      "results": [
+        {
+          "title": "CCSG",
+          "url": "https://ccsg.isr.umich.edu/chapters/data-processing-and-statistical-adjustment/",
+          "snippet": "### Data Processing and Statistical Adjustment Rachel A. Orlowski, Frost Hubbard, Emily Blasczyk, and Dan Zahs, 2016 ... 1. Use coding to classify survey responses into categories with associated numeric values. Rationale To statistically analyze survey responses, they must be tr"
+        },
+        {
+          "title": "GuidedTrack | How to calculate questionnaire scores when some items require reverse scoring",
+          "url": "https://docs.guidedtrack.com/research-guide/avoiding-bias/reverse-scoring/",
+          "snippet": "### How to calculate questionnaire scores when some items require reverse scoring🔗 If you would like to reverse the scoring for some of a participant's questions, we recommend doing so at the stage when subscores are calculated, rather than using a reversed answer scale for indiv"
+        },
+        {
+          "title": "How to Write a Survey Data Codebook? Variables, Options, Missing Values, and Derived Rules | WeJot Knowledge Base",
+          "url": "https://wejot.ai/knowledge/survey-codebook-guide",
+          "snippet": "| Variable | Source and Applicable Population | Values or Calculation | Analysis Notes | | --- | --- | --- | --- | | `used_feature` | Q3, all who passed screening | 1=used in past 30 days; 0=not used; -8=don’t know | -8 must not be merged with “not used” | | `sat_feature` | Q4, o"
+        },
+        {
+          "title": "How to Reverse Code in SPSS: Step-by-Step Guide",
+          "url": "https://statisticalanalysishelp.com/how-to-reverse-code-in-spss",
+          "snippet": "Reverse coding is one of the most important steps in questionnaire and survey data preparation. Many research instruments include both positively worded and negatively worded items. If the negatively worded items are not reversed before analysis, the scale score can become incorr"
+        },
+        {
+          "title": "AEC410/PD079: The Savvy Survey #15: Survey Responses and Data Entry",
+          "url": "https://ask.ifas.ufl.edu/publication/PD079",
+          "snippet": "There are also situations in which a savvy surveyor may use a questionnaire with reverse coded items. This method is typically used to encourage respondents to think about each question carefully and select the proper response. Figure 3 provides an example of a survey item with r"
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/f0b482c6-40d0-4fe9-bbbb-37f9d2fbd297"
+    },
+    "retail promotion analysis misled by a confounding variable store traffic": {
+      "query": "retail promotion analysis misled by a confounding variable store traffic",
+      "results": [
+        {
+          "title": "Using sensor technology to evaluate the effects of a price promotion on store arrival traffic",
+          "url": "https://doi.org/10.1016/j.jbusres.2026.116212",
+          "snippet": "# Using sensor technology to evaluate the effects of a price promotion on store arrival traffic Journal of Business Research. Published: 2026-04-20. 0 citations. ## Abstract • Sensors located at store entrances collect shopper-specific arrival times. • Gamma distributions jointly"
+        },
+        {
+          "title": "Evaluating Promotions in Shopping Environments: Decomposing Sales Response into Attraction, Conversion, and Spending Effects | Marketing Science",
+          "url": "https://pubsonline.informs.org/doi/10.1287/mksc.20.2.194.10192",
+          "snippet": "Published Online: 1 May 2001 https://doi.org/10.1287/mksc.20.2.194.10192 ## Abstract Retailers' marketing objectives can be classified into three broad categories: attraction effects that focus on consumers' store-entry decisions, conversion effects that relate to consumers' deci"
+        },
+        {
+          "title": "A new approach to measuring retail promotion effectiveness: A case of store traffic",
+          "url": "https://ideas.repec.org/a/eee/jbrese/v69y2016i10p4394-4402.html",
+          "snippet": "## Author Listed: - Epstein, Leonardo D. - Flores, Arturo A. - Goodstein, Ronald C. - Milberg, Sandra J. Registered: ## Abstract This article presents an approach to measure the effect of promotions on customer traffic, a measure of effectiveness of retail promotions important bo"
+        },
+        {
+          "title": "\"Product Price Level and Retail Price Promotion: An Empirical Analysis \" by Kristopher Keller and Raj Sethuraman",
+          "url": "https://scholar.smu.edu/business_marketing_research/49",
+          "snippet": "Prior research suggests that price promotions by higher-priced products generate greater sales lift than those by lower-priced products. This view implies that higher-priced products should promote more often, all else equal. However, this assertion largely rests on the asymmetri"
+        },
+        {
+          "title": "How Retailers Can Improve Promotion Effectiveness",
+          "url": "https://www.bcg.com/publications/2015/retail-pricing-how-retailers-can-improve-promotion-effectiveness",
+          "snippet": "Craft a winning promotion strategy to guide category-level decisions. For many retailers, the promotion process is heavily focused on implementation rather than strategy. Many retailers lack a clear goal for their promotions; management does not consider whether it is trying to i"
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/fc68d126-d02d-4e1a-8cae-d3e5f78a98d7"
+    },
+    "business analysis wrong conclusion because of a missing join or hidden variable": {
+      "query": "business analysis wrong conclusion because of a missing join or hidden variable",
+      "results": [
+        {
+          "title": "How confounding variables and company silos can ruin your analysis - Recast",
+          "url": "https://getrecast.com/confounding-variables/",
+          "snippet": "The Head of Acquisition has a lot of discretion as to how the budget is allocated amongst Paid Search, Display, and Paid Social. ... Hence he has decided to increase the spend on Paid Search for a few weeks. Aside from senior management, no other team in the company is briefed on"
+        },
+        {
+          "title": "Hidden Joins: Schema vs Query Truth | Momenta Analytics",
+          "url": "https://www.momentaanalytics.com/content/hidden-join-rate",
+          "snippet": "# Hidden-Join Rate How much of the way your tables connect lives only in the queries, never in the schema. Hidden in the SQL 59% Guessable from schema 41% Of 184 joins in one core reporting schema, 109 could not be guessed from the column names. Fifty-nine percent of how those ta"
+        },
+        {
+          "title": "Chapter 3 — Query-Based Data Evidence, Integrity, and Relationships | MSQE",
+          "url": "https://msqe.dev/handbook/part-06/chapter-03-query-based-data-evidence-integrity-and-relationships/",
+          "snippet": "Data systems represent related facts through keys, references, mappings, ... Referential integrity is the condition that a child’s reference resolves to an appropriate parent according to the model’s rules. A relationship can be technically present but still unsuitable for the cl"
+        },
+        {
+          "title": "[PDF] Missing data: the hidden problem",
+          "url": "https://www.bauer.uh.edu/jhess/documents/2.pdf",
+          "snippet": "SPSS Miss-ing Value Analysis determines whether the missing data are problem-atic and may affect the results white paper Missing data: the hidden problem 4 ® sented, so this conclusion could be incorrect. If every customer reported their age, you might get different results. For "
+        },
+        {
+          "title": "Medium",
+          "url": "https://medium.com/@tarangds/the-impact-of-missing-data-on-statistical-analysis-and-how-to-fix-it-3498ad084bfe",
+          "snippet": "- Loss of Statistical Power: When data is missing, it reduces the amount of information available for your analysis. This makes it harder to find patterns and can weaken your results. - Bias in Results: If missing data isn’t random, it can end up over representing certain groups "
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/197a7428-ece0-440c-8163-89216db65f29"
+    },
+    "checking a clean retail dataset before trusting a sales trend": {
+      "query": "checking a clean retail dataset before trusting a sales trend",
+      "results": [
+        {
+          "title": "Data quality checks every retail analyst should run | NRS Insights Blog",
+          "url": "https://blogs.nrsinsights.com/posts/data-quality-checks/",
+          "snippet": "Most bad retail analysis isn't caused by bad math. It's caused by bad data that nobody checked. Data quality checks are the routine tests you run on a dataset before analyzing it: is it complete, are there duplicates, do the values make sense, and does it describe the stores and "
+        },
+        {
+          "title": "Data Cleaning in Python Pandas: Audit a Real Retail Dataset | Data Analytics #1",
+          "url": "https://www.mathewkanalytics.com/lessons/real-world-data-analytics/001-acquiring-and-auditing-a-real-retail-transactions-dataset/",
+          "snippet": "The columns that matter most are `InvoiceNo`, ... # Part 4: Auditing Real Missing Values# Missing values quietly break averages, joins and customer counts, so you audit them early. `df.isna()` marks each blank cell as True; `.sum()` would count them per column, but only the last "
+        },
+        {
+          "title": "Assessing Retail Data Quality in Python for E-commerce Analytics | Step-by-Step Guide",
+          "url": "https://www.mathewkanalytics.com/lessons/python-for-retail-e-commerce-analytics/015-assessing-retail-data-quality/",
+          "snippet": "('Duplicate invoices:', dup_invoices) print('Fully duplicated rows:', dup_fullrows) ... 'Price': 'mean'}) missing_invoices = set(df_retail['Invoice']) - set(sales_by_invoice.index) print(' ... missing values, duplicates, and data types before analysis -"
+        },
+        {
+          "title": "Best Retail Datasets for Machine Learning 2026 — Unidata",
+          "url": "https://unidata.pro/blog/best-retail-datasets-for-ml",
+          "snippet": "Online Retail II is a clean transaction log — line items, quantities, prices, customer IDs, and invoice timestamps across two years. It is standard for RFM analysis and market basket mining. The main limitation is retailer type: a gift wholesaler operates on bulk-order logic with"
+        },
+        {
+          "title": "GitHub - Ehsan-Behzadi/Online-Retail-Data-Analysis-and-Preprocessing: This project analyzes and preprocesses the Online Retail dataset to uncover insights into ",
+          "url": "https://github.com/Ehsan-Behzadi/Online-Retail-Data-Analysis-and-Preprocessing",
+          "snippet": "Regression Assumption Checks: + Normality Test: Checked with Anderson-Darling. + Multicollinearity Check: Verified with VIF. + Feature Relationship. Data Preparation for Linear Regression Modeling: + Box-Cox Transformation. + Outlier Detection. + One-Hot Encode. + Final Dataset C"
+        }
+      ],
+      "trace": "https://app.telem.ai/platform/traffic2/b5595751-b212-4fa7-97d3-9d7a3b786bb5"
+    }
+  }
+}
