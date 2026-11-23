@@ -2,7 +2,7 @@
 
 **The contract is `contract/api.md` (routes and shapes) and `contract/events.md` (events).** Nived owns it. This folder implements it; where the two differ, the contract wins and we change this folder. Things we need from it that it doesn't say yet are listed at the end.
 
-All backend calls live in `client.ts`. Nothing else in the front end touches `/api`. Shapes are in `types.ts`, trap ids and labels in `traps.ts`.
+All backend calls live in `client.ts`. Which backend it talks to: served by the real server (a production build), the real backend on the same origin with no setting; under `npm run dev`, sample data by default (`?mock=0` calls the real `/api`, `?mock=1` forces sample data); in static replay mode, JSON files (below). Nothing else in the front end touches `/api`. Shapes are in `types.ts`, trap ids and labels in `traps.ts`.
 
 ## Functions and routes
 
@@ -30,7 +30,7 @@ Errors: a non-2xx reply or `{"error": "plain words"}` is shown as is, except 404
 
 ## Mock mode (sample data)
 
-On by default. `?mock=0` calls the real server. `mock.ts` answers every function with the contract's own sample task and tables: `./mock/` holds copies of `contract/mock_session.jsonl` and `contract/mock_task/`, so sample data has the real shape. Re-copy with `sh web/src/api/mock/sync.sh` from the repo root when the contract changes. The copy in `./mock/` is currently Nived's latest 86-event session from his `n1-session` branch (Telem's `topic` and `case` searches, sealed whispers, `panel.transcript`, the dictionary on `task.picked`); the `contract/` folder on `main` still has the older 68-event one until his branch is merged. The mock's SQL (`mockSql.ts`) is a small stand-in, not a real runner: it reads `SELECT` columns or `COUNT/AVG/SUM/MIN/MAX(col) [AS name]` `FROM` one table with an optional `JOIN other USING (col)`, `WHERE col op value [AND ...]`, `GROUP BY`, `ORDER BY` and `LIMIT`. `?mockspeed=10` runs the sample ten times faster.
+On by default only under the Vite dev server (`npm run dev`); a production build served by the real server uses the real backend. `?mock=0` calls the real server and `?mock=1` forces sample data. `mock.ts` answers every function with the contract's own sample task and tables: `./mock/` holds copies of `contract/mock_session.jsonl` and `contract/mock_task/`, so sample data has the real shape. Re-copy with `sh web/src/api/mock/sync.sh` from the repo root when the contract changes. The copy in `./mock/` is currently Nived's latest 86-event session from his `n1-session` branch (Telem's `topic` and `case` searches, sealed whispers, `panel.transcript`, the dictionary on `task.picked`); the `contract/` folder on `main` still has the older 68-event one until his branch is merged. The mock's SQL (`mockSql.ts`) is a small stand-in, not a real runner: it reads `SELECT` columns or `COUNT/AVG/SUM/MIN/MAX(col) [AS name]` `FROM` one table with an optional `JOIN other USING (col)`, `WHERE col op value [AND ...]`, `GROUP BY`, `ORDER BY` and `LIMIT`. `?mockspeed=10` runs the sample ten times faster.
 
 **The live sample never acts for the learner.** In Your rotation and Judge mode the fake server (`mockLive.ts`) emits `learner.query`, `learner.evidence`, `learner.answer`, `appeal.*` and `ask` events only when the real person does those things (a SQL query, Submit, opening an appeal, asking an agent). Everything else is the lab's own work: Vale's task and brief, Telem's topic-only background, Riley's answer, the panel's whispers, the checks, the verdict, Telem's real case after the verdict, the mastery update. When the person submits, the fake compares their answer with its key and sends a matching verdict: right (verdict and trap both right, `passed`), partly right (one of them right, `failed`, with a score between) or wrong (`failed`, score 0). Whisper words arrive in `panel.transcript` after the verdict. An appeal gets an `appeal.message` from Sam and a ruling that the grade stands. Each agent answers an ask only from what it could see.
 
@@ -71,3 +71,21 @@ We read the fields in bold in `contract/events.md`, and ignore kinds and fields 
 ## Still open with the contract
 
 - The sample session has no `glasser` `sponsor.call`, so Glasser shows 0 in sample data.
+
+## Static replay (the hosted link)
+
+Build with `VITE_STATIC=1` and the app reads a recorded session from JSON files instead of calling `/api`. `isStatic()` (exported from `client.ts`, defined in `mode.ts`) tells the screens. The demo always starts, since the hosted link has only the recording. **Every file name lives in one place, `staticFiles.ts` (`STATIC_FILES`), so when Nived sends the exact names only that file changes.** The base folder is `recorded/` next to the page (change it with `VITE_STATIC_BASE`). Current guess:
+
+| File | Holds |
+|---|---|
+| `recorded/demo.json` | `{session, start, end, speed}`, or `{session: null}` (then the fake session plays and the page says "Sample data") |
+| `recorded/agents.json` | the agents list |
+| `recorded/<id>/events.json` | every event from the beginning (an array, or `{events}`) |
+| `recorded/<id>/task.json` | `{task}` |
+| `recorded/<id>/tables.json` | the tables (also tried per task first: `recorded/<id>/<task>/tables.json`) |
+| `recorded/<id>/rows/<table>.json` | all the table's rows (an array, or `{rows}`); offset and limit are applied by the front end (per-task path tried first) |
+| `recorded/<id>/profile/<table>.json` | `{table, columns}` (per-task path tried first) |
+| `recorded/<id>/mastery.json`, `recorded/<id>/sponsors.json` | the same shapes as the routes |
+| `recorded/audio/<file>` | the voice lines |
+
+In this mode the SQL box says "Replay only", the answer form is off with a note, and `runSql`, `submitAnswer`, `openAppeal`, `sendAppealMessage`, `askAgent` and `startSession` all refuse with "Replay only: this is a recorded session, so it can't be changed." (`REPLAY_ONLY`). Main should switch off the Ask tab's input with `isStatic()`.

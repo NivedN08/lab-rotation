@@ -5,6 +5,7 @@
 
 import { useSyncExternalStore } from "react";
 import { getDemo, getEvents, useMock } from "./client";
+import { isStatic } from "./mode";
 import { mock } from "./mock";
 import { drive } from "./session";
 import { taskClockStart } from "./clock";
@@ -228,9 +229,10 @@ export function useDemo(): DemoState {
   );
 }
 
-// ?demo=1 starts it as soon as the app loads, before anything starts a live session.
+// ?demo=1 starts it as soon as the app loads, before anything starts a live session. Static replay mode always starts it:
+// the hosted link has no live session to offer, only the recording.
 try {
-  if (new URLSearchParams(window.location.search).get("demo") === "1") {
+  if (isStatic() || new URLSearchParams(window.location.search).get("demo") === "1") {
     // Take the state now so no live session starts first; fetch once every module has finished loading.
     drive.claim(load);
     set({ status: "loading" });

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { getTables, rotation, useDemo, useRotation, type TableInfo } from "../api/client";
+import { getTables, isStatic, rotation, useDemo, useRotation, type TableInfo } from "../api/client";
 import { AnswerForm } from "./AnswerForm";
 import { ChartBuilder } from "./ChartBuilder";
 import { EvidenceTray } from "./EvidenceTray";
@@ -75,7 +75,7 @@ export default function Workspace({ onTaskChange }: Props) {
         <>
           {watching && (
             <p className="ws-sent" role="status">
-              Demo replay{demo.sample ? ". Sample data" : ""}: you're watching a recorded session, so answers are turned off.
+              {isStatic() ? "Replay only" : "Demo replay"}{demo.sample ? ". Sample data" : ""}: you're watching a recorded session, so answers, appeals and questions are turned off.
             </p>
           )}
           <div className="ws-task" key={`brief-${task.id}`}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getSponsors, sponsorTotals, useDemo, useRotation, type SponsorTotals } from "../api/client";
+import { atLeast, getSponsors, sponsorTotals, useDemo, useRotation, type SponsorTotals } from "../api/client";
 import "./panels.css";
 
 /** A number that flashes when it changes. */
@@ -42,7 +42,11 @@ export function SponsorStrip() {
     };
   }, [sessionId, calls, watching]);
 
-  const t = watching || !served ? sponsorTotals(events) : served;
+  // The server's totals can trail the events already received, so they are never shown lower than what the events add up to.
+  const folded = sponsorTotals(events);
+  const t = watching || !served ? folded : atLeast(served, folded);
+  // And a count is never lower than the trace links shown beside it.
+  const searches = Math.max(t.telem.searches, t.telem.traces.length);
   const plural = (n: number, w: string) => (n === 1 ? w : w.endsWith("ch") ? `${w}es` : `${w}s`);
 
   return (
@@ -53,7 +57,7 @@ export function SponsorStrip() {
       </span>
       <span className="pn-item">
         <span className="pn-name">Telem</span>
-        <Num v={t.telem.searches} /> {plural(t.telem.searches, "search")}
+        <Num v={searches} /> {plural(searches, "search")}
         {t.telem.traces.length > 0 && (
           <span className="pn-traces">
             {t.telem.traces.map((h, i) => (

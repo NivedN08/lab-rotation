@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { labelTraps, openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent, type PanelTranscriptData } from "../api/client";
+import { isStatic, labelTraps, openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent, type PanelTranscriptData } from "../api/client";
 import "./panels.css";
 
 const NAME: Record<AgentId, string> = { vale: "Dr. Vale", ines: "Ines", sam: "Sam", telem: "Telem", riley: "Riley", learner: "You", system: "System" };
@@ -21,7 +21,7 @@ const verdictTask = (events: LabEvent[]): string | undefined => {
  */
 export function PanelRoom() {
   const { sessionId, events } = useRotation();
-  const watching = useDemo().status !== "off";
+  const watching = useDemo().status !== "off" || isStatic();
   const [reason, setReason] = useState("");
   const [text, setText] = useState("");
   const [localAppeal, setLocalAppeal] = useState("");

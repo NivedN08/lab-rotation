@@ -42,3 +42,23 @@ export function sponsorTotals(events: LabEvent[]): SponsorTotals {
   }
   return t;
 }
+
+/**
+ * The larger of two sets of totals, counter by counter, with the trace links of both. The server's totals can lag behind the events
+ * the app has already received, and a count must never be lower than what is on screen elsewhere.
+ */
+export function atLeast(a: SponsorTotals, b: SponsorTotals): SponsorTotals {
+  const m = Math.max;
+  return {
+    band: { messages: m(a.band.messages, b.band.messages) },
+    telem: {
+      searches: m(a.telem.searches, b.telem.searches),
+      monitorHits: m(a.telem.monitorHits, b.telem.monitorHits),
+      traces: [...new Set([...a.telem.traces, ...b.telem.traces])],
+    },
+    bruin: { checksRun: m(a.bruin.checksRun, b.bruin.checksRun), checksFailed: m(a.bruin.checksFailed, b.bruin.checksFailed) },
+    runware: { lines: m(a.runware.lines, b.runware.lines), cost: m(a.runware.cost, b.runware.cost) },
+    glasser: { calls: m(a.glasser.calls, b.glasser.calls) },
+    teamily: { posts: m(a.teamily?.posts ?? 0, b.teamily?.posts ?? 0) },
+  };
+}

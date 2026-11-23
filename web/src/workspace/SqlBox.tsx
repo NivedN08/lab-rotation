@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Grid } from "./Grid";
 import { lastQuery } from "./lastQuery";
-import { runSql, useMock, type SqlResult } from "../api/client";
+import { isStatic, runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
 
@@ -26,6 +26,18 @@ export function SqlBox({ sessionId, firstTable, tableNames = [] }: { sessionId: 
   }
 
   const rows = result?.rows.slice(0, ROW_CAP) ?? [];
+
+  // The hosted link plays a recording: there is nothing to run a query on.
+  if (isStatic() && !useMock()) {
+    return (
+      <section className="ws-sql" aria-label="SQL box">
+        <h2 className="ws-title">SQL</h2>
+        <p className="ws-sent" role="status">
+          Replay only. This is a recorded session, so queries can't be run here.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="ws-sql" aria-label="SQL box">
