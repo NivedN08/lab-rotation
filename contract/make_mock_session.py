@@ -239,7 +239,8 @@ quotes = [{"text": "its max is 5600 while other regions top out near 74", "sourc
           {"text": "spend / 100", "source": q6}]
 # The reality check is built in code from Glasser's numbers, after the quote check.
 reality = ("Reality check: a basket of 4 staples (milk, bread, coffee, paper towels), US online prices: "
-           "about $34 ($26 to $67), from Glasser.")
+           "about $34 ($26 to $67), from Glasser. The $1,067 a quick read gives (members' average spend per "
+           "visit, before the fix) should have looked wrong: fixed, it is $37.")
 verdict_text = ("Right verdict, right trap. You wrote \"its max is 5600 while other regions top out near 74\", which is exactly "
                 "what the failing check shows. Your fix, spend / 100, is the right one. You lose a little for needing two hints. "
                 + reality)

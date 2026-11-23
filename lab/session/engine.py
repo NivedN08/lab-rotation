@@ -72,6 +72,29 @@ WHISPER_WHY = {
 }
 
 
+NAIVE_RATIO = 3   # the careless number must be this many times the fixed one to "look wrong"
+
+
+def naive_sentence(key: dict) -> str:
+    """'The $1,633 a quick read gives (...) should have looked wrong: fixed, it is $43.' Only
+    when N3's careless number is clearly off (value / fixed > 3, in practice unit mix-ups);
+    for a confounder the two match and duplicates move it a few dollars, so say nothing."""
+    n = key.get("naive")
+    if not isinstance(n, dict) or key.get("trap") == "none":
+        return ""
+    try:
+        value, fixed = float(n["value"]), float(n["fixed"])
+    except (KeyError, TypeError, ValueError):
+        return ""
+    if fixed <= 0 or value / fixed <= NAIVE_RATIO:
+        return ""
+    money = str(n.get("unit") or "USD").upper().startswith("USD")
+    label = str(n.get("label") or "").strip()
+    about = f" ({label})" if label else ""
+    return (f"The {sources._amount(value, money)} a quick read gives{about} should have looked wrong: "
+            f"fixed, it is {sources._amount(fixed, money)}.")
+
+
 def _label(b: dict) -> str:
     lab_ = str(b.get("label") or f"a typical {b.get('kind', 'basket')}").strip()
     first = lab_.split(" ", 1)[0]
@@ -563,12 +586,8 @@ class Session:
         """One sentence from Glasser's numbers, built in code (an agent could misstate them)."""
         key = self.slot.task.key
         line = f"Reality check: {_label(b)}: {sources.benchmark_range(b)}, from {sources.benchmark_source(b)}."
-        naive = key.get("naive")
-        unit = str(b.get("unit") or "")
-        if isinstance(naive, (int, float)) and key["trap"] != "none" and naive > 3 * float(b["high"]):
-            money = unit.upper().startswith("USD") or unit.startswith("$")
-            line += f" The quick answer's {sources._amount(float(naive), money)} should have looked wrong."
-        return line
+        tail = naive_sentence(key)
+        return f"{line} {tail}" if tail else line
 
     def reveal_news(self) -> None:
         """After t1's verdict: the case of the day, and whether it steered the pick."""
