@@ -113,3 +113,14 @@ def test_bootstrap_zero_for_same_preds_and_sign_for_better():
     assert all(v == (0.0, 0.0, 0.0) for v in same.values())
     better = compare.bootstrap(ds, worse, gold, reps=50)
     assert better["MI"][0] > 0 and better["MI"][1] > 0 and better["ML"] == (0.0, 0.0, 0.0)
+
+
+def test_submission_check_catches_changes():
+    from bench import submit
+    doc = [{"conversation_id": "x", "conversation_history": "h",
+            "tutor_responses": {"Tutor_1": {"response": "r"}, "Tutor_2": {"response": "s"}}}]
+    sub, _ = submit.build(doc, {}, ("Actionability",))
+    assert submit.check(sub, doc, "Actionability") == []
+    sub[0]["tutor_responses"]["Tutor_2"]["response"] = "changed"
+    assert submit.check(sub, doc, "Actionability")
+    assert submit.check(sub[:0], doc, "Actionability")

@@ -156,7 +156,12 @@ def main(argv=None) -> int:
         save_preds(a.name, a.split, preds, meta)
     if a.split == "test":
         print(f"test predictions saved for {len(preds)} replies (no labels to score)")
-        return 0
+        if not a.no_results and not meta.get("stopped"):
+            # scores stay blank until CodaBench returns them
+            upsert_results([{"split": "test", "dimension": d, "system": a.name, "macro_f1": "",
+                             "n": sum(1 for v in preds.values() if v.get(d)), "record": RECORDS[d]}
+                            for d in DIMENSIONS])
+        return 1 if meta.get("stopped") else 0
     done = [d for d in dialogues if all(r.key in preds for r in d.replies)]
     rep = scores(done, preds)
     print_report(split_label, a.name, rep, meta)
