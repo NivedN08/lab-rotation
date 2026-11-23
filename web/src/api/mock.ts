@@ -7,6 +7,7 @@ import tablesJson from "./mock/tables.json";
 import taskJson from "./mock/task.json";
 import visitsCsv from "./mock/visits.csv?raw";
 import { elapsedNow, eventsSoFar, hurry, recordedEvents, scriptedEvents, SCRIPT, taskEndTime } from "./mockSession";
+import { runMockSql } from "./mockSql";
 import { sponsorTotals } from "./sponsors";
 import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
@@ -81,63 +82,14 @@ export const mock = {
   // Mock mode only: the fake session stands in for the one the backend would pick.
   getDemo: () => wait<DemoInfo>({ session: DEMO_SESSION, start: 0, end: SCRIPT[SCRIPT.length - 1].t + 6, speed: 1 }),
 
-  // Canned stand-in for the server's SQL runner.
+  // Stand-in for the server's SQL runner (see mockSql.ts).
   runSql(sql: string): Promise<SqlResult> {
-    const m = sql
-      .trim()
-      .replace(/;\s*$/, "")
-      .match(/^select\s+(.+?)\s+from\s+(\w+)(?:\s+where\s+(\w+)\s*(=|!=|>|<)\s*('?[^']*'?))?(?:\s+limit\s+(\d+))?$/is);
-    if (!m) return Promise.reject(new Error("Sample mode can't run that one. It understands SELECT columns (or COUNT, AVG, SUM, MIN, MAX of a column) FROM one table, with an optional WHERE col = value and LIMIT n. The real server runs full SQL."));
-    const [, sel, tname, wcol, op, wval, lim] = m;
-    const table = FAKE_TABLES.find((t) => t.name.toLowerCase() === tname.toLowerCase());
-    if (!table) return Promise.reject(new Error(`No such table: ${tname}. Tables are ${FAKE_TABLES.map((t) => t.name).join(", ")}.`));
-    const names = table.columns.map((c) => c.name);
-    const names0 = names;
-    let rows = table.rows;
-    if (wcol) {
-      const i = names.indexOf(wcol);
-      if (i < 0) return Promise.reject(new Error(`No such column: ${wcol} in ${table.name}.`));
-      const v = wval.replace(/^'|'$/g, "");
-      rows = rows.filter((r) => {
-        const c = r[i];
-        if (c === null) return false;
-        if (op === "=") return String(c) === v;
-        if (op === "!=") return String(c) !== v;
-        return op === ">" ? Number(c) > Number(v) : Number(c) < Number(v);
-      });
+    try {
+      const r = runMockSql(FAKE_TABLES, sql);
+      return wait({ ...r, ms: 4 });
+    } catch (e) {
+      return Promise.reject(e);
     }
-    const aggs = sel.split(",").map((s) => s.trim().match(/^(count|avg|sum|min|max)\((\*|\w+)\)$/i));
-    if (aggs.every(Boolean)) {
-      const out: Cell[] = [];
-      const names: string[] = [];
-      for (const a of aggs as RegExpMatchArray[]) {
-        const fn = a[1].toLowerCase();
-        names.push(`${fn}(${a[2]})`);
-        if (a[2] === "*") {
-          if (fn !== "count") return Promise.reject(new Error(`${fn}(*) is not valid. Use a column name.`));
-          out.push(rows.length);
-          continue;
-        }
-        const i = names0.indexOf(a[2]);
-        if (i < 0) return Promise.reject(new Error(`No such column: ${a[2]} in ${table.name}.`));
-        const vals = rows.map((r) => r[i]).filter((v): v is string | number | boolean => v !== null);
-        const nums = vals.filter((v): v is number => typeof v === "number");
-        if (fn === "count") out.push(vals.length);
-        else if (!nums.length) out.push(null);
-        else if (fn === "sum") out.push(Math.round(nums.reduce((x, y) => x + y, 0) * 100) / 100);
-        else if (fn === "avg") out.push(Math.round((nums.reduce((x, y) => x + y, 0) / nums.length) * 100) / 100);
-        else out.push(fn === "min" ? Math.min(...nums) : Math.max(...nums));
-      }
-      return wait({ columns: names, rows: [out], ms: 3 });
-    }
-    const cols = sel.trim() === "*" ? names : sel.split(",").map((s) => s.trim());
-    const idx: number[] = [];
-    for (const c of cols) {
-      const i = names.indexOf(c);
-      if (i < 0) return Promise.reject(new Error(`No such column: ${c} in ${table.name}.`));
-      idx.push(i);
-    }
-    return wait({ columns: cols, rows: rows.slice(0, lim ? Number(lim) : 200).map((r) => idx.map((i) => r[i])), ms: 4 });
   },
 
   submitAnswer: (_a: AnswerSubmission) => {
