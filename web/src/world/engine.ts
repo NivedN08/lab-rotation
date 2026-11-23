@@ -1011,7 +1011,7 @@ export class LabEngine {
         if (!a.study || a.role === "solo") continue;
         const p = this.toScreen(a.home.px, (a.home.ty + 1) * TILE + 11);
         ctx.fillStyle = "rgba(27,31,58,0.55)";
-        ctx.fillText(a.id === this.replay.you ? "Your desk" : a.study, p.x, p.y);
+        ctx.fillText(a.id === this.replay.you ? "Your desk" : a.id === this.replay.riley ? "Riley's desk" : a.study, p.x, p.y);
       }
     }
     // Floating outcome labels.

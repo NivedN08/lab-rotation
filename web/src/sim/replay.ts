@@ -95,6 +95,8 @@ export class Replay {
   cast = new Map<string, CastKey>();
   /** The agent who is You, if this run has one. */
   you: string | null = null;
+  /** The agent who is Riley, your rival in Team B, if this run has one. */
+  riley: string | null = null;
   studies: Map<string, Study>;
   studyIndex = new Map<string, number>();
   byAgent = new Map<string, Ev[]>();
@@ -122,6 +124,7 @@ export class Replay {
         cast.add(key);
         this.cast.set(a.id, key);
         if (key === "team-a") this.you = a.id;
+        if (key === "team-b") this.riley = a.id;
         this.names.set(a.id, CAST[key]);
       } else this.names.set(a.id, NAMES[n++ % NAMES.length]);
     }

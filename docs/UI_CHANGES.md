@@ -26,7 +26,7 @@
 - [x] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
 - [x] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
 - [x] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
-- [ ] 5. Riley's desk in Team B, so both answers meet at the hatch (decided: Team B)
+- [x] 5. Riley's desk in Team B, so both answers meet at the hatch (decided: Team B)
 - [x] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
 - [ ] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
 - [ ] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
@@ -45,7 +45,7 @@
 - [x] W1. Table browser: tabs per table, rows with a row cap
 - [x] W2. SQL box: runs on the server (Nived's runner), shows results and errors
 - [x] W3. Evidence picker: click rows, columns or cells to cite them
-- [ ] W4. Answer form: holds / fails / can't tell, the trap you found, your evidence, submit
+- [x] W4. Answer form: holds / fails / can't tell, the trap you found, your evidence, submit
 - [ ] W5. Timer and the empty, loading and error states
 - [ ] W6.* Column profile (one click per column)
 - [ ] W7.* Chart builder
@@ -97,3 +97,4 @@ No new animation types are needed. Each new event reuses one that the original a
 - 2: cast names by role (first agent per role): director Dr. Vale, head of Team A Sam, librarian Telem, referee Ines, Team A You, Team B Riley; others keep random names. New role labels and "what it can read" lines. No shots (screenshots dropped from the process).
 - 3: room plaques now read Dr. Vale's office, Telem's library, Team A: You and Sam, Team B: Riley, Referee: Ines, Your learner profile; the room panels say what each room means for the rotation. Team C and Solo agents are dimmed and labelled "Closed" (decided).
 - 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.
+- 5: Riley sits at the Team B desk nearest the hatch, plate reads "Riley's desk" when zoomed in; both answers fly to the hatch between the rooms.
