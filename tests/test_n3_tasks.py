@@ -136,3 +136,38 @@ def test_bruin_agrees_with_python_checks(small_bank):
         for r in res:
             assert "bruinError" not in r, r
             assert r["bruinPassed"] == r["passed"], (skill, r["check"])
+
+
+def test_glasser_params_calibrate_prices(tmp_path):
+    rec = {"prices": [{"item": "a", "median": 5.69}, {"item": "b", "median": 3.92},
+                      {"item": "c", "median": 9.38}, {"item": "d", "median": 15.1}],
+           "basket": {"avgBasketUsd": 38.0, "source": "fixed value"}, "sources": ["https://example.test/run"]}
+    p = tmp_path / "glasser_retail.json"
+    p.write_text(json.dumps(rec))
+    params, src = R.glasser_params(p)
+    assert params["price_per_item"] == (3.92, 7.54) and params["basket_mean"] == 38.0
+    assert src["source"] == "glasser (recorded)"
+    params, src = R.glasser_params(tmp_path / "missing.json")
+    assert params == R.PARAMS and src == {"source": "fixed"}
+    k = bank.generate_one("confounder", 1, R.HOLDS, 3, 0, tmp_path / "t", R.glasser_params(p)[0])
+    assert k["careful"]["verdict"] == R.HOLDS
+
+
+def test_key_has_matters_and_hints(small_bank):
+    for t in all_tasks():
+        cols = {(x["name"], c["name"]) for x in ws.tables(t) for c in x["columns"]}
+        for m in t.key["matters"]:
+            assert tuple(m.split(".")) in cols, (t.skill, m)
+        assert len(t.key["hints"]) == 3
+        assert t.skill not in t.key["hints"][0] and "cents" not in t.key["hints"][0]
+
+
+def test_schema_is_no_tell_within_a_tier(small_bank):
+    """Within a tier, every task but hidden_variable has the same tables and columns."""
+    for tier in R.TIERS:
+        shapes = {}
+        for t in all_tasks():
+            if t.tier == tier and t.skill != "hidden_variable":
+                shapes.setdefault(json.dumps([(x["name"], [c["name"] for c in x["columns"]])
+                                              for x in ws.tables(t)]), []).append(t.skill)
+        assert len(shapes) == 1, (tier, shapes)

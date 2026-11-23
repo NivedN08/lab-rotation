@@ -17,7 +17,7 @@ right):
     unit_mismatch    one region's spend is in cents, not dollars; its median sits ~100x away.
     dictionary_flip  the data dictionary states the loyalty_flag coding the wrong way round;
                      the points column (0 exactly for non-members) shows the true coding
-                     (tier 3: points sit in visits, a second table).
+                     (tier 3 tasks keep points in visits, a second table).
     confounder       one POS version inflates spend and members are concentrated at the stores
                      running it; comparing within POS version removes the effect.
     hidden_variable  the loyalty flag is not in visits or customers but in a third table,
@@ -118,9 +118,30 @@ def _dictionary(stated_code: int, flag_table: str, points_where: str, has_stores
     return "\n".join(lines) + "\n"
 
 
-def draw(trap: str, truth: str, tier: int, rng: np.random.Generator) -> dict:
+GLASSER_RECORDED = pathlib.Path(__file__).resolve().parents[1] / "sponsors" / "recorded" / "glasser_retail.json"
+
+
+def glasser_params(path: pathlib.Path = GLASSER_RECORDED) -> tuple[dict, dict]:
+    """PARAMS calibrated with the retail numbers N2's Glasser client recorded (item prices, basket),
+    and where they came from. Falls back to the fixed PARAMS when nothing is recorded."""
+    try:
+        rec = json.loads(path.read_text())
+        medians = sorted(float(x["median"]) for x in rec.get("prices", []) if x.get("median"))
+        if len(medians) < 2:
+            raise ValueError("too few prices")
+        params = {**PARAMS, "price_per_item": (round(medians[0], 2), round(float(np.median(medians)), 2))}
+        basket = rec.get("basket") or {}
+        if basket.get("avgBasketUsd"):
+            params["basket_mean"] = float(basket["avgBasketUsd"])
+        return params, {"source": "glasser (recorded)", "sources": rec.get("sources", []),
+                        "basket": basket.get("source")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return dict(PARAMS), {"source": "fixed"}
+
+
+def draw(trap: str, truth: str, tier: int, rng: np.random.Generator, params: dict | None = None) -> dict:
     """One task's tables, claim, dictionary and planted footprint, from one random draw."""
-    P = PARAMS
+    P = params or PARAMS
     decoy = None
     if tier >= 2 and not (tier == 3 and trap in ("duplicate_rows", "dictionary_flip", "hidden_variable")):
         choices = [d for d, t in DECOYS.items() if t != trap]
@@ -130,8 +151,9 @@ def draw(trap: str, truth: str, tier: int, rng: np.random.Generator) -> dict:
     n_c = int(rng.integers(P["customers"][0], P["customers"][1] + 1))
     hidden = trap == "hidden_variable"
     card = hidden and tier == 3
-    points_where = "visits" if (trap == "dictionary_flip" and tier == 3) else (
-        "loyalty_accounts" if hidden else "customers")
+    # Tier 3 keeps loyalty points in visits for every trap, so the flag and its companion
+    # sit in two tables (and points_earned is no tell for the dictionary flip).
+    points_where = "loyalty_accounts" if hidden else ("visits" if tier == 3 else "customers")
 
     # Stores: three per region, both POS versions in every region.
     region_of = np.repeat(np.arange(4), 3)
@@ -527,3 +549,58 @@ SUSPICION = {
     "confounder": "spend jumps on the new POS; that has to be skewing it",
     "dictionary_flip": "I don't trust the loyalty flag coding",
 }
+
+
+def matters(trap: str, d: dict) -> list[str]:
+    """table.column names a query should touch to catch this task's trap (the struggle meter)."""
+    flag_table = d["expected_notes"]["flag_table"]
+    base = ["visits.spend", f"{flag_table}.loyalty_flag"]
+    extra = {
+        "duplicate_rows": ["visits.store_id", "visits.visit_date", "visits.items"],
+        "unit_mismatch": ["stores.region"],
+        "dictionary_flip": ["visits.points_earned" if "points_earned" in d["tables"]["visits"]["columns"]
+                            else f"{flag_table}.points_balance"],
+        "confounder": ["stores.pos_version"],
+        "hidden_variable": [f"loyalty_accounts.{d['footprint'].get('join', 'customer_id')}"],
+        "none": [],
+    }[trap]
+    return base + extra
+
+
+def hints(trap: str, d: dict) -> list[str]:
+    """Sam's hint ladder, levels 1 to 3. Level 1 never names the trap."""
+    fp = d["footprint"]
+    return {
+        "duplicate_rows": [
+            "Before averaging, ask whether every row is a separate visit.",
+            "Group visits by store, date, items and spend and look for counts above 1.",
+            f"{fp.get('duplicated_visits', 'Many')} visits repeat another visit exactly under a new visit id; "
+            "drop the repeats, then compare.",
+        ],
+        "unit_mismatch": [
+            "Look at the range of spend before you trust an average.",
+            "Compare min, median and max spend by region (join visits to stores).",
+            f"{fp.get('cents_region', 'One region')}'s spend is about 100 times the others': it is in cents.",
+        ],
+        "dictionary_flip": [
+            "Check that the loyalty flag means what the dictionary says.",
+            "Cross the loyalty flag with the points column: who has points?",
+            "The rows the dictionary calls members have no points; the coding is backwards.",
+        ],
+        "confounder": [
+            "Ask what else differs between the two groups besides loyalty.",
+            "Break spend and the loyalty mix down by stores.pos_version.",
+            f"POS {fp.get('pos_version', '5.0')} inflates spend and the groups split unevenly across POS "
+            "versions; compare within each version.",
+        ],
+        "hidden_variable": [
+            "List every table before deciding the data can't answer this.",
+            "The loyalty flag is not in visits or customers. Is there another table?",
+            f"loyalty_accounts holds the flag; join it through {fp.get('join', 'customer_id')}.",
+        ],
+        "none": [
+            "Check the usual suspects, then trust what survives.",
+            "Repeats, units, coding, POS mix and missing columns all look fine here.",
+            "Nothing is planted in this one: the plain comparison is the right one.",
+        ],
+    }[trap]

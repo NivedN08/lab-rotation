@@ -110,7 +110,8 @@ def _bank_id(seed: int, skill: str, tier: int, n: int) -> str:
     return f"rb{h[:6]}"
 
 
-def generate_one(skill: str, tier: int, truth: str, seed: int, n: int, folder: pathlib.Path) -> dict:
+def generate_one(skill: str, tier: int, truth: str, seed: int, n: int, folder: pathlib.Path,
+                 params: dict | None = None) -> dict:
     """Draw until the keep filter passes; write the public folder; return the sealed key."""
     import numpy as np
     from lab.tasks import retail as R
@@ -121,7 +122,7 @@ def generate_one(skill: str, tier: int, truth: str, seed: int, n: int, folder: p
     opposite = R.FAILS if truth == R.HOLDS else R.HOLDS
     for attempt in range(R.MAX_ATTEMPTS):
         rng = np.random.default_rng([seed, R.SKILLS.index(skill), tier, n, attempt])
-        d = R.draw(trap, truth, tier, rng)
+        d = R.draw(trap, truth, tier, rng, params)
         R.write_public(folder, d)
         ref, naive = R.analyse(folder, careful=True), R.analyse(folder, careful=False)
         if not (R.clear(ref, truth, R.CAREFUL_P) and ref["notes"] == d["expected_notes"]):
@@ -157,6 +158,7 @@ def generate_one(skill: str, tier: int, truth: str, seed: int, n: int, folder: p
     return {"trap": skill, "tier": tier, "correctVerdict": truth, "correctTrap": skill, "claim": d["claim"],
             "higher": d["higher"], "decoy": d["decoy"], "footprint": d["footprint"],
             "careful": careful, "careless": careless,
+            "matters": R.matters(skill, d), "hints": R.hints(skill, d),
             "checks": list(CHECK_IDS.values()), "failingCheck": want_fail[0] if want_fail else None,
             "checkResults": checks, "seed": seed, "n": n, "attempts": attempt + 1}
 
@@ -174,7 +176,10 @@ def plan(per: int, seed: int) -> list[tuple[str, int, str, int]]:
     return out
 
 
-def build(per: int = PER, seed: int = SEED, root: pathlib.Path = ROOT, log=print) -> dict:
+def build(per: int = PER, seed: int = SEED, root: pathlib.Path = ROOT, log=print, glasser: bool = True) -> dict:
+    """Generate the whole bank. glasser=True calibrates prices with N2's recorded Glasser numbers."""
+    from lab.tasks.retail import PARAMS, glasser_params
+    params, source = glasser_params() if glasser else (dict(PARAMS), {"source": "fixed"})
     public, sealed = root / "public", root / "sealed"
     for p in (public, sealed):
         if p.exists():
@@ -185,17 +190,15 @@ def build(per: int = PER, seed: int = SEED, root: pathlib.Path = ROOT, log=print
         for skill, tier, truth, n in plan(per, seed):
             bid = _bank_id(seed, skill, tier, n)
             work = pathlib.Path(tmp) / bid
-            key = generate_one(skill, tier, truth, seed, n, work)
+            key = generate_one(skill, tier, truth, seed, n, work, params)
             shutil.move(str(work), public / bid)
             key = {"bankId": bid, **key}
             (sealed / f"{bid}.json").write_text(json.dumps(key, indent=2) + "\n")
             idx[bid] = {"skill": skill, "tier": tier, "truth": truth}
             log(f"{bid} {skill:16s} t{tier} {truth:6s} attempts={key['attempts']}")
     (sealed / "index.json").write_text(json.dumps(dict(sorted(idx.items())), indent=2) + "\n")
-    from lab.tasks.retail import PARAMS
     (sealed / "generation.json").write_text(json.dumps(
-        {"seed": seed, "per": per, "params": {k: v for k, v in PARAMS.items()}, "params_source": "fixed"},
-        indent=2, default=str) + "\n")
+        {"seed": seed, "per": per, "params": params, "params_source": source}, indent=2, default=str) + "\n")
     global _INDEX
     _INDEX = None
     return idx
