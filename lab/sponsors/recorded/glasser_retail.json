@@ -1,0 +1,64 @@
+{
+  "stores": [
+    {
+      "ticker": "TGT",
+      "period": "FY 2025",
+      "totalStores": 1995,
+      "trafficGrowthPct": -2.2,
+      "comparableSalesGrowthPct": -2.6,
+      "cost": 0.02,
+      "source": "https://app.glasser.ai/runs/cbfdc4a5-e303-4859-b1d5-2755c910b64f"
+    }
+  ],
+  "prices": [
+    {
+      "item": "gallon of whole milk",
+      "median": 5.69,
+      "low": 4.79,
+      "high": 7.21,
+      "n": 40,
+      "cost": 0.002,
+      "source": "https://app.glasser.ai/runs/d5d38754-d09e-44c8-ae2f-69e0d47427f4"
+    },
+    {
+      "item": "loaf of white bread",
+      "median": 3.92,
+      "low": 2.99,
+      "high": 4.99,
+      "n": 40,
+      "cost": 0.002,
+      "source": "https://app.glasser.ai/runs/1200ac67-f688-463d-9472-3d54febed7ad"
+    },
+    {
+      "item": "ground coffee 12 oz",
+      "median": 9.38,
+      "low": 7.97,
+      "high": 13.71,
+      "n": 40,
+      "cost": 0.002,
+      "source": "https://app.glasser.ai/runs/9b8b7b3f-e875-4790-923d-89931434637b"
+    },
+    {
+      "item": "paper towels 6 pack",
+      "median": 15.1,
+      "low": 10.3,
+      "high": 39.44,
+      "n": 40,
+      "cost": 0.002,
+      "source": "https://app.glasser.ai/runs/fed91236-9307-40c6-a25e-5990ae9893f1"
+    }
+  ],
+  "basket": {
+    "avgBasketUsd": 38.0,
+    "itemsPerBasket": 9,
+    "source": "fixed value (not from Glasser)"
+  },
+  "cost": 0.028,
+  "sources": [
+    "https://app.glasser.ai/runs/cbfdc4a5-e303-4859-b1d5-2755c910b64f",
+    "https://app.glasser.ai/runs/d5d38754-d09e-44c8-ae2f-69e0d47427f4",
+    "https://app.glasser.ai/runs/1200ac67-f688-463d-9472-3d54febed7ad",
+    "https://app.glasser.ai/runs/9b8b7b3f-e875-4790-923d-89931434637b",
+    "https://app.glasser.ai/runs/fed91236-9307-40c6-a25e-5990ae9893f1"
+  ]
+}
