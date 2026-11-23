@@ -73,10 +73,13 @@ const MOMENT_WORDS: Record<string, string> = {
 
 /** A lab log line for a live event: the backend's own words, nothing added. */
 export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
-  if (!e.text || e.k === "sponsor.call") return null;
-  const d = (e.data ?? {}) as { passed?: boolean; correct?: boolean };
-  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.correct === false);
-  return { text: e.text, why: e.why, tone: bad ? "bad" : undefined };
+  // Counters and the struggle meter tick constantly; everything else shows its text (or its why).
+  if (e.k === "sponsor.call" || e.k === "meter.update") return null;
+  const text = e.text || e.why;
+  if (!text) return null;
+  const d = (e.data ?? {}) as { passed?: boolean; result?: string };
+  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.result === "failed");
+  return { text, why: e.text ? e.why : "", tone: bad ? "bad" : undefined };
 }
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */

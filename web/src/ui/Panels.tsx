@@ -7,6 +7,7 @@ import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
 import { MasteryChart } from "../panels";
 import { Avatar } from "./Avatar";
+import { Safe } from "./Safe";
 
 type Nav = {
   R: Replay;
@@ -130,7 +131,9 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
       )}
       {id === "learner" && (
         <Section title="Your mastery">
-          <MasteryChart />
+          <Safe name="The mastery chart">
+            <MasteryChart />
+          </Safe>
         </Section>
       )}
       <Section title="Decisions, and why" count={mine.length || undefined}>

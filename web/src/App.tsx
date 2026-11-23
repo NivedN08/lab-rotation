@@ -11,10 +11,11 @@ import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
 import { TaskChips } from "./ui/TaskChips";
+import { Safe } from "./ui/Safe";
 import { VerdictCard, verdictFromEvents } from "./ui/Verdict";
 import { Timeline } from "./ui/Timeline";
 import { WorkspaceTab } from "./ui/WorkspaceTab";
-import { buildTour } from "./ui/tour";
+import { buildRotationTour, buildTour } from "./ui/tour";
 import { LabEngine, type Target } from "./world/engine";
 
 type View = "landing" | "leaving" | "lab";
@@ -74,7 +75,9 @@ export function App() {
   const [demo, setDemo] = useState<Demo | null>(null);
   const [clipOn, setClipOn] = useState(false);
   const [hold, setHold] = useState(false); // the visitor left the results card: stop looping
-  const tourSteps = useMemo(() => (replay ? buildTour(replay) : []), [replay]);
+  const rotationSteps = useMemo(() => (replay && replay.run.run === ROTATION ? buildRotationTour(replay) : []), [replay]);
+  const tourSteps = useMemo(() => (replay && replay.run.run !== ROTATION ? buildTour(replay) : []), [replay]);
+  const tourList: { title: string; text: string }[] = replay?.run.run === ROTATION ? rotationSteps : tourSteps;
   // The demo clip plays when it is on and its run is loaded; otherwise the whole run.
   const clip = clipOn && demo && replay && demo.run === replay.run.run ? demo : null;
   const lo = clip ? clip.start : 0;
@@ -297,7 +300,25 @@ export function App() {
     const e = engine();
     setWelcome(false);
     setTour(i);
+    if (e) e.followAction = i === null && followOn; // the camera holds still during the tour
     if (i === null || !e) return;
+    if (isRotation) {
+      // The rotation tour looks at people and places; it leaves the clock alone.
+      const s = rotationSteps[i];
+      if (!s) return;
+      e.focus(s.focus);
+      if (s.workspace) {
+        setSelected(null);
+        setPanel("workspace");
+      } else if (s.select) {
+        setSelected(s.select);
+        setPanel("details");
+      } else {
+        setSelected(null);
+        setPanel(null);
+      }
+      return;
+    }
     if (clip) {
       // The tour walks through the whole run, not just the clip.
       e.setRange(null);
@@ -519,12 +540,14 @@ export function App() {
                   {demoOn ? "Your rotation" : "Demo"}
                 </button>
               )}
-              {!isRotation && (
-                <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
-                  Tour
-                </button>
+              <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
+                Tour
+              </button>
+              {isRotation && (
+                <Safe name="The mute button">
+                  <MuteButton />
+                </Safe>
               )}
-              {isRotation && <MuteButton />}
               <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
                 Workspace
               </button>
@@ -567,7 +590,9 @@ export function App() {
                 </div>
                 {panel === "workspace" ? null : panel === "room" ? (
                   <div className="side-body">
-                    <PanelRoom />
+                    <Safe name="The panel room">
+                      <PanelRoom />
+                    </Safe>
                   </div>
                 ) : panel === "chat" ? (
                   <Chat R={R} t={t} server={!!source?.server} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
@@ -629,6 +654,11 @@ export function App() {
                   <button className="btn" onClick={() => setWelcome(false)}>
                     Explore on my own
                   </button>
+                  {isRotation && (
+                    <button className="btn" onClick={() => goTour(0)}>
+                      Take the tour
+                    </button>
+                  )}
                   {isRotation ? (
                     <button
                       className="btn gold"
@@ -649,13 +679,13 @@ export function App() {
               </div>
             )}
 
-            {tour !== null && tourSteps[tour] && (
+            {tour !== null && tourList[tour] && (
               <div className="tour box" role="dialog" aria-label="Tour">
                 <span className="count">
-                  {tour + 1} of {tourSteps.length}
+                  {tour + 1} of {tourList.length}
                 </span>
-                <h2>{tourSteps[tour].title}</h2>
-                <p>{tourSteps[tour].text}</p>
+                <h2>{tourList[tour].title}</h2>
+                <p>{tourList[tour].text}</p>
                 <div className="row">
                   <button className="btn quiet" onClick={() => goTour(null)}>
                     End tour
@@ -665,7 +695,7 @@ export function App() {
                       Back
                     </button>
                   )}
-                  {tour < tourSteps.length - 1 ? (
+                  {tour < tourList.length - 1 ? (
                     <button className="btn gold" onClick={() => goTour(tour + 1)} autoFocus>
                       Next
                     </button>
@@ -678,18 +708,20 @@ export function App() {
               </div>
             )}
 
-            {verdictCard && verdictTask && tour === null && (
-              <VerdictCard
-                taskTitle={verdictTitle}
-                {...verdictCard}
-                onClose={() => (demoOn ? setDemoHeld(true) : setClosedVerdicts((c) => [...c, verdictTask]))}
-                onPanelRoom={() => {
-                  if (demoOn) setDemoHeld(true);
-                  else setClosedVerdicts((c) => [...c, verdictTask]);
-                  setPanel("room");
-                }}
-                onAgain={demoOn ? watchAgain : undefined}
-              />
+            {verdictCard && verdictTask && tour === null && !welcome && (
+              <Safe name="The verdict card">
+                <VerdictCard
+                  taskTitle={verdictTitle}
+                  {...verdictCard}
+                  onClose={() => (demoOn ? setDemoHeld(true) : setClosedVerdicts((c) => [...c, verdictTask]))}
+                  onPanelRoom={() => {
+                    if (demoOn) setDemoHeld(true);
+                    else setClosedVerdicts((c) => [...c, verdictTask]);
+                    setPanel("room");
+                  }}
+                  onAgain={demoOn ? watchAgain : undefined}
+                />
+              </Safe>
             )}
 
             {atClipEnd && clip?.ends_with_results && R.graded(t) && R.run.totals && !hold && tour === null && (
@@ -729,7 +761,9 @@ export function App() {
 
             {isRotation && (
               <div className="strip-slot">
-                <SponsorStrip />
+                <Safe name="The sponsor strip">
+                  <SponsorStrip />
+                </Safe>
               </div>
             )}
 
@@ -767,7 +801,9 @@ export function App() {
         )}
       </div>
       <SampleBadge />
-      <Voice />
+      <Safe name="Voice lines">
+        <Voice />
+      </Safe>
       {view !== "lab" && (
         <Landing
           onEnter={enter}

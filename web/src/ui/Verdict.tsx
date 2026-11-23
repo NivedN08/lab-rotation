@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { trapLabel } from "../api/traps";
 import type { LabEvent, Verdict } from "../api/types";
 
-// The verdict card shows what the backend sent and nothing else. Props mirror the event `data`
-// fields documented in web/src/api/README.md; the card never grades or decides anything.
+// The verdict card shows what the backend sent and nothing else (contract/events.md); it never
+// grades or decides anything.
 
-/** `data` of a `verdict` event. */
-export type VerdictData = { correct: boolean; key: Verdict; trap: string; sealed?: boolean };
-/** `data` of a `check.result` event (Ines's Bruin checks). */
-export type CheckData = { check: string; passed: boolean };
+/** The verdict, from a `verdict` event: passed or not, the answer key, and Ines's feedback. */
+export type VerdictData = { correct: boolean; key: Verdict; trap: string; sealed?: boolean; feedback?: string };
+/** One of Ines's Bruin checks, from a `check.result` event, with its plain-words line. */
+export type CheckData = { check: string; passed: boolean; label?: string };
 /** `data` of a `learner.answer` or `rival.answer` event. */
 export type AnswerData = { verdict: Verdict; trap: string };
 
@@ -33,24 +33,37 @@ type CardData = Pick<VerdictCardProps, "verdict" | "yours" | "riley" | "checks">
 export function verdictFromEvents(events: LabEvent[], taskId: string): CardData | null {
   const mine = events.filter((e) => e.task === taskId);
   const last = (k: string) => [...mine].reverse().find((e) => e.k === k)?.data as Record<string, unknown> | undefined;
-  const v = last("verdict") as VerdictData | undefined;
+  type Ev = { label?: string };
+  const v = last("verdict") as { result?: string; correctVerdict?: Verdict; correctTrap?: string; text?: string; ledger?: unknown } | undefined;
   if (!v) return null;
-  const answer = last("learner.answer") as (AnswerData & { note?: string }) | undefined;
-  const rival = last("rival.answer") as AnswerData | undefined;
+  const answer = last("learner.answer") as (Partial<AnswerData> & { note?: string; evidence?: Ev[] }) | undefined;
+  const rival = last("rival.answer") as Partial<AnswerData> | undefined;
+  const cited = [
+    ...(answer?.evidence ?? []).map((x) => x.label),
+    ...mine.filter((e) => e.k === "learner.evidence").flatMap((e) => ((e.data as { action?: string; items?: Ev[] } | undefined)?.action === "remove" ? [] : ((e.data as { items?: Ev[] } | undefined)?.items ?? []).map((x) => x.label))),
+  ].filter((x): x is string => !!x);
   return {
-    verdict: v,
-    yours: {
-      verdict: answer?.verdict ?? "cant_tell",
-      trap: answer?.trap ?? "none",
-      evidence: mine.filter((e) => e.k === "learner.evidence").map((e) => String((e.data as { label?: string } | undefined)?.label ?? e.text ?? "")),
-      words: answer?.note || undefined,
+    verdict: {
+      correct: v.result === "passed",
+      key: v.correctVerdict ?? "cant_tell",
+      trap: v.correctTrap ?? "none",
+      sealed: !!v.ledger || mine.some((e) => e.k === "ledger.seal"),
+      feedback: v.text,
     },
-    riley: rival ?? null,
-    checks: mine.filter((e) => e.k === "check.result").map((e) => e.data as CheckData),
+    yours: { verdict: answer?.verdict ?? "cant_tell", trap: answer?.trap ?? "none", evidence: [...new Set(cited)], words: answer?.note || undefined },
+    riley: rival?.verdict ? { verdict: rival.verdict, trap: rival.trap ?? "none" } : null,
+    checks: mine
+      .filter((e) => e.k === "check.result")
+      .map((e) => {
+        const d = (e.data ?? {}) as { check?: string; passed?: boolean; detail?: string };
+        return { check: d.check ?? "check", passed: d.passed !== false, label: e.text ?? d.detail };
+      }),
   };
 }
 
-const SAY: Record<Verdict, string> = { holds: "the claim holds", fails: "the claim fails", cant_tell: "can't tell" };
+const SAY_VERDICT: Record<string, string> = { holds: "the claim holds", fails: "the claim fails", cant_tell: "can't tell" };
+const say = (v: string | undefined) => SAY_VERDICT[v ?? ""] ?? String(v);
+const trapWords = (id: string | undefined) => (trapLabel(id ?? "none") ?? String(id)).toLowerCase();
 
 function Mark({ ok, yes = "passed", no = "failed" }: { ok: boolean; yes?: string; no?: string }) {
   return <span className={`mark ${ok ? "pass" : "fail"}`}>{ok ? yes : no}</span>;
@@ -65,25 +78,26 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
       </span>
       <h2>{verdict.correct ? "You found the trap" : "Not this time"}</h2>
       <p>
-        The key says {SAY[verdict.key]}: {trapLabel(verdict.trap).toLowerCase()}.
+        The key says {say(verdict.key)}: {trapWords(verdict.trap)}.
       </p>
+      {verdict.feedback && <p style={{ marginTop: 6 }}>{verdict.feedback}</p>}
 
       <section className="section">
         <h3>Your verdict against the key</h3>
         <dl className="kv">
           <dt>You said</dt>
           <dd>
-            {SAY[yours.verdict]}, {trapLabel(yours.trap).toLowerCase()} <Mark ok={verdict.correct} yes="right" no="wrong" />
+            {say(yours.verdict)}, {trapWords(yours.trap)} <Mark ok={verdict.correct} yes="right" no="wrong" />
           </dd>
           <dt>The key</dt>
           <dd>
-            {SAY[verdict.key]}, {trapLabel(verdict.trap).toLowerCase()}
+            {say(verdict.key)}, {trapWords(verdict.trap)}
           </dd>
           {riley && (
             <>
               <dt>Riley said</dt>
               <dd>
-                {SAY[riley.verdict]}, {trapLabel(riley.trap).toLowerCase()}
+                {say(riley.verdict)}, {trapWords(riley.trap)}
               </dd>
             </>
           )}
@@ -95,9 +109,9 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
           <h3>Bruin checks next to your evidence</h3>
           <div className="verdict-pair">
             <div>
-              {(failing.length ? failing : checks).map((c) => (
-                <div className="item" key={c.check}>
-                  {c.check} check <Mark ok={c.passed} />
+              {(failing.length ? failing : checks).map((c, i) => (
+                <div className="item" key={`${c.check}-${i}`}>
+                  {c.label ?? `${c.check} check`} <Mark ok={c.passed} />
                 </div>
               ))}
               {!checks.length && <p className="empty">No checks run.</p>}

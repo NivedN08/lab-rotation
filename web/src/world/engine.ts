@@ -3,6 +3,7 @@
 // travel the corridors; answers meet only at the hatch in the blind wall. Every movement is
 // started by a real event in the run's log.
 
+import { trapLabel } from "../api/traps";
 import type { LabEvent } from "../api/types";
 import type { Ev, Role } from "../data/types";
 import type { Replay } from "../sim/replay";
@@ -623,7 +624,8 @@ export class LabEngine {
     const who = this.liveActor(e.agent);
     this.liveActor(e.to);
     if (e.k === "agent.move" && who) {
-      const dest = this.placeSpot(String((e.data as { to?: string } | undefined)?.to ?? e.to ?? "desk"), who);
+      const dd = (e.data ?? {}) as { place?: string; to?: string };
+      const dest = this.placeSpot(String(dd.place ?? e.to ?? dd.to ?? "desk"), who);
       if (dest) {
         who.x = dest.px;
         who.y = dest.py;
@@ -675,9 +677,12 @@ export class LabEngine {
       case "panel.whisper":
       case "appeal.open":
       case "appeal.message": {
+        // An envelope to each recipient: `to`, plus anyone on `data.cc`.
         const from = who ?? you;
-        const dest = to ?? this.liveActor("vale");
-        if (from && dest) this.fly(this.spotOf(from), this.deskSpot(dest), colorOf(from.role, from.id), "envelope", () => this.say(dest, "paper", colorOf(from.role, from.id), 1.6));
+        const cc = Array.isArray(d.cc) ? (d.cc as string[]).map((id) => this.liveActor(id)) : [];
+        const dests = [to ?? (cc.length ? undefined : this.liveActor("vale")), ...cc].filter((x): x is Actor => !!x && x !== from);
+        if (from)
+          for (const dest of dests) this.fly(this.spotOf(from), this.deskSpot(dest), colorOf(from.role, from.id), "envelope", () => this.say(dest, "paper", colorOf(from.role, from.id), 1.6));
         break;
       }
       case "learner.answer":
@@ -699,7 +704,7 @@ export class LabEngine {
       }
       case "check.result": {
         if (who) this.say(who, "check", DEPT.referee, 2.5);
-        const name = String(d.check ?? "check");
+        const name = d.trap ? trapLabel(String(d.trap)) : "Bruin";
         const passed = d.passed !== false;
         const at = who ?? null;
         this.floater(at ? at.home.px : FIX.refTable.px, (at ? at.home.py : FIX.refTable.py) - 30, `${name} check ${passed ? "passed" : "failed"}`, passed ? C.green : C.red, 4);
@@ -708,8 +713,9 @@ export class LabEngine {
       case "verdict":
       case "appeal.ruling": {
         if (who) this.say(who, "gavel", DEPT.referee, 3.5);
-        const ok = e.k === "verdict" ? d.correct === true : d.upheld === true;
-        const text = e.k === "verdict" ? (ok ? "you found the trap" : "trap missed") : ok ? "appeal upheld" : "verdict stands";
+        // A verdict passes or fails; a ruling either keeps the grade (upheld) or changes it.
+        const ok = e.k === "verdict" ? d.result === "passed" : d.upheld !== true;
+        const text = e.k === "verdict" ? (ok ? "task passed" : "task failed") : ok ? "grade changed" : "grade stands";
         this.floater(FIX.refTable.px, FIX.refTable.py - 6, text, ok ? C.green : C.red, 4.5);
         break;
       }
@@ -727,7 +733,7 @@ export class LabEngine {
       case "agent.move": {
         // Walk to wherever the event says, and stay there until the next move.
         if (!who) break;
-        const dest = this.placeSpot(String(d.to ?? e.to ?? "desk"), who);
+        const dest = this.placeSpot(String(d.place ?? e.to ?? d.to ?? "desk"), who);
         if (dest) this.plan(who, [{ go: dest, face: dest === who.home ? 0 : 1 }], null);
         break;
       }
@@ -867,11 +873,30 @@ export class LabEngine {
     }
   }
 
-  /** Where an agent.move goes: another person, a fixture, a room, or back to the desk. */
+  /** Where an agent.move goes: a named place, another person, or back to the desk. */
   private placeSpot(to: string, who: Actor): Spot | null {
     const other = this.actors.get(this.replay.liveAgent(to) ?? "");
     if (other && other !== who) return this.visitSpot(other);
+    const deskOf = (id: string) => {
+      const a = this.actors.get(this.replay.liveAgent(id) ?? "");
+      return !a ? null : a === who ? who.home : this.visitSpot(a);
+    };
     switch (to) {
+      // The places in contract/events.md.
+      case "door":
+        return ELEVATOR;
+      case "vale_office":
+        return VISITOR_SPOTS[1];
+      case "learner_desk":
+        return deskOf("learner");
+      case "riley_desk":
+        return deskOf("riley");
+      case "shelves":
+        return { tx: 30, ty: 3, px: 30 * TILE + TILE / 2, py: 3 * TILE + TILE - 1 };
+      case "panel_table":
+        return FIX.refTable;
+      case "whiteboard":
+        return { tx: 42, ty: 3, px: 42 * TILE + TILE / 2, py: 3 * TILE + TILE - 1 };
       case "desk":
       case "home":
         return who.home;
