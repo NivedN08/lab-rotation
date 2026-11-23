@@ -146,6 +146,9 @@ export function App() {
     engine.setSpeed(speed);
     engineRef.current = engine;
     if (replay.run.run === ROTATION) {
+      // Frame the rooms in use; the closed ones stay out of view until you zoom out.
+      engine.setFrame(["director", "library", "team-a", "team-b", "referee", "vault"]);
+      engine.fit(false);
       // Your rotation: take in everything so far and follow it live. The demo follows its own clock.
       const d = demoRef.current;
       if (d.status === "ready") replay.setRecording(d.timeline, d.end);
@@ -381,7 +384,7 @@ export function App() {
         }
       } else if (ev.key === "+" || ev.key === "=") e.zoomBy(1.25);
       else if (ev.key === "-") e.zoomBy(0.8);
-      else if (ev.key === "0") e.fit(true);
+      else if (ev.key === "0") e.showWhole();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -580,7 +583,7 @@ export function App() {
               <button className="btn icon" onClick={() => engine()?.zoomBy(1 / 1.3)} aria-label="Zoom out" title="Zoom out (-)">
                 −
               </button>
-              <button className="btn icon" onClick={() => engine()?.fit(true)} aria-label="Show the whole lab" title="Whole lab (0)">
+              <button className="btn icon" onClick={() => engine()?.showWhole()} aria-label="Show the whole lab" title="Whole lab (0)">
                 <svg width="14" height="14" viewBox="0 0 7 7" shapeRendering="crispEdges" aria-hidden="true">
                   <path d="M0 0h3v1H1v2H0zM4 0h3v3H6V1H4zM0 4h1v2h2v1H0zM6 4h1v3H4V6h2z" fill="currentColor" />
                 </svg>

@@ -242,7 +242,8 @@ export class LabEngine {
 
   fit(animate: boolean) {
     this.follow = null;
-    const to = { x: (W * TILE) / 2, y: (H * TILE) / 2 + 4, z: this.fitZoom() };
+    const f = this.frameRect ?? { x: 0, y: 0, w: W, h: H };
+    const to = { x: (f.x + f.w / 2) * TILE, y: (f.y + f.h / 2) * TILE + 4, z: this.fitZoom() };
     if (animate) this.camTo = to;
     else this.cam = { ...to };
   }
@@ -268,10 +269,32 @@ export class LabEngine {
     return Math.min(this.cw / ((W + 2) * TILE), this.ch / ((H + 3) * TILE));
   }
 
-  /** The starting zoom. On a phone the whole floor makes people a few pixels tall, so start closer. */
+  /** The rooms the camera frames by default (tiles), or null for the whole building. */
+  private frameRect: { x: number; y: number; w: number; h: number } | null = null;
+
+  /** Frame just these rooms by default; the zoom buttons can still show the whole lab. */
+  setFrame(rooms: RoomId[] | null) {
+    if (!rooms?.length) {
+      this.frameRect = null;
+      return;
+    }
+    const rs = rooms.map((id) => roomById[id]);
+    const x = Math.min(...rs.map((r) => r.x)) - 1;
+    const y = Math.min(...rs.map((r) => r.y)) - 1;
+    this.frameRect = { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) + 1 - x, h: Math.max(...rs.map((r) => r.y + r.h)) + 1 - y };
+  }
+
+  /** The starting zoom: the framed rooms, or the whole building. On a phone, start closer. */
   fitZoom() {
-    const whole = this.wholeZoom();
-    return this.cw < 700 ? Math.max(whole, 0.8) : whole;
+    const f = this.frameRect;
+    const base = f ? Math.min(this.cw / ((f.w + 1) * TILE), this.ch / ((f.h + 3) * TILE)) : this.wholeZoom();
+    return this.cw < 700 ? Math.max(base, 0.8) : base;
+  }
+
+  /** Show every room, closed ones too. */
+  showWhole() {
+    this.follow = null;
+    this.camTo = { x: (W * TILE) / 2, y: (H * TILE) / 2 + 4, z: this.wholeZoom() };
   }
 
   // ---- Homes ------------------------------------------------------------------------------------
@@ -543,8 +566,16 @@ export class LabEngine {
 
   /** Catch up on an event from before this floor was drawn: put people where they are, no animation. */
   placeLive(e: LabEvent) {
-    this.liveActor(e.agent);
+    const who = this.liveActor(e.agent);
     this.liveActor(e.to);
+    if (e.k === "agent.move" && who) {
+      const dest = this.placeSpot(String((e.data as { to?: string } | undefined)?.to ?? e.to ?? "desk"), who);
+      if (dest) {
+        who.x = dest.px;
+        who.y = dest.py;
+        who.atHome = dest === who.home;
+      }
+    }
   }
 
   playLive(e: LabEvent) {
@@ -633,6 +664,13 @@ export class LabEngine {
       case "voice.line":
         if (who && !who.bubble) this.say(who, "question", color, 2);
         break;
+      case "agent.move": {
+        // Walk to wherever the event says, and stay there until the next move.
+        if (!who) break;
+        const dest = this.placeSpot(String(d.to ?? e.to ?? "desk"), who);
+        if (dest) this.plan(who, [{ go: dest, face: dest === who.home ? 0 : 1 }], null);
+        break;
+      }
       // sponsor.call: counted by the sponsor strip, no floor animation.
     }
   }
@@ -747,7 +785,65 @@ export class LabEngine {
     return this.playing ? Math.max(0.7, Math.min(3, this.speed / 10)) : 0;
   }
 
+  /** When each person next shows a small working bubble at their desk (rotation floors only). */
+  private nextIdle = new Map<string, number>();
+
+  /** Between events, people at their desks look busy: a reading, writing or searching bubble now and then. */
+  private idleWork() {
+    const moving = this.ext ? this.ext.playing : this.playing;
+    if (!this.replay.cast.size || !moving) return;
+    for (const a of this.actors.values()) {
+      if (!a.visible || !a.atHome || a.bubble || a.steps.length || a.path.length) continue;
+      const due = this.nextIdle.get(a.id);
+      if (due === undefined) {
+        this.nextIdle.set(a.id, this.real + 2 + (hashOf(a.id) % 50) / 10);
+        continue;
+      }
+      if (this.real < due) continue;
+      const icons = IDLE[a.role] ?? IDLE.default;
+      const icon = icons[Math.floor(this.real * 7 + hashOf(a.id)) % icons.length];
+      this.say(a, icon, colorOf(a.role, a.id), 1.3);
+      this.nextIdle.set(a.id, this.real + 5 + ((hashOf(a.id) + Math.floor(this.real)) % 60) / 10);
+    }
+  }
+
+  /** Where an agent.move goes: another person, a fixture, a room, or back to the desk. */
+  private placeSpot(to: string, who: Actor): Spot | null {
+    const other = this.actors.get(this.replay.liveAgent(to) ?? "");
+    if (other && other !== who) return this.visitSpot(other);
+    switch (to) {
+      case "desk":
+      case "home":
+        return who.home;
+      case "hatch":
+        return who.role === "team-b" ? FIX.hatchB : FIX.hatchA;
+      case "terminal":
+      case "search":
+        return { tx: 34, ty: 4, px: 34 * TILE + TILE / 2, py: 4 * TILE + TILE - 1 };
+      case "table":
+      case "bruin":
+        return FIX.refTable;
+      case "vault":
+        return FIX.vaultDoor;
+      case "lobby":
+      case "elevator":
+        return ELEVATOR;
+      case "coffee":
+        return FIX.coffee;
+      case "office":
+        return VISITOR_SPOTS[1];
+    }
+    const room = (roomById as Record<string, (typeof ROOMS)[number] | undefined>)[to];
+    if (room) {
+      const tx = Math.floor(room.x + room.w / 2);
+      const ty = room.y + Math.floor(room.h / 2);
+      return { tx, ty, px: tx * TILE + TILE / 2, py: ty * TILE + TILE - 1 };
+    }
+    return null;
+  }
+
   private update(dt: number) {
+    this.idleWork();
     const f = this.walkFactor();
     for (const a of this.actors.values()) {
       if (!a.visible) continue;
@@ -1402,4 +1498,21 @@ export class LabEngine {
   camera() {
     return { ...this.cam };
   }
+}
+
+/** The working bubbles each kind of person shows at their desk between events. */
+const IDLE: Record<string, Icon[]> = {
+  director: ["read", "write"],
+  library: ["search", "read", "scroll"],
+  referee: ["check", "read"],
+  head: ["read", "write"],
+  "team-a": ["write", "read"],
+  "team-b": ["write", "read", "search"],
+  default: ["read", "write"],
+};
+
+function hashOf(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
 }
