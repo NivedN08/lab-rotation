@@ -279,3 +279,62 @@ def kill_group(proc: subprocess.Popen) -> None:
             return
         except subprocess.TimeoutExpired:
             continue
+
+
+# --------------------------------------------------------------------- one-turn chat, no tools
+
+class ChatUnavailable(Exception):
+    """The CLI could not answer (missing, failed, timed out or empty). The message has no secrets."""
+
+
+def chat_command(system: str, model: str | None = None, claude_bin: str = CLAUDE_BIN) -> list[str]:
+    """Headless Claude Code with no tools, no MCP, no settings and no session file."""
+    cmd = [claude_bin, "-p", "--tools", "", "--strict-mcp-config", "--no-session-persistence",
+           "--setting-sources", "", "--output-format", "json", "--system-prompt", system]
+    if model:
+        cmd += ["--model", DEFAULT_MODELS.get(model, model)]
+    return cmd
+
+
+def chat_environment() -> dict[str, str]:
+    """A short environment from the host, without any API key."""
+    env = {k: os.environ[k] for k in FROM_HOST if k in os.environ}
+    env["HOME"] = str(pathlib.Path.home())   # the CLI finds its login through HOME
+    env["PATH"] = ":".join(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    return env
+
+
+def chat(system: str, prompt: str, *, model: str | None = None, timeout_s: float = 60,
+         claude_bin: str = CLAUDE_BIN) -> str:
+    """One turn: `system` as the system prompt, `prompt` (sent on stdin) as the user turn.
+
+    Returns the reply text. Raises ChatUnavailable on any failure. Never passes a key: the
+    environment is rebuilt from a short allow-list, and the prompt is data only.
+    """
+    if not os.path.exists(claude_bin):
+        raise ChatUnavailable(f"no Claude Code CLI at {claude_bin}")
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="lab-chat-") as tmp:
+        try:
+            proc = subprocess.Popen(chat_command(system, model, claude_bin), cwd=tmp, env=chat_environment(),
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    start_new_session=True)
+        except OSError as e:
+            raise ChatUnavailable(f"cannot start the Claude Code CLI ({type(e).__name__})") from None
+        try:
+            out, _err = proc.communicate(prompt.encode(), timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            kill_group(proc)
+            raise ChatUnavailable(f"Claude Code CLI timed out after {timeout_s:g} s") from None
+    lines = out.decode(errors="replace").strip().splitlines()
+    try:
+        data = json.loads(lines[-1]) if lines else {}
+    except ValueError:
+        raise ChatUnavailable(f"Claude Code CLI gave no JSON (exit {proc.returncode})") from None
+    if data.get("is_error") or proc.returncode != 0:
+        raise ChatUnavailable(f"Claude Code CLI error (exit {proc.returncode}, {str(data.get('subtype'))[:40]})")
+    text = str(data.get("result") or "").strip()
+    if not text:
+        raise ChatUnavailable("Claude Code CLI gave an empty answer")
+    return text

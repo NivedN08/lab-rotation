@@ -1,0 +1,13 @@
+store_id,region,pos_version,opened
+st01,East,5.0,2014
+st02,South,5.0,2013
+st03,South,4.2,2015
+st04,North,4.2,2005
+st05,West,5.0,2015
+st06,South,5.0,2004
+st07,West,4.2,2021
+st08,East,4.2,2004
+st09,North,4.2,2014
+st10,West,4.2,2005
+st11,East,4.2,2021
+st12,North,5.0,2006
