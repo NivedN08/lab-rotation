@@ -20,6 +20,10 @@ export type AgentRec = {
   model: string | null;
   sessions: Session[];
   cost: number;
+  /** A rotation agent's name, what it can read and its portrait, as the backend's agent list sends them. */
+  name?: string;
+  reads?: string;
+  portrait?: string | null;
 };
 
 export type Ev = {

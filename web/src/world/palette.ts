@@ -64,7 +64,11 @@ export const DEPT_SOFT: Record<Role, string> = {
 };
 
 /** The department a head runs ("head-team-a" -> "team-a"), or null for anyone else. */
+/** Department heads in a rotation, by their backend id. */
+const HEAD_IDS: Record<string, Role> = { sam: "team-a" };
+
 export function headDept(id: string): Role | null {
+  if (HEAD_IDS[id]) return HEAD_IDS[id];
   const d = id.startsWith("head-") ? id.slice(5) : "";
   return d === "library" || d === "team-a" || d === "team-b" || d === "team-c" ? d : null;
 }

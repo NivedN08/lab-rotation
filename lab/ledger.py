@@ -30,7 +30,7 @@ from lab.eventlog import utc_now
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_PATH = ROOT / "ledger" / "ledger.jsonl"
 KINDS = ("batch.registered", "batch.graded", "failure", "move.proposed", "move.evaluated", "move.accepted",
-         "move.rejected", "note")
+         "move.rejected", "note", "grade.sealed", "grade.changed")
 ZERO_SHA = "0" * 64
 FIELDS = ("seq", "time", "kind", "data", "prev_sha", "sha")
 _lock = threading.Lock()
