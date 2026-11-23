@@ -60,6 +60,17 @@ const LIVE_MOMENT: Record<string, Moment["kind"]> = {
   "appeal.ruling": "referee",
 };
 
+/** Words for a moment when only its kind is known (the demo's timeline). */
+const MOMENT_WORDS: Record<string, string> = {
+  "task.picked": "Task picked",
+  "agent.say": "A hint",
+  "learner.answer": "Your answer",
+  "rival.answer": "Riley's answer",
+  "check.result": "A Bruin check",
+  verdict: "Verdict",
+  "appeal.ruling": "Ruling on the appeal",
+};
+
 /** A lab log line for a live event: the backend's own words, nothing added. */
 export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
   if (!e.text || e.k === "sponsor.call") return null;
@@ -162,10 +173,21 @@ export class Replay {
   addLive(events: LabEvent[]) {
     for (const e of events) {
       this.end = Math.max(this.end, e.t);
+      if (this.fixedMoments) continue;
       const kind = LIVE_MOMENT[e.k];
       const d = (e.data ?? {}) as { passed?: boolean };
       if (kind) this.moments.push({ t: e.t, kind: e.k === "check.result" ? (d.passed === false ? "disagree" : "agree") : kind, label: e.text ?? e.k });
     }
+  }
+
+  /** Set once the whole recording's moments are known (the demo), so arriving events don't add them again. */
+  private fixedMoments = false;
+
+  /** The demo knows its whole recording up front: mark every moment and the end now. */
+  setRecording(timeline: { t: number; k: string }[], end: number) {
+    this.fixedMoments = true;
+    this.end = end;
+    this.moments = timeline.filter((x) => LIVE_MOMENT[x.k]).map((x) => ({ t: x.t, kind: LIVE_MOMENT[x.k], label: MOMENT_WORDS[x.k] ?? x.k }));
   }
 
   /** The floor agent with this backend id, if it is on this floor. */

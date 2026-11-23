@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { SummitScene } from "../world/summit";
 
-type Props = { onEnter: () => void; ready: boolean; status: string; live: boolean; leaving: boolean };
+type Props = { onEnter: () => void; onDemo: () => void; ready: boolean; status: string; live: boolean; leaving: boolean };
 
-export function Landing({ onEnter, ready, status, live, leaving }: Props) {
+export function Landing({ onEnter, onDemo, ready, status, live, leaving }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SummitScene | null>(null);
   const [origin, setOrigin] = useState({ x: 68, y: 40 });
@@ -26,6 +26,9 @@ export function Landing({ onEnter, ready, status, live, leaving }: Props) {
         <p>A research lab run by AI agents. Two teams analyse each study without seeing each other's work, so when they agree, it means something.</p>
         <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
           Start your rotation
+        </button>
+        <button className="btn cta" onClick={onDemo} disabled={!ready} style={{ marginLeft: 10 }}>
+          Watch the demo
         </button>
         <div className="now">
           {live && <span className="live-dot" aria-hidden="true" />}

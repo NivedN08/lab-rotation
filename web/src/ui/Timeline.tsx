@@ -29,10 +29,12 @@ type Props = {
   onNext: (dir: 1 | -1) => void;
   /** In a rotation: whether the floor is following now, and the button that jumps back to it. */
   live?: { on: boolean; go: () => void };
+  /** A rotation (yours or the demo): time is counted into the session, not the run. */
+  session?: boolean;
 };
 
-export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext, live }: Props) {
-  const into = live ? "into the session" : "into the run";
+export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext, live, session }: Props) {
+  const into = session ? "into the session" : "into the run";
   const ref = useRef<HTMLDivElement>(null);
   const span = Math.max(1, hi - lo);
   const at = (time: number) => `${Math.max(0, Math.min(1, (time - lo) / span)) * 100}%`;

@@ -91,6 +91,8 @@ export class LabEngine {
   private liveIndex = 0;
   /** Following the session as it happens: the clock runs in real time with the newest events. */
   live = false;
+  /** The demo's clock, which this floor follows instead of keeping its own. */
+  private ext: { pos: number; at: number; speed: number; playing: boolean } | null = null;
   private roomLight = new Map<RoomId, number>();
   private elevatorNext = 0;
   private visitorSlot = 0;
@@ -319,7 +321,12 @@ export class LabEngine {
     const dt = Math.min(0.1, this.lastNow ? (now - this.lastNow) / 1000 : 0);
     this.lastNow = now;
     this.real += dt;
-    if (this.live) {
+    if (this.ext) {
+      // The demo: follow its clock, smoothing between its updates.
+      const x = this.ext;
+      this.t = x.playing ? x.pos + Math.min(0.5, this.real - x.at) * x.speed : x.pos;
+      this.crossLive();
+    } else if (this.live) {
       // Live: the clock runs in real time and never falls far behind the newest event.
       const newest = this.liveEvents[this.liveEvents.length - 1]?.t ?? 0;
       this.t = Math.max(this.t + dt, newest - 2);
@@ -369,6 +376,21 @@ export class LabEngine {
     if (!fresh.length) return;
     this.liveEvents.push(...fresh);
     this.replay.addLive(fresh);
+  }
+
+  /** Follow the demo's clock: its position, speed and whether it is playing. */
+  followClock(pos: number, speed: number, playing: boolean) {
+    this.live = false;
+    this.ext = { pos, at: this.real, speed, playing };
+    this.playing = playing;
+  }
+
+  /** The demo jumped (a seek or a loop): start over from its events up to `t`, without animating them. */
+  jumpTo(t: number, events: LabEvent[]) {
+    this.liveEvents = [...events];
+    this.replay.addLive(events);
+    this.seek(t);
+    if (this.ext) this.ext = { ...this.ext, pos: t, at: this.real };
   }
 
   /** Jump to now and follow the session as it happens. */
@@ -720,6 +742,7 @@ export class LabEngine {
   // ---- Movement -------------------------------------------------------------------------------
 
   private walkFactor() {
+    if (this.ext) return this.ext.playing ? Math.max(1, Math.min(3, this.ext.speed / 2)) : 0;
     if (this.live) return 1;
     return this.playing ? Math.max(0.7, Math.min(3, this.speed / 10)) : 0;
   }

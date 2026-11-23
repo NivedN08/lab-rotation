@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getAgents, subscribeEvents, useRotation, type LabEvent } from "./api/client";
+import { demo as demoPlayer, getAgents, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, useRotation, type LabEvent } from "./api/client";
+import { SampleBadge } from "./api/SampleBadge";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
@@ -17,8 +18,9 @@ import { LabEngine, type Target } from "./world/engine";
 
 type View = "landing" | "leaving" | "lab";
 
-/** The run picker's value for your own rotation, as opposed to a recorded run. */
+/** The run picker's values: your own rotation, and the demo (a recorded rotation). */
 const ROTATION = "rotation";
+const DEMO = "demo";
 
 export function App() {
   const [source, setSource] = useState<Source | null>(null);
@@ -26,15 +28,25 @@ export function App() {
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("landing");
-  const replay = useMemo(() => (run ? new Replay(run) : null), [run]);
+  // The demo replays a recorded session through the same rotation state; it gets its own floor.
+  const demoState = useDemo();
+  const demoOn = demoState.status !== "off";
+  const demoRef = useRef(demoState);
+  demoRef.current = demoState;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const replay = useMemo(() => (run ? new Replay(run) : null), [run, demoOn]);
   const rotation = useRotation(); // the one shared session, clock and event poll
   const rotationEvents = useRef<LabEvent[]>([]);
   rotationEvents.current = rotation.events;
   const isRotation = run?.run === ROTATION;
+  const [demoEnded, setDemoEnded] = useState(false); // the demo reached its end and holds there
+  const [demoHeld, setDemoHeld] = useState(false); // the visitor left the end card: stop looping
   // The verdict card opens when a task's verdict arrives, until you close it.
   const [closedVerdicts, setClosedVerdicts] = useState<string[]>([]);
   const verdictTask = [...rotation.events].reverse().find((e) => e.k === "verdict" && e.task)?.task ?? null;
-  const verdictCard = isRotation && verdictTask && !closedVerdicts.includes(verdictTask) ? verdictFromEvents(rotation.events, verdictTask) : null;
+  // In the demo it waits for the end of the recording, the way the old clip ended on its results.
+  const verdictShown = demoOn ? demoEnded && !demoHeld : !!verdictTask && !closedVerdicts.includes(verdictTask);
+  const verdictCard = isRotation && verdictTask && verdictShown ? verdictFromEvents(rotation.events, verdictTask) : null;
   const verdictTitle = (() => {
     const i = rotation.tasks.findIndex((x) => x.id === verdictTask);
     return i >= 0 ? `Task ${i + 1}` : rotation.tasks.find((x) => x.id === verdictTask)?.title ?? "Your task";
@@ -134,9 +146,14 @@ export function App() {
     engine.setSpeed(speed);
     engineRef.current = engine;
     if (replay.run.run === ROTATION) {
-      // Your rotation: take in everything so far and follow it live.
+      // Your rotation: take in everything so far and follow it live. The demo follows its own clock.
+      const d = demoRef.current;
+      if (d.status === "ready") replay.setRecording(d.timeline, d.end);
       engine.addLive(rotationEvents.current);
-      engine.goLive();
+      if (d.status !== "off") {
+        engine.seek(d.position);
+        engine.followClock(d.position, d.speed, d.playing);
+      } else engine.goLive();
     }
     if (import.meta.env.DEV) (window as unknown as { __lab: LabEngine }).__lab = engine;
     const live = source?.runs.find((r) => r.run === replay.run.run)?.live;
@@ -152,6 +169,39 @@ export function App() {
   // The rotation's events reach the floor as they arrive; each plays, with the animations the
   // floor already has, when the floor's clock reaches it.
   useEffect(() => subscribeEvents((events) => engineRef.current?.addLive(events)), []);
+  // A demo seek or loop: the floor starts over from everything up to that moment.
+  useEffect(() => subscribeJump((time, events) => engineRef.current?.jumpTo(time, events)), []);
+
+  // The demo's whole recording marks the timeline, and the floor follows the demo's clock.
+  useEffect(() => {
+    if (demoState.status === "ready" && replay) replay.setRecording(demoState.timeline, demoState.end);
+  }, [replay, demoState.status, demoState.timeline, demoState.end]);
+  useEffect(() => {
+    if (demoState.status === "ready") engineRef.current?.followClock(demoState.position, demoState.speed, demoState.playing);
+  }, [replay, demoState.status, demoState.position, demoState.speed, demoState.playing]);
+
+  // At the end of the demo, hold on the verdict card, then play it again, the way the old clip did.
+  useEffect(() => {
+    if (demoState.status !== "ready") return setDemoEnded(false);
+    // Stop one player tick (0.2 s of real time) before the end, before the player loops by itself.
+    const near = demoState.end - Math.max(1, demoState.speed * 0.3);
+    if (demoState.playing && demoState.position >= near) {
+      demoPlayer.pause();
+      setDemoEnded(true);
+    } else if (demoState.position < near) setDemoEnded(false);
+  }, [demoState.status, demoState.playing, demoState.position, demoState.end]);
+  const watchAgain = () => {
+    setDemoHeld(false);
+    setDemoEnded(false);
+    demoPlayer.seek(demoRef.current.start);
+    demoPlayer.play();
+  };
+  useEffect(() => {
+    if (!demoEnded || demoHeld || panel || view !== "lab") return;
+    const timer = window.setTimeout(watchAgain, 12000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoEnded, demoHeld, panel, view]);
 
   // Play only the clip while demo mode is on.
   useEffect(() => {
@@ -268,6 +318,16 @@ export function App() {
   const nextMoment = (dir: 1 | -1) => {
     const e = engine();
     if (!e || !replay) return;
+    if (demoOn) {
+      const cur = e.t;
+      const list = replay.moments;
+      const m = dir === 1 ? list.find((x) => x.t > cur + 1) : [...list].reverse().find((x) => x.t < cur - 3);
+      if (!m) return;
+      setDemoEnded(false);
+      demoPlayer.seek(Math.max(demoState.start, m.t - 4));
+      demoPlayer.play();
+      return;
+    }
     const list = replay.moments.filter((m) => (!filter || !m.study || m.study === filter) && m.t >= lo && m.t <= hi);
     const cur = e.t;
     const m = dir === 1 ? list.find((x) => x.t > cur + 1) : [...list].reverse().find((x) => x.t < cur - 3);
@@ -309,7 +369,8 @@ export function App() {
       if (!e) return;
       if (ev.key === " ") {
         ev.preventDefault();
-        e.setPlaying(!e.playing);
+        if (demoOn) demoPlayer.toggle();
+        else e.setPlaying(!e.playing);
       } else if (ev.key === "ArrowRight") nextMoment(1);
       else if (ev.key === "ArrowLeft") nextMoment(-1);
       else if (ev.key === "Escape") {
@@ -389,18 +450,22 @@ export function App() {
                   <select
                     id="run"
                     className="run-pick"
-                    value={runName ?? ""}
+                    value={demoOn ? DEMO : runName ?? ""}
                     onChange={(e) => {
+                      const v = e.target.value;
                       tRef.current = 0;
                       setClipOn(false);
                       setFilter(null);
                       setSelected(null);
                       setPanel(null);
                       setTour(null);
-                      setRunName(e.target.value);
+                      if (v === DEMO) startDemo();
+                      else stopDemo();
+                      setRunName(v === DEMO ? ROTATION : v);
                     }}
                   >
                     <option value={ROTATION}>Your rotation</option>
+                    <option value={DEMO}>Demo</option>
                     {source.runs.map((r) => (
                       <option key={r.run} value={r.run}>
                         {r.live ? "Live: " : ""}
@@ -434,6 +499,16 @@ export function App() {
               {demo && !isRotation && (
                 <button className="btn quiet hide-sm" onClick={toggleClip} title={clip ? "Play the whole run instead of the demo's 5 minutes" : "Play the demo's 5 minutes"}>
                   {clip ? "Whole run" : "Demo"}
+                </button>
+              )}
+              {isRotation && (
+                <button
+                  className="btn quiet hide-sm"
+                  aria-pressed={demoOn}
+                  onClick={() => (demoOn ? stopDemo() : startDemo())}
+                  title={demoOn ? "Leave the demo and go back to your rotation" : "Watch a recorded rotation from start to verdict"}
+                >
+                  {demoOn ? "Your rotation" : "Demo"}
                 </button>
               )}
               {!isRotation && (
@@ -518,8 +593,10 @@ export function App() {
               <div className="tour box" role="dialog" aria-label="Welcome">
                 <h2>Welcome to the lab floor</h2>
                 <p>
-                  {isRotation
-                    ? "This is your rotation. Dr. Vale will bring you a task; open the Workspace to dig into the data. Telem, Sam, Riley and Ines are all at work around you. Click anyone to see what they're doing and why."
+                  {demoOn
+                    ? "You're watching a recorded rotation, from the first task to the verdict. Everyone here is an AI agent; you are the student in Team A. Click anyone to see what they did and why."
+                    : isRotation
+                      ? "This is your rotation. Dr. Vale will bring you a task; open the Workspace to dig into the data. Telem, Sam, Riley and Ines are all at work around you. Click anyone to see what they're doing and why."
                     : clip
                       ? `You're watching ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of a real run, recorded event by event${clip.ends_with_results ? ", ending on its results" : ""}. Everyone here is an AI agent. People walk when information moves between departments. Click anyone to see what they're working on, or ask them.`
                       : "Everyone here is an AI agent replaying a real run. People walk when information moves between departments. Click anyone to see what they're working on, or ask them."}
@@ -581,11 +658,13 @@ export function App() {
               <VerdictCard
                 taskTitle={verdictTitle}
                 {...verdictCard}
-                onClose={() => setClosedVerdicts((c) => [...c, verdictTask])}
+                onClose={() => (demoOn ? setDemoHeld(true) : setClosedVerdicts((c) => [...c, verdictTask]))}
                 onPanelRoom={() => {
-                  setClosedVerdicts((c) => [...c, verdictTask]);
+                  if (demoOn) setDemoHeld(true);
+                  else setClosedVerdicts((c) => [...c, verdictTask]);
                   setPanel("room");
                 }}
+                onAgain={demoOn ? watchAgain : undefined}
               />
             )}
 
@@ -627,27 +706,50 @@ export function App() {
             <Timeline
               R={R}
               t={t}
-              playing={playing}
-              speed={speed}
+              playing={demoOn ? demoState.playing : playing}
+              speed={demoOn ? demoState.speed : speed}
               filter={filter}
-              lo={lo}
-              hi={hi}
+              lo={demoOn ? demoState.start : lo}
+              hi={demoOn ? demoState.end : hi}
               onPlay={() => {
                 setHold(false);
-                engine()?.setPlaying(!engine()!.playing);
+                if (demoOn) {
+                  if (demoEnded) watchAgain();
+                  else demoPlayer.toggle();
+                } else engine()?.setPlaying(!engine()!.playing);
               }}
-              onSeek={(x) => engine()?.seek(x)}
+              onSeek={(x) => {
+                if (demoOn) {
+                  setDemoEnded(false);
+                  demoPlayer.seek(x);
+                } else engine()?.seek(x);
+              }}
               onSpeed={(s) => {
+                if (demoOn) return demoPlayer.setSpeed(s);
                 setSpeed(s);
                 engine()?.setSpeed(s);
               }}
               onNext={nextMoment}
-              live={isRotation ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
+              live={isRotation && !demoOn ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
+              session={isRotation}
             />
           </>
         )}
       </div>
-      {view !== "lab" && <Landing onEnter={enter} ready={!!replay} status={status} live={!!runInfo?.live} leaving={view === "leaving"} />}
+      <SampleBadge />
+      {view !== "lab" && (
+        <Landing
+          onEnter={enter}
+          onDemo={() => {
+            startDemo();
+            enter();
+          }}
+          ready={!!replay}
+          status={status}
+          live={!!runInfo?.live}
+          leaving={view === "leaving"}
+        />
+      )}
     </>
   );
 }

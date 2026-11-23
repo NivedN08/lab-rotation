@@ -23,6 +23,8 @@ export type VerdictCardProps = {
   children?: ReactNode;
   onClose: () => void;
   onPanelRoom?: () => void;
+  /** The demo's end: play it again. */
+  onAgain?: () => void;
 };
 
 type CardData = Pick<VerdictCardProps, "verdict" | "yours" | "riley" | "checks">;
@@ -54,7 +56,7 @@ function Mark({ ok, yes = "passed", no = "failed" }: { ok: boolean; yes?: string
   return <span className={`mark ${ok ? "pass" : "fail"}`}>{ok ? yes : no}</span>;
 }
 
-export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children, onClose, onPanelRoom }: VerdictCardProps) {
+export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children, onClose, onPanelRoom, onAgain }: VerdictCardProps) {
   const failing = checks.filter((c) => !c.passed);
   return (
     <div className="tour box verdict" role="dialog" aria-label={`Verdict for ${taskTitle}`}>
@@ -127,9 +129,20 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
             Open the panel room
           </button>
         )}
-        <button className="btn gold" onClick={onClose} autoFocus>
-          Back to the lab
-        </button>
+        {onAgain ? (
+          <>
+            <button className="btn" onClick={onClose}>
+              Explore the lab
+            </button>
+            <button className="btn gold" onClick={onAgain} autoFocus>
+              Watch again
+            </button>
+          </>
+        ) : (
+          <button className="btn gold" onClick={onClose} autoFocus>
+            Back to the lab
+          </button>
+        )}
       </div>
     </div>
   );
