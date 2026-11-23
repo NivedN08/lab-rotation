@@ -768,3 +768,8 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* The clock has stopped at the verdict. */
+.ws-timer.done .ws-timer-num {
+  color: var(--mist);
+}

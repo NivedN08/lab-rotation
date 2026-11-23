@@ -82,7 +82,7 @@ export default function Workspace({ onTaskChange }: Props) {
                 {task.title}
                 {task.tier !== undefined && <span className="ws-tier">Tier {task.tier}</span>}
               </h2>
-              <Timer startedAt={startedAt} seconds={task.seconds} />
+              <Timer taskId={task.id} startedAt={startedAt} seconds={task.seconds} />
             </div>
             {task.claim && (
               <p className="ws-claim">
