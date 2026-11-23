@@ -9,6 +9,7 @@ import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
 import { TaskChips } from "./ui/TaskChips";
+import { VerdictCard, verdictFromEvents } from "./ui/Verdict";
 import { Timeline } from "./ui/Timeline";
 import { WorkspaceTab } from "./ui/WorkspaceTab";
 import { buildTour } from "./ui/tour";
@@ -30,6 +31,14 @@ export function App() {
   const rotationEvents = useRef<LabEvent[]>([]);
   rotationEvents.current = rotation.events;
   const isRotation = run?.run === ROTATION;
+  // The verdict card opens when a task's verdict arrives, until you close it.
+  const [closedVerdicts, setClosedVerdicts] = useState<string[]>([]);
+  const verdictTask = [...rotation.events].reverse().find((e) => e.k === "verdict" && e.task)?.task ?? null;
+  const verdictCard = isRotation && verdictTask && !closedVerdicts.includes(verdictTask) ? verdictFromEvents(rotation.events, verdictTask) : null;
+  const verdictTitle = (() => {
+    const i = rotation.tasks.findIndex((x) => x.id === verdictTask);
+    return i >= 0 ? `Task ${i + 1}` : rotation.tasks.find((x) => x.id === verdictTask)?.title ?? "Your task";
+  })();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<LabEngine | null>(null);
@@ -569,6 +578,18 @@ export function App() {
                   )}
                 </div>
               </div>
+            )}
+
+            {verdictCard && verdictTask && tour === null && (
+              <VerdictCard
+                taskTitle={verdictTitle}
+                {...verdictCard}
+                onClose={() => setClosedVerdicts((c) => [...c, verdictTask])}
+                onPanelRoom={() => {
+                  setClosedVerdicts((c) => [...c, verdictTask]);
+                  setPanel("room");
+                }}
+              />
             )}
 
             {atClipEnd && clip?.ends_with_results && R.graded(t) && R.run.totals && !hold && tour === null && (

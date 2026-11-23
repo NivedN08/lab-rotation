@@ -25,7 +25,7 @@ export function Landing({ onEnter, ready, status, live, leaving }: Props) {
         </h1>
         <p>A research lab run by AI agents. Two teams analyse each study without seeing each other's work, so when they agree, it means something.</p>
         <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
-          View current research
+          Start your rotation
         </button>
         <div className="now">
           {live && <span className="live-dot" aria-hidden="true" />}

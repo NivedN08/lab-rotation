@@ -30,7 +30,7 @@
 - [x] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
 - [x] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
 - [x] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
-- [ ] 9. Verdict card, built from the results card: your verdict against the key, the failing Bruin check next to your evidence, your quoted words, Riley's answer, "sealed" (`App.tsx` or `ui/Verdict.tsx`)
+- [x] 9. Verdict card, built from the results card: your verdict against the key, the failing Bruin check next to your evidence, your quoted words, Riley's answer, "sealed" (`App.tsx` or `ui/Verdict.tsx`)
 - [ ] 10. Sponsor strip: a thin bar above the timeline counting BAND messages, Telem searches (with trace links), Bruin checks run and failed, Runware lines and cost, Glasser calls (`ui/SponsorStrip.tsx`)
 - [ ] 11. Mastery chart: one bar per trap type; shown in your Details panel and on the verdict card (`ui/Mastery.tsx`, `ui/Panels.tsx`)
 - [ ] 12. Audio: play each voice line as it appears, with a mute button in the top bar
@@ -98,7 +98,7 @@ No new animation types are needed. Each new event reuses one that the original a
 - 3: room plaques now read Dr. Vale's office, Telem's library, Team A: You and Sam, Team B: Riley, Referee: Ines, Your learner profile; the room panels say what each room means for the rotation. Team C and Solo agents are dimmed and labelled "Closed" (decided).
 - 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.
 - 5: Riley sits at the Team B desk nearest the hatch, plate reads "Riley's desk" when zoomed in; both answers fly to the hatch between the rooms.
-- 9 (layout only, not ticked): verdict card component built from the results card; takes the verdict, check.result and answer event data as props. Wired up once the shared rotation state lands.
+- 9: verdict card built from the results card opens when a task's verdict event arrives: your verdict and trap against the key, the Bruin checks next to your cited evidence, your own words when the answer carries them, Riley's answer, sealed. "Open the panel room" or "Back to the lab" closes it. Landing button now reads "Start your rotation".
 - 8: top bar shows Task 1, 2, 3 with passed/failed marks and the time left, all read from the shared rotation state (same clock as the workspace timer); clicking a task opens the Workspace tab. Falls back to the study chips when there is no rotation.
 - 7: every rotation event from the shared poll plays one of the floor's existing animations on the cast (table above); the lab log shows the backend's own line for each event. Live animations keep moving while the replay is paused. The hatch shows "answers match" or "answers differ" by comparing the two answers as sent.
 - Rotation floor: the floor opens on your rotation, built from the backend's agent list and matched by id (vale, ines, sam, telem, riley, learner); recorded runs stay in the run picker with their timeline, tour and demo. Every event's why shows under its lab log line and in a person's Details panel ("Decisions, and why").
