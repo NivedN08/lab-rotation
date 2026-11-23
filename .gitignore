@@ -1,0 +1,35 @@
+# Keys and local settings: never commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Local machine files
+.DS_Store
+.claude/settings.local.json
+
+# Benchmark data and run workspaces stay local (they hold answer keys and large files)
+data/
+runs/
+*.log
+
+# Builders work in their own copies here
+.claude/worktrees/
+
+# Web front end build output
+web/dist/
+# The front end's baked replays come from results/ and hold no answer keys
+!web/public/runs/
+
+# The web front end's TypeScript data types, not run data
+!web/src/data/
