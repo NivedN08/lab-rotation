@@ -42,6 +42,9 @@ TICKERS = ("TGT",)  # Target discloses total_stores and traffic_growth
 ITEMS = ("gallon of whole milk", "loaf of white bread", "ground coffee 12 oz", "paper towels 6 pack")
 # Basket size is not disclosed by the KPI endpoint; this is a fixed planning value, labelled as such.
 BASKET = {"avgBasketUsd": 38.0, "itemsPerBasket": 9, "source": "fixed value (not from Glasser)"}
+# Listed prices per Run (from Glasser's inspect), used to stop before a Run would pass the budget.
+PRICES = {("financialdatasets", "/kpi/metrics"): 0.02, ("serper", "/shopping"): 0.002}
+TICKER_NAMES = {"TGT": "Target", "KR": "Kroger", "COST": "Costco", "WMT": "Walmart"}
 
 
 class GlasserError(RuntimeError):
@@ -65,6 +68,7 @@ class Glasser:
         self._transport = transport  # tests pass a callable(tool, args) -> dict
         self.budget = float(os.environ.get("GLASSER_BUDGET_USD", "0.25")) if budget_usd is None else budget_usd
         self.spent = 0.0
+        self._bought: dict = {}  # this session's Runs by (provider, endpoint, input): repeats are free
 
     # -- transport --------------------------------------------------------------
 
@@ -90,8 +94,19 @@ class Glasser:
         return json.loads(text)
 
     def run(self, provider: str, endpoint: str, input: dict, *, label: str, by: str = "system") -> dict:
-        """One paid Run. Returns its output; reports cost and run link."""
-        if self.spent >= self.budget:
+        """One paid Run. Returns {output, cost, runUrl, repeat}; reports cost and run link.
+
+        The same Run again in this session is free: it reports `count: 0`, cost 0, the same link.
+        """
+        key = (provider, endpoint, json.dumps(input, sort_keys=True))
+        if key in self._bought:
+            prev = self._bought[key]
+            report(self.on_call, SponsorCall("glasser", "run", label + " (already bought)", by=by, cost_usd=0.0,
+                                             trace=prev["runUrl"], count=0))
+            return dict(prev, cost=0.0, repeat=True)
+        if self.spent + PRICES.get((provider, endpoint), 0.0) > self.budget + 1e-9:
+            report(self.on_call, SponsorCall("glasser", "run", label + " (budget spent)", ok=False, by=by,
+                                             fallback=True, error="budget"))
             raise GlasserError("budget spent")
         t = Timer()
         try:
@@ -100,10 +115,16 @@ class Glasser:
             cost = float(r.get("charge_usd") or 0.0)
             self.spent += cost
             if r.get("status") != "COMPLETED":
+                report(self.on_call, SponsorCall("glasser", "run", label, ok=False, ms=t.ms, by=by, fallback=True,
+                                                 cost_usd=cost, trace=r.get("run_url"), error=str(r.get("status"))))
                 raise GlasserError(f"run {r.get('status')}")
             report(self.on_call, SponsorCall("glasser", "run", label, ms=t.ms, by=by, cost_usd=cost,
                                              trace=r.get("run_url")))
-            return {"output": r.get("output") or {}, "cost": cost, "runUrl": r.get("run_url", "")}
+            out = {"output": r.get("output") or {}, "cost": cost, "runUrl": r.get("run_url", ""), "repeat": False}
+            self._bought[key] = out
+            return out
+        except GlasserError:
+            raise
         except Exception as exc:  # noqa: BLE001
             report(self.on_call, SponsorCall("glasser", "run", label, ok=False, ms=t.ms, by=by, fallback=True,
                                              error=short_error(exc)))
@@ -111,10 +132,10 @@ class Glasser:
 
     # -- retail numbers ---------------------------------------------------------
 
-    def store_kpis(self, ticker: str) -> dict:
+    def store_kpis(self, ticker: str, *, by: str = "system") -> dict:
         """{ticker, period, totalStores, trafficGrowthPct, comparableSalesGrowthPct, cost, source}."""
         r = self.run("financialdatasets", "/kpi/metrics", {"ticker": ticker, "period": "annual", "limit": 50},
-                     label=f"Read store numbers for {ticker}")
+                     label=f"Read store numbers for {ticker}", by=by)
         rows = r["output"].get("kpi_metrics", [])
         latest = max((m["period"] for m in rows), default="")
         pick = {m["metric_name"]: m["value"] for m in rows if m["period"] == latest}
@@ -123,9 +144,9 @@ class Glasser:
                 "comparableSalesGrowthPct": pick.get("comparable_store_sales_growth"),
                 "cost": r["cost"], "source": r["runUrl"]}
 
-    def price_level(self, item: str) -> dict:
+    def price_level(self, item: str, *, by: str = "system") -> dict:
         """{item, median, low, high, n, cost, source}: US Google Shopping prices, quartiles as low/high."""
-        r = self.run("serper", "/shopping", {"q": item, "gl": "us"}, label=f"Priced {item}")
+        r = self.run("serper", "/shopping", {"q": item, "gl": "us"}, label=f"Priced {item}", by=by)
         prices = sorted(p for p in (parse_price(x.get("price")) for x in r["output"].get("shopping", [])) if p)
         if len(prices) >= 4:
             q1, med, q3 = statistics.quantiles(prices, n=4)
@@ -134,6 +155,64 @@ class Glasser:
         rnd = (lambda v: round(v, 2) if v is not None else None)
         return {"item": item, "median": rnd(med), "low": rnd(q1), "high": rnd(q3), "n": len(prices),
                 "cost": r["cost"], "source": r["runUrl"]}
+
+    def benchmark(self, kind: str, *, by: str = "system", ticker: str = "TGT") -> dict:
+        """An agent buys one real fact on demand.
+
+        {kind, label, value, low, high, unit, source, cost, trace, traces, cached}. Kinds:
+        - "basket": what a basket of the staple ITEMS costs on US Google Shopping (sum of the
+          items' median prices; low/high are the sums of their quartiles). Up to 4 Runs, $0.008.
+        - "retailer_kpi": a retailer's store count for its latest year, with traffic and
+          comparable-sales growth in `extra`. One Run, $0.02.
+        Repeats in this session are free. Down, offline or over budget: the recorded set answers.
+        """
+        if kind not in ("basket", "retailer_kpi"):
+            raise ValueError(f"unknown benchmark kind {kind!r}")
+        if not self.offline:
+            try:
+                return self._benchmark_live(kind, by, ticker)
+            except Exception:  # noqa: BLE001 - recorded numbers answer instead
+                pass
+        rec = load_recorded(RECORDED) or {"stores": [], "prices": []}
+        out = self._benchmark_from(kind, rec.get("prices", []), rec.get("stores", []), ticker)
+        report(self.on_call, SponsorCall("glasser", "run", f"Used a recorded {kind.replace('_', ' ')} benchmark",
+                                         by=by, fallback=True, trace=out["trace"] or None))
+        return dict(out, cost=0.0, cached=True)
+
+    def _benchmark_live(self, kind: str, by: str, ticker: str) -> dict:
+        if kind == "basket":
+            prices = [self.price_level(i, by=by) for i in ITEMS]
+            out = self._benchmark_from(kind, prices, [], ticker)
+            cost = sum(p["cost"] for p in prices)
+        else:
+            kpi = self.store_kpis(ticker, by=by)
+            out = self._benchmark_from(kind, [], [kpi], ticker)
+            cost = kpi["cost"]
+        return dict(out, cost=round(cost, 4), cached=False)
+
+    @staticmethod
+    def _benchmark_from(kind: str, prices: list, stores: list, ticker: str) -> dict:
+        if kind == "basket":
+            prices = [p for p in prices if p.get("median") is not None]
+            names = ", ".join(p["item"] for p in prices)
+            traces = [p.get("source", "") for p in prices]
+            return {"kind": kind, "label": f"A basket of {len(prices)} staples ({names}), US online prices",
+                    "value": round(sum(p["median"] for p in prices), 2),
+                    "low": round(sum(p["low"] for p in prices), 2), "high": round(sum(p["high"] for p in prices), 2),
+                    "unit": "USD", "source": "Google Shopping via Glasser (serper /shopping)",
+                    "trace": traces[0] if traces else "", "traces": traces, "extra": {"items": prices}}
+        kpi = next((s for s in stores if s.get("ticker") == ticker), stores[0] if stores else {})
+        who = TICKER_NAMES.get(kpi.get("ticker", ""), kpi.get("ticker", ""))
+        bits = [f"traffic {kpi['trafficGrowthPct']:+g}%" if kpi.get("trafficGrowthPct") is not None else "",
+                f"comparable sales {kpi['comparableSalesGrowthPct']:+g}%"
+                if kpi.get("comparableSalesGrowthPct") is not None else ""]
+        detail = ", ".join(b for b in bits if b)
+        return {"kind": kind, "label": f"{who} stores, {kpi.get('period', '')}" + (f" ({detail})" if detail else ""),
+                "value": kpi.get("totalStores"), "low": None, "high": None, "unit": "stores",
+                "source": "SEC filings via Financial Datasets on Glasser (/kpi/metrics)",
+                "trace": kpi.get("source", ""), "traces": [kpi.get("source", "")] if kpi.get("source") else [],
+                "extra": {"ticker": kpi.get("ticker"), "trafficGrowthPct": kpi.get("trafficGrowthPct"),
+                          "comparableSalesGrowthPct": kpi.get("comparableSalesGrowthPct")}}
 
     def retail_params(self, *, refresh: bool = False) -> dict:
         """{stores: [...], prices: [...], basket, cost, cached, sources}. Cached per day in data/."""
