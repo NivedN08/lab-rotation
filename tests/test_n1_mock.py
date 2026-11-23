@@ -89,7 +89,7 @@ def test_totals_and_mastery_follow_the_replay(mock):
     assert totals["bruin"] == {"checksRun": 5, "checksFailed": 1}
     assert totals["runware"]["lines"] == 7
     assert totals["telem"]["searches"] == 3 and totals["telem"]["monitorHits"] == 1
-    assert totals["glasser"]["calls"] == 4
+    assert totals["glasser"]["calls"] == 3   # Ines's repeat of Sam's lookup is free (count 0)
     _, mastery = call("GET", f"/api/session/{sid}/mastery")
     by_trap = {m["trap"]: m for m in mastery["traps"]}
     assert len(by_trap) == 6 and by_trap["unit_mismatch"] == {"trap": "unit_mismatch", "score": 0.61, "attempts": 1}
