@@ -25,8 +25,8 @@
 - [x] 1. Names: the original name becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
 - [x] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
 - [x] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
-- [ ] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
-- [ ] 5. Riley's desk in Team B, so both answers meet at the hatch (decide: or a desk next to you)
+- [x] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
+- [ ] 5. Riley's desk in Team B, so both answers meet at the hatch (decided: Team B)
 - [x] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
 - [ ] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
 - [ ] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
@@ -95,4 +95,5 @@ No new animation types are needed. Each new event reuses one that the original a
 - 6: side panel tabs are now Workspace, Details, Ask, Panel room; Workspace mounts `web/src/workspace/index.tsx` (default or `Workspace` export, props in `ui/WorkspaceTab.tsx`), stays mounted across tab switches, widens to 720px while `onTaskChange(true)`; Workspace button in the top bar opens it. Shots: `06-before.png`, `06-after.png`.
 - 1: the original name is "Lab Rotation" on the landing wordmark, top bar, error screen and browser tab title. Shots: `01-before.png`, `01-after.png`, `01-before-topbar.png`, `01-after-topbar.png`.
 - 2: cast names by role (first agent per role): director Dr. Vale, head of Team A Sam, librarian Telem, referee Ines, Team A You, Team B Riley; others keep random names. New role labels and "what it can read" lines. No shots (screenshots dropped from the process).
-- 3: room plaques now read Dr. Vale's office, Telem's library, Team A: You and Sam, Team B: Riley, Referee: Ines, Your learner profile; the room panels say what each room means for the rotation. Team C and Solo agents unchanged pending a decision.
+- 3: room plaques now read Dr. Vale's office, Telem's library, Team A: You and Sam, Team B: Riley, Referee: Ines, Your learner profile; the room panels say what each room means for the rotation. Team C and Solo agents are dimmed and labelled "Closed" (decided).
+- 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.

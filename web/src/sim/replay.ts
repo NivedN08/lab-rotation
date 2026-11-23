@@ -43,7 +43,8 @@ export const MODEL_NAME: Record<string, string> = {
 };
 
 /** The Lab Rotation cast, by role (a head by its id). The first agent in each role takes the name. */
-const CAST: Record<string, string> = {
+export type CastKey = "director" | "head-team-a" | "library" | "referee" | "team-a" | "team-b";
+const CAST: Record<CastKey, string> = {
   director: "Dr. Vale",
   "head-team-a": "Sam",
   library: "Telem",
@@ -90,6 +91,10 @@ export class Replay {
   run: Run;
   agents: Map<string, AgentRec>;
   names = new Map<string, string>();
+  /** Which agent plays which cast part; agents outside the cast are not in here. */
+  cast = new Map<string, CastKey>();
+  /** The agent who is You, if this run has one. */
+  you: string | null = null;
   studies: Map<string, Study>;
   studyIndex = new Map<string, number>();
   byAgent = new Map<string, Ev[]>();
@@ -109,12 +114,14 @@ export class Replay {
     // Names: the first agent in each cast role takes the cast name; everyone else gets a first
     // name, stable per run.
     let n = 0;
-    const cast = new Set<string>();
+    const cast = new Set<CastKey>();
     const order = [...run.agents].sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || (a.study ?? "").localeCompare(b.study ?? "") || a.id.localeCompare(b.id));
     for (const a of order) {
-      const key = a.role === "head" ? a.id : a.role;
-      if (CAST[key] && !cast.has(key)) {
+      const key = (a.role === "head" ? a.id : a.role) as CastKey;
+      if (key in CAST && !cast.has(key)) {
         cast.add(key);
+        this.cast.set(a.id, key);
+        if (key === "team-a") this.you = a.id;
         this.names.set(a.id, CAST[key]);
       } else this.names.set(a.id, NAMES[n++ % NAMES.length]);
     }

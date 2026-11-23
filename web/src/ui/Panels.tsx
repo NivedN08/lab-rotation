@@ -467,9 +467,9 @@ const ROOM_TEXT: Record<string, { role?: Role; what: string }> = {
   library: { role: "library", what: "Telem's library. When you need a method, Telem searches papers and the web for how it should be done and what usually goes wrong, then carries what it finds to your desk." },
   "team-a": { role: "team-a", what: "Your desk is here. Sam, your mentor, sits at the head desk at the back and can drop by with a hint, never the answer." },
   "team-b": { role: "team-b", what: "Riley works the same task from the same tables, blind. Riley never sees your work and you never see Riley's until the verdict. The wall between the rooms has no door." },
-  "team-c": { role: "team-c", what: "Called only when the referee cannot settle a disagreement. A third blind team, given the warning signs but no answers." },
+  "team-c": { what: "Closed during a rotation. Nobody works here." },
   referee: { role: "referee", what: "Ines and the Bruin terminal. Ines gets your answer and Riley's as X and Y, without knowing whose is whose, and runs the Bruin checks that tell them apart. She may not vote." },
-  solo: { role: "solo", what: "The comparison arm: the same model, the same data and the same time limit, but no lab. Four attempts per study, each alone, with no memory and no library." },
+  solo: { what: "Closed during a rotation. Nobody works here." },
   lobby: { what: "You arrive here when your session starts, then walk to your desk in Team A." },
 };
 

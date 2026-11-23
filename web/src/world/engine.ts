@@ -104,12 +104,14 @@ export class LabEngine {
     this.staticCv = buildStatic();
     this.events = [...replay.run.events].sort((a, b) => replay.timeOf(a) - replay.timeOf(b));
     // Heads' desks appear only in runs that had department heads (D-23).
-    this.desks = replay.run.agents.some((a) => a.role === "head") ? [...DESKS, ...HEAD_DESKS] : DESKS;
+    // Sam's head desk at the back of Team A is always there; the other heads' desks only when a run has heads.
+    const teamAHead = HEAD_DESKS.find((d) => d.x === HEAD_SEATS["team-a"].tx - 1)!;
+    this.desks = replay.run.agents.some((a) => a.role === "head") ? [...DESKS, ...HEAD_DESKS] : [...DESKS, teamAHead];
     for (const a of replay.run.agents) {
       const home = this.homeOf(a.id, a.role, a.study);
       if (!home) continue;
       this.actors.set(a.id, {
-        id: a.id, role: a.role, study: a.study, look: lookFor(a.id, a.role), home,
+        id: a.id, role: a.role, study: a.study, look: lookFor(a.id, a.role, a.id === replay.you), home,
         x: home.px, y: home.py, dir: 0, path: [], steps: [], wait: 0, carry: null, walkPhase: 0,
         visible: false, atHome: true, bubble: null, releaseAt: 0,
       });
@@ -284,6 +286,7 @@ export class LabEngine {
   }
 
   private roomActive(room: RoomId): boolean {
+    if (roomById[room]?.closed) return false;
     for (const a of this.actors.values()) {
       if (this.roomOf(a) !== room) continue;
       if (this.replay.status(a.id, this.t).working) return true;
@@ -691,7 +694,7 @@ export class LabEngine {
   private drawRoomLights(ctx: CanvasRenderingContext2D) {
     for (const r of ROOMS) {
       const light = this.roomLight.get(r.id) ?? 0;
-      const dim = 0.42 * (1 - light);
+      const dim = r.closed ? 0.62 : 0.42 * (1 - light);
       if (dim > 0.01) {
         ctx.fillStyle = `rgba(18, 22, 52, ${dim})`;
         ctx.fillRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
@@ -996,7 +999,7 @@ export class LabEngine {
       ctx.fillStyle = "rgba(22, 26, 51, 0.88)";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), Math.round(w), Math.round(h));
       const role = (r.id in DEPT ? r.id : r.id === "director" ? "director" : null) as Role | null;
-      ctx.fillStyle = role ? DEPT[role] : r.id === "vault" ? "#7fe0ff" : "#a9b2d3";
+      ctx.fillStyle = r.closed ? "#5d6590" : role ? DEPT[role] : r.id === "vault" ? "#7fe0ff" : "#a9b2d3";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + h / 2) - 2, Math.round(w), 2);
       ctx.fillStyle = "#eef2fa";
       ctx.fillText(text, p.x, p.y + 0.5);
@@ -1008,7 +1011,7 @@ export class LabEngine {
         if (!a.study || a.role === "solo") continue;
         const p = this.toScreen(a.home.px, (a.home.ty + 1) * TILE + 11);
         ctx.fillStyle = "rgba(27,31,58,0.55)";
-        ctx.fillText(a.study, p.x, p.y);
+        ctx.fillText(a.id === this.replay.you ? "Your desk" : a.study, p.x, p.y);
       }
     }
     // Floating outcome labels.
@@ -1029,6 +1032,9 @@ export class LabEngine {
     }
     // Name tags for the hovered and selected person.
     const tags: Target[] = [];
+    // You always wear a name tag, so you can find yourself on the floor.
+    const you = this.replay.you;
+    if (you && !(this.hover?.type === "agent" && this.hover.id === you) && !(this.selected?.type === "agent" && this.selected.id === you)) tags.push({ type: "agent", id: you });
     if (this.hover?.type === "agent") tags.push(this.hover);
     if (this.selected?.type === "agent" && !(this.hover?.type === "agent" && this.hover.id === this.selected.id)) tags.push(this.selected);
     for (const t of tags) {
@@ -1042,7 +1048,7 @@ export class LabEngine {
       const w = ctx.measureText(name).width + 14;
       ctx.fillStyle = "#161a33";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - 22), Math.round(w), 20);
-      ctx.fillStyle = colorOf(a.role, a.id);
+      ctx.fillStyle = a.id === you ? C.lamp : colorOf(a.role, a.id);
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - 4), Math.round(w), 2);
       ctx.fillStyle = "#eef2fa";
       ctx.fillText(name, p.x, p.y - 12);

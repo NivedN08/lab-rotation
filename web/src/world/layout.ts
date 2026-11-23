@@ -23,6 +23,8 @@ export type Room = {
   /** Door tiles in the wall shared with the corridor: x of the first of two tiles. */
   door?: number;
   doorSide?: "bottom" | "top";
+  /** Not used in a rotation: always dimmed, labelled "Closed". */
+  closed?: boolean;
 };
 
 export const ROOMS: Room[] = [
@@ -33,9 +35,9 @@ export const ROOMS: Room[] = [
   { id: "team-b", name: "Team B: Riley", x: 54, y: 1, w: 14, h: 12, floor: "lino", door: 60, doorSide: "bottom" },
   { id: "corridor", name: "Corridor", x: 9, y: 14, w: 59, h: 4, floor: "terrazzo" },
   { id: "referee", name: "Referee: Ines", x: 9, y: 19, w: 12, h: 14, floor: "rubber", door: 14, doorSide: "top" },
-  { id: "team-c", name: "Team C", x: 22, y: 19, w: 13, h: 14, floor: "tile", door: 27, doorSide: "top" },
+  { id: "team-c", name: "Closed", closed: true, x: 22, y: 19, w: 13, h: 14, floor: "tile", door: 27, doorSide: "top" },
   { id: "vault", name: "Your learner profile", x: 36, y: 19, w: 13, h: 14, floor: "steel", door: 41, doorSide: "top" },
-  { id: "solo", name: "Solo agents", x: 50, y: 19, w: 18, h: 14, floor: "lino", door: 57, doorSide: "top" },
+  { id: "solo", name: "Closed", closed: true, x: 50, y: 19, w: 18, h: 14, floor: "lino", door: 57, doorSide: "top" },
 ];
 
 export const roomById = Object.fromEntries(ROOMS.map((r) => [r.id, r])) as Record<RoomId, Room>;
