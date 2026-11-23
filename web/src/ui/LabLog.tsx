@@ -7,7 +7,7 @@ import type { Target } from "../world/engine";
 export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: number; filter: string | null; select: (t: Target) => void; live?: LabEvent[] }) {
   // During a rotation the log shows the session's events, in the backend's own words.
   const liveLines = useMemo(() => {
-    const out: { e: LabEvent; text: string; tone?: string }[] = [];
+    const out: { e: LabEvent; text: string; why: string; tone?: string }[] = [];
     for (const e of live) {
       const d = describeLive(e);
       if (d && out[out.length - 1]?.text !== d.text) out.push({ e, ...d });
@@ -24,12 +24,15 @@ export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: numb
   if (liveLines.length) {
     return (
       <div className="log" aria-label="Lab log">
-        {liveLines.map(({ e, text, tone }) => {
-          const who = R.liveAgent((e as { a?: string }).a);
+        {liveLines.map(({ e, text, why, tone }) => {
+          const who = R.liveAgent(e.agent);
           return (
             <button key={e.seq} className={tone ?? ""} onClick={() => who && select({ type: "agent", id: who })}>
               <time>{fmtElapsed(e.t)}</time>
-              <span>{text}</span>
+              <span>
+                {text}
+                {why && <small className="why">Why: {why}</small>}
+              </span>
             </button>
           );
         })}

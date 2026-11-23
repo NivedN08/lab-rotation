@@ -1307,3 +1307,13 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Decision log: each event's why, under its line --------------------------------------------- */
+
+.log .why,
+.item .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--fog);
+  font-size: 12px;
+}

@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import type { LabEvent } from "../api/types";
 import type { Note, Role } from "../data/types";
 import { fmtElapsed, MODEL_NAME, ROLE_READS, roleLabel, roundWord, statusWord, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
@@ -12,6 +13,8 @@ type Nav = {
   select: (t: Target) => void;
   talk: (agent: string) => void;
   filter: (study: string | null) => void;
+  /** The rotation's events so far, from the shared poll. */
+  live?: LabEvent[];
 };
 
 const band = (role: Role, id = "") => ({ "--band": colorOf(role, id) }) as CSSProperties;
@@ -86,6 +89,57 @@ export function PersonButton({ id, R, t, select, note }: { id: string; R: Replay
 }
 
 // ---- A person ---------------------------------------------------------------------------------
+
+/** A person in your rotation: who they are, what they can read, and every decision they made and why. */
+export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
+  const { R } = nav;
+  const a = R.agents.get(id)!;
+  const mine = (nav.live ?? []).filter((e) => e.agent === id || e.to === id).reverse();
+  const latest = mine.find((e) => e.agent === id && e.text);
+  return (
+    <div style={band(a.role, id)}>
+      <div className="who">
+        <div className="portrait">
+          <Avatar id={id} role={a.role} scale={5} />
+        </div>
+        <div>
+          <h2>{R.name(id)}</h2>
+          <p className="role">
+            <span className="swatch" style={{ background: colorOf(a.role, id) }} />
+            {roleLabel(id, a.role)}
+          </p>
+        </div>
+      </div>
+      <p className="now-line">
+        <small>{latest ? "Latest" : "Now"}</small>
+        {latest?.text ?? "At their desk."}
+      </p>
+      {(a.reads ?? ROLE_READS[a.role]) && (
+        <p className="reads">
+          <Lock />
+          {a.reads ?? ROLE_READS[a.role]}
+        </p>
+      )}
+      {id !== "learner" && (
+        <div className="actions">
+          <button className="btn gold" onClick={() => nav.talk(id)}>
+            Ask {R.name(id)} a question
+          </button>
+        </div>
+      )}
+      <Section title="Decisions, and why" count={mine.length || undefined}>
+        {!mine.length && <p className="empty">Nothing yet.</p>}
+        {mine.map((e) => (
+          <div className="item" key={e.seq}>
+            <div className="label">{e.text ?? e.k}</div>
+            <div className="meta">{fmtElapsed(e.t)} into the session</div>
+            <span className="why">Why: {e.why}</span>
+          </div>
+        ))}
+      </Section>
+    </div>
+  );
+}
 
 export function PersonPanel({ id, ...nav }: Nav & { id: string }) {
   const { R, t } = nav;

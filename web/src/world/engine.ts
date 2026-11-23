@@ -385,7 +385,7 @@ export class LabEngine {
       case "memory.pass_down": {
         const target = e.to ? this.actors.get(e.to) : undefined;
         if (!target || !target.visible) break;
-        const sender = this.actors.get(e.a ?? "director") ?? this.actors.get("director");
+        const sender = (e.a ? this.actors.get(e.a) : undefined) ?? this.director();
         const color = sender ? colorOf(sender.role, sender.id) : DEPT.director;
         if (sender?.role === "director" && sender.steps.some((s) => "go" in s && s.go === this.visitSpot(target))) break;
         if (this.throttle(`pd-${e.a}-${e.to}`, 8)) this.fly(this.spotOf(sender), this.deskSpot(target), color, "envelope", () => this.say(target, "paper", color, 1.6));
@@ -415,7 +415,10 @@ export class LabEngine {
           break;
         }
         if (e.passed) this.directorVisit(target, "question");
-        else this.say(this.actors.get("director")!, "cross", C.red, 2.5);
+        else {
+          const d = this.director();
+          if (d) this.say(d, "cross", C.red, 2.5);
+        }
         break;
       }
       case "candidate": {
@@ -475,11 +478,17 @@ export class LabEngine {
     this.plan(a, [{ go: this.visitSpot(target), face: 1 }, { wait: 2.2, icon, face: 1, carry: carry ?? undefined }, { go: a.home, face: 0 }], carry);
   }
 
+  /** Catch up on an event from before this floor was drawn: put people where they are, no animation. */
+  placeLive(e: LabEvent) {
+    this.liveActor(e.agent);
+    this.liveActor(e.to);
+  }
+
   playLive(e: LabEvent) {
     this.liveUntil = this.real + 20;
     const d = (e.data ?? {}) as Record<string, unknown>;
-    const who = this.liveActor((e as { a?: string }).a);
-    const to = this.liveActor((e as { to?: string }).to);
+    const who = this.liveActor(e.agent);
+    const to = this.liveActor(e.to);
     const you = this.liveActor("learner");
     const color = who ? colorOf(who.role, who.id) : DEPT.director;
     switch (e.k) {
@@ -566,6 +575,12 @@ export class LabEngine {
     }
   }
 
+  /** The director on this floor: "director" in a recorded run, Dr. Vale in a rotation. */
+  private director(): Actor | undefined {
+    for (const a of this.actors.values()) if (a.role === "director") return a;
+    return undefined;
+  }
+
   private throttle(key: string, runSeconds: number) {
     const last = this.lastFlyAt.get(key) ?? -1e9;
     if (this.t - last < runSeconds) return false;
@@ -586,7 +601,7 @@ export class LabEngine {
   }
 
   private directorVisit(target: Actor, icon: Icon) {
-    const d = this.actors.get("director");
+    const d = this.director();
     if (!d) return;
     const spot = this.visitSpot(target);
     const busy = d.steps.length > 0 || d.path.length > 0;

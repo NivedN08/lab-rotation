@@ -3,6 +3,7 @@
 
 import type { LabEvent } from "../api/types";
 import type { AgentRec, Ev, Note, Role, Run, Search, Study } from "../data/types";
+import { headDept } from "../world/palette";
 
 export const ROLE_LABEL: Record<Role, string> = {
   director: "Lab director",
@@ -32,7 +33,7 @@ const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-
 
 /** The label under a person's name: a head says which department it runs. */
 export function roleLabel(id: string, role: Role): string {
-  if (role === "head") return HEAD_OF[id.slice(5)] ?? ROLE_LABEL.head;
+  if (role === "head") return HEAD_OF[headDept(id) ?? ""] ?? ROLE_LABEL.head;
   return ROLE_LABEL[role];
 }
 
@@ -44,25 +45,16 @@ export const MODEL_NAME: Record<string, string> = {
 };
 
 /** The Lab Rotation cast, by role (a head by its id). The first agent in each role takes the name. */
-export type CastKey = "director" | "head-team-a" | "library" | "referee" | "team-a" | "team-b";
-const CAST: Record<CastKey, string> = {
-  director: "Dr. Vale",
-  "head-team-a": "Sam",
-  library: "Telem",
-  referee: "Ines",
-  "team-a": "You",
-  "team-b": "Riley",
-};
-
-/** Backend agent ids in the rotation's events, and the cast part each one plays. */
-const LIVE_CAST: Record<string, CastKey> = { learner: "team-a", vale: "director", sam: "head-team-a", telem: "library", ines: "referee", riley: "team-b" };
+/** The rotation's cast, by the agent ids the backend uses. Names come from the backend's agent list. */
+export type CastId = "vale" | "ines" | "sam" | "telem" | "riley" | "learner";
+const CAST_IDS = new Set<string>(["vale", "ines", "sam", "telem", "riley", "learner"]);
 
 /** A lab log line for a live event: the backend's own words, nothing added. */
-export function describeLive(e: LabEvent): { text: string; tone?: "bad" } | null {
+export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
   if (!e.text || e.k === "sponsor.call") return null;
   const d = (e.data ?? {}) as { passed?: boolean; correct?: boolean };
   const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.correct === false);
-  return { text: e.text, tone: bad ? "bad" : undefined };
+  return { text: e.text, why: e.why, tone: bad ? "bad" : undefined };
 }
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */
@@ -103,8 +95,8 @@ export class Replay {
   run: Run;
   agents: Map<string, AgentRec>;
   names = new Map<string, string>();
-  /** Which agent plays which cast part; agents outside the cast are not in here. */
-  cast = new Map<string, CastKey>();
+  /** The rotation cast on this floor, by backend id. Empty for a recorded run. */
+  cast = new Set<string>();
   /** The agent who is You, if this run has one. */
   you: string | null = null;
   /** The agent who is Riley, your rival in Team B, if this run has one. */
@@ -125,21 +117,16 @@ export class Replay {
     this.studies = new Map(run.studies.map((s) => [s.id, s]));
     run.studies.forEach((s, i) => this.studyIndex.set(s.id, i));
 
-    // Names: the first agent in each cast role takes the cast name; everyone else gets a first
-    // name, stable per run.
+    // Names: the rotation cast is matched by id and named by the backend; everyone else in a
+    // recorded run gets a first name, stable per run.
     let n = 0;
-    const cast = new Set<CastKey>();
     const order = [...run.agents].sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || (a.study ?? "").localeCompare(b.study ?? "") || a.id.localeCompare(b.id));
     for (const a of order) {
-      const key = (a.role === "head" ? a.id : a.role) as CastKey;
-      if (key in CAST && !cast.has(key)) {
-        cast.add(key);
-        this.cast.set(a.id, key);
-        if (key === "team-a") this.you = a.id;
-        if (key === "team-b") this.riley = a.id;
-        this.names.set(a.id, CAST[key]);
-      } else this.names.set(a.id, NAMES[n++ % NAMES.length]);
+      if (CAST_IDS.has(a.id)) this.cast.add(a.id);
+      this.names.set(a.id, a.name ?? (a.role === "director" ? "The Director" : NAMES[n++ % NAMES.length]));
     }
+    this.you = this.agents.has("learner") ? "learner" : null;
+    this.riley = this.agents.has("riley") ? "riley" : null;
 
     for (const e of run.events) {
       if (e.a) push(this.byAgent, e.a, e);
@@ -160,13 +147,9 @@ export class Replay {
     this.buildMoments();
   }
 
-  /** The floor agent behind a backend agent id (learner, vale, ines, sam, telem, riley), if this run has one. */
+  /** The floor agent with this backend id, if it is on this floor. */
   liveAgent(id: string | undefined): string | undefined {
-    if (!id) return undefined;
-    const part = LIVE_CAST[id];
-    if (!part) return undefined;
-    for (const [agent, key] of this.cast) if (key === part) return agent;
-    return undefined;
+    return id && this.cast.has(id) ? id : undefined;
   }
 
   name(id: string) {

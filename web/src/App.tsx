@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { subscribeEvents, useRotation } from "./api/client";
+import { getAgents, subscribeEvents, useRotation, type LabEvent } from "./api/client";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
+import { rotationRun } from "./sim/rotation";
 import { Chat, type Msg } from "./ui/Chat";
 import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
-import { FixturePanel, PersonPanel, RoomPanel, StudyPanel } from "./ui/Panels";
+import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
 import { TaskChips } from "./ui/TaskChips";
 import { Timeline } from "./ui/Timeline";
 import { WorkspaceTab } from "./ui/WorkspaceTab";
@@ -14,6 +15,9 @@ import { buildTour } from "./ui/tour";
 import { LabEngine, type Target } from "./world/engine";
 
 type View = "landing" | "leaving" | "lab";
+
+/** The run picker's value for your own rotation, as opposed to a recorded run. */
+const ROTATION = "rotation";
 
 export function App() {
   const [source, setSource] = useState<Source | null>(null);
@@ -23,6 +27,9 @@ export function App() {
   const [view, setView] = useState<View>("landing");
   const replay = useMemo(() => (run ? new Replay(run) : null), [run]);
   const rotation = useRotation(); // the one shared session, clock and event poll
+  const rotationEvents = useRef<LabEvent[]>([]);
+  rotationEvents.current = rotation.events;
+  const isRotation = run?.run === ROTATION;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<LabEngine | null>(null);
@@ -52,18 +59,28 @@ export function App() {
     Promise.all([listRuns(), loadDemo()])
       .then(([s, d]) => {
         setSource(s);
-        // The demo opens on its recorded 5 minutes when its run is available.
-        if (d && s.runs.some((r) => r.run === d.run)) {
-          setDemo(d);
-          setClipOn(true);
-          setRunName(d.run);
-        } else setRunName(s.runs[0]?.run ?? null);
+        // The floor opens on your rotation; the recorded runs stay in the run picker, and the
+        // demo button plays the recorded 5 minutes.
+        if (d && s.runs.some((r) => r.run === d.run)) setDemo(d);
       })
-      .catch(() => setError("Could not find any runs. Run python3 build_data.py in web/ first."));
+      .catch(() => setSource({ server: false, runs: [] }));
+    setRunName(ROTATION);
   }, []);
 
+  // A rotation floor holds the people the backend lists, matched by their ids.
   useEffect(() => {
-    if (!source || !runName) return;
+    if (runName !== ROTATION) return;
+    let stop = false;
+    getAgents()
+      .then((agents) => !stop && setRun(rotationRun(agents)))
+      .catch((e) => !stop && setError(`Could not load the lab's people: ${(e as Error).message}`));
+    return () => {
+      stop = true;
+    };
+  }, [runName]);
+
+  useEffect(() => {
+    if (!source || !runName || runName === ROTATION) return;
     let stop = false;
     loadRun(runName, source.server)
       .then((r) => !stop && setRun(r))
@@ -105,6 +122,7 @@ export function App() {
     });
     engine.setSpeed(speed);
     engineRef.current = engine;
+    for (const e of rotationEvents.current) engine.placeLive(e);
     if (import.meta.env.DEV) (window as unknown as { __lab: LabEngine }).__lab = engine;
     const live = source?.runs.find((r) => r.run === replay.run.run)?.live;
     if (tRef.current > 0) engine.seek(Math.min(tRef.current, replay.end));
@@ -115,7 +133,19 @@ export function App() {
   }, [replay]);
 
   // The rotation's events play on the floor as they arrive, with the animations it already has.
-  useEffect(() => subscribeEvents((events) => events.forEach((e) => engineRef.current?.playLive(e))), []);
+  // A batch that spans more than a few seconds is catching up on the past: only its last
+  // moments animate, the rest just puts people where they are.
+  useEffect(
+    () =>
+      subscribeEvents((events) => {
+        const last = events[events.length - 1]?.t ?? 0;
+        for (const e of events) {
+          if (e.t >= last - 4) engineRef.current?.playLive(e);
+          else engineRef.current?.placeLive(e);
+        }
+      }),
+    [],
+  );
 
   // Play only the clip while demo mode is on.
   useEffect(() => {
@@ -309,7 +339,11 @@ export function App() {
   const hhmm = (time: number) => (run ? fmtClock(run.started, time).replace(/:\d\d (?=[AP]M)/, " ") : "");
   const status = !run
     ? "Loading the lab…"
-    : clip
+    : isRotation
+      ? rotation.current
+        ? `Your rotation: ${rotation.current.title} is waiting`
+        : "Your rotation is ready"
+      : clip
       ? `Replaying ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of ${runShort}: ${hhmm(clip.start).replace(/ [AP]M$/, "")} to ${hhmm(Math.min(clip.end, R?.end ?? clip.end))} Pacific, ${labAgents} lab agents`
       : runInfo?.live
         ? `Live now: ${run.label}, ${labAgents} agents at work`
@@ -329,7 +363,7 @@ export function App() {
       )
     : [];
 
-  const nav = R ? { R, t, select, talk, filter: chooseStudy } : null;
+  const nav = R ? { R, t, select, talk, filter: chooseStudy, live: rotation.events } : null;
 
   return (
     <>
@@ -341,7 +375,7 @@ export function App() {
               <button className="brand" onClick={() => location.reload()} title="Back to the start">
                 <b>Lab Rotation</b>
               </button>
-              {source && source.runs.length > 1 && (
+              {source && source.runs.length > 0 && (
                 <>
                   <label className="sr-only" htmlFor="run">
                     Run
@@ -360,6 +394,7 @@ export function App() {
                       setRunName(e.target.value);
                     }}
                   >
+                    <option value={ROTATION}>Your rotation</option>
                     {source.runs.map((r) => (
                       <option key={r.run} value={r.run}>
                         {r.live ? "Live: " : ""}
@@ -369,7 +404,7 @@ export function App() {
                   </select>
                 </>
               )}
-              {rotation.tasks.length > 0 ? (
+              {isRotation ? (
                 <TaskChips rotation={rotation} onOpen={() => setPanel("workspace")} />
               ) : (
                 <nav className="chips" aria-label="Studies">
@@ -390,14 +425,16 @@ export function App() {
                   })}
                 </nav>
               )}
-              {demo && (
+              {demo && !isRotation && (
                 <button className="btn quiet hide-sm" onClick={toggleClip} title={clip ? "Play the whole run instead of the demo's 5 minutes" : "Play the demo's 5 minutes"}>
                   {clip ? "Whole run" : "Demo"}
                 </button>
               )}
-              <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
-                Tour
-              </button>
+              {!isRotation && (
+                <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
+                  Tour
+                </button>
+              )}
               <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
                 Workspace
               </button>
@@ -446,7 +483,7 @@ export function App() {
                   <Chat R={R} t={t} server={!!source?.server} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
                 ) : (
                   <div className="side-body">
-                    {selected?.type === "agent" && <PersonPanel id={selected.id} {...nav} />}
+                    {selected?.type === "agent" && (isRotation ? <RotationPersonPanel id={selected.id} {...nav} /> : <PersonPanel id={selected.id} {...nav} />)}
                     {selected?.type === "study" && <StudyPanel id={selected.id} {...nav} />}
                     {selected?.type === "room" && <RoomPanel id={selected.id} {...nav} />}
                     {selected?.type === "fixture" && <FixturePanel id={selected.id} {...nav} />}
@@ -475,17 +512,32 @@ export function App() {
               <div className="tour box" role="dialog" aria-label="Welcome">
                 <h2>Welcome to the lab floor</h2>
                 <p>
-                  {clip
-                    ? `You're watching ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of a real run, recorded event by event${clip.ends_with_results ? ", ending on its results" : ""}. Everyone here is an AI agent. People walk when information moves between departments. Click anyone to see what they're working on, or ask them.`
-                    : "Everyone here is an AI agent replaying a real run. People walk when information moves between departments. Click anyone to see what they're working on, or ask them."}
+                  {isRotation
+                    ? "This is your rotation. Dr. Vale will bring you a task; open the Workspace to dig into the data. Telem, Sam, Riley and Ines are all at work around you. Click anyone to see what they're doing and why."
+                    : clip
+                      ? `You're watching ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of a real run, recorded event by event${clip.ends_with_results ? ", ending on its results" : ""}. Everyone here is an AI agent. People walk when information moves between departments. Click anyone to see what they're working on, or ask them.`
+                      : "Everyone here is an AI agent replaying a real run. People walk when information moves between departments. Click anyone to see what they're working on, or ask them."}
                 </p>
                 <div className="row">
                   <button className="btn" onClick={() => setWelcome(false)}>
                     Explore on my own
                   </button>
-                  <button className="btn gold" onClick={() => goTour(0)} autoFocus>
-                    Take the 1-minute tour
-                  </button>
+                  {isRotation ? (
+                    <button
+                      className="btn gold"
+                      onClick={() => {
+                        setWelcome(false);
+                        setPanel("workspace");
+                      }}
+                      autoFocus
+                    >
+                      Open the Workspace
+                    </button>
+                  ) : (
+                    <button className="btn gold" onClick={() => goTour(0)} autoFocus>
+                      Take the 1-minute tour
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -554,25 +606,27 @@ export function App() {
               </div>
             )}
 
-            <Timeline
-              R={R}
-              t={t}
-              playing={playing}
-              speed={speed}
-              filter={filter}
-              lo={lo}
-              hi={hi}
-              onPlay={() => {
-                setHold(false);
-                engine()?.setPlaying(!engine()!.playing);
-              }}
-              onSeek={(x) => engine()?.seek(x)}
-              onSpeed={(s) => {
-                setSpeed(s);
-                engine()?.setSpeed(s);
-              }}
-              onNext={nextMoment}
-            />
+            {!isRotation && (
+              <Timeline
+                R={R}
+                t={t}
+                playing={playing}
+                speed={speed}
+                filter={filter}
+                lo={lo}
+                hi={hi}
+                onPlay={() => {
+                  setHold(false);
+                  engine()?.setPlaying(!engine()!.playing);
+                }}
+                onSeek={(x) => engine()?.seek(x)}
+                onSpeed={(s) => {
+                  setSpeed(s);
+                  engine()?.setSpeed(s);
+                }}
+                onNext={nextMoment}
+              />
+            )}
           </>
         )}
       </div>
