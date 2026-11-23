@@ -56,6 +56,44 @@ twice), and again above 0 on a second replicate. Every step goes to a hash-chain
 Scores go to `data/bench/results.csv` (split, dimension, system, macro_f1, n, record),
 which Bruin loads as `bench_results`.
 
+## Test set and CodaBench upload (manual)
+
+The test run is the single reader with the tuned guide (`single-opus-tuned`): it matches
+the panel on dev-B at about a third of the calls.
+
+    uv run python -m bench.run single --split test --guide bench/guide_tuned.md --name single-opus-tuned --jobs 4
+    uv run python -m bench.submit --name single-opus-tuned
+
+This writes one zip per track, each `predictions.json` inside `predictions.json.zip`: the
+test file with an `annotation` holding that track's label added to every tutor response
+(the organisers' sample format; `bench/submit.py` checks every file against the test file
+before zipping). Test rows go into `results.csv` with `macro_f1` blank.
+
+| track | CodaBench competition | file to upload |
+|---|---|---|
+| 1 Mistake Identification | https://www.codabench.org/competitions/7195/ | `data/bench/codabench/single-opus-tuned/track1_mistake_identification/predictions.json.zip` |
+| 2 Mistake Location | https://www.codabench.org/competitions/7200/ | `data/bench/codabench/single-opus-tuned/track2_mistake_location/predictions.json.zip` |
+| 3 Providing Guidance | https://www.codabench.org/competitions/7202/ | `data/bench/codabench/single-opus-tuned/track3_providing_guidance/predictions.json.zip` |
+| 4 Actionability | https://www.codabench.org/competitions/7203/ | `data/bench/codabench/single-opus-tuned/track4_actionability/predictions.json.zip` |
+
+Steps, per track:
+
+1. Sign in at codabench.org (one account submits for the whole team, per the organisers).
+2. Open the track's competition page and register for it if asked.
+3. Open "Get Started" and read the "Evaluation and Submission File" tab; check it still asks
+   for a zipped `predictions.json` in this shape.
+4. Look at the phases. If a phase is open today, go to "My Submissions", pick that phase,
+   upload the zip, and wait until the submission shows Finished. If every phase has ended,
+   the competition no longer scores uploads: stop there.
+5. Read exact macro-F1 from the results, then record all four at once:
+   `uv run python -m bench.run record-test --name single-opus-tuned --scores MI=..,ML=..,PG=..,AC=..`
+
+Whether it still accepts uploads is unknown. The official test phase closed on 24 April
+2025 and the final leaderboards are published (sig-edu.org/sharedtask/2025). The task
+allowed 5 submissions per team per track. CodaBench answers scripts with a bot check, so
+the phase list could not be read from here. Check step 4 by hand. If nothing is open, the
+honest claim stays the dev-B result.
+
 ## Results
 
 3-class macro-F1 (%), model `claude-opus-5-5` for every agent, first 50 dialogues of each

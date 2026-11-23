@@ -21,7 +21,7 @@ import sys
 import time
 
 from bench import data, judge, llm, score
-from bench.data import DIMENSIONS, ROOT
+from bench.data import DIMENSIONS, ROOT, SHORT
 
 PREDS = ROOT / "data" / "bench" / "preds"
 RESULTS = ROOT / "data" / "bench" / "results.csv"
@@ -121,9 +121,35 @@ def print_report(split: str, system: str, rep: dict, meta: dict | None = None) -
         print(f"  {extra}")
 
 
+def record_test(system: str, scores: str, path: pathlib.Path = RESULTS) -> int:
+    """Fill a system's test rows with the scores CodaBench returned (fractions or percents)."""
+    full = {SHORT[d]: d for d in DIMENSIONS}
+    got = {}
+    for part in filter(None, scores.split(",")):
+        k, _, v = part.partition("=")
+        if k.strip() not in full:
+            raise SystemExit(f"unknown track {k!r}; use MI, ML, PG, AC")
+        x = float(v)
+        got[full[k.strip()]] = round(100 * x if x <= 1 else x, 1)
+    rows = []
+    if path.is_file():
+        with path.open() as f:
+            rows = [r for r in csv.DictReader(f) if r["split"] == "test" and r["system"] == system]
+    if not rows:
+        raise SystemExit(f"no test rows for {system}; run it on --split test first")
+    for r in rows:
+        if r["dimension"] in got:
+            r["macro_f1"] = got[r["dimension"]]
+    upsert_results(rows, path)
+    print(f"recorded test scores for {system}: {got}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="bench.run")
-    ap.add_argument("mode", choices=("single", "panel", "score"))
+    ap.add_argument("mode", choices=("single", "panel", "score", "record-test"))
+    ap.add_argument("--scores", default=None,
+                    help="record-test: CodaBench exact macro-F1 per track, e.g. MI=0.70,ML=0.55,PG=0.60,AC=0.68")
     ap.add_argument("--split", default="dev-A", choices=("dev-A", "dev-B", "dev", "test"))
     ap.add_argument("--n", type=int, default=None, help="first n dialogues of the split")
     ap.add_argument("--model", default="opus")
@@ -136,6 +162,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-results", action="store_true", help="do not write results.csv")
     a = ap.parse_args(argv)
 
+    if a.mode == "record-test":
+        return record_test(a.name, a.scores or "")
     dialogues = data.select(a.split, a.n)
     split_label = a.split if not a.n else f"{a.split}"
     if a.mode == "score":

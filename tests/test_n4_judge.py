@@ -111,3 +111,13 @@ def test_command_has_no_tools_and_no_settings():
     assert cmd[cmd.index("--tools") + 1] == "" and "--strict-mcp-config" in cmd
     assert cmd[cmd.index("--setting-sources") + 1] == "" and "--no-session-persistence" in cmd
     assert cmd[cmd.index("--model") + 1] == "claude-opus-5-5"
+
+
+def test_record_test_fills_blank_scores(tmp_path):
+    path = tmp_path / "r.csv"
+    run.upsert_results([{"split": "test", "dimension": d, "system": "s", "macro_f1": "", "n": 1547,
+                         "record": run.RECORDS[d]} for d in data.DIMENSIONS], path)
+    run.record_test("s", "MI=0.705,AC=68.1", path)
+    rows = {r.split(",")[1]: r.split(",")[3] for r in path.read_text().splitlines()[1:]}
+    assert rows["Mistake_Identification"] == "70.5" and rows["Actionability"] == "68.1"
+    assert rows["Mistake_Location"] == ""
