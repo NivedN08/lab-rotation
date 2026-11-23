@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { demo as demoPlayer, getAgents, rotation as session, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, type LabEvent } from "./api/client";
 import { SampleBadge } from "./api/SampleBadge";
 import { useLateRotation } from "./ui/useLateRotation";
+import { Debrief } from "./ui/Debrief";
 import { MasteryChart, MuteButton, PanelRoom, SponsorStrip, Voice } from "./panels";
 import type { Run } from "./data/types";
-import { Replay } from "./sim/replay";
+import { isTimeUp, Replay, TIME_UP } from "./sim/replay";
 import { rotationRun } from "./sim/rotation";
 import { Chat, type Msg } from "./ui/Chat";
 import { Landing } from "./ui/Landing";
@@ -49,13 +50,27 @@ export function App() {
   // The verdict card opens when a task's verdict arrives, until you close it.
   const [closedVerdicts, setClosedVerdicts] = useState<string[]>([]);
   const verdictTask = [...rotation.events].reverse().find((e) => e.k === "verdict" && e.task)?.task ?? null;
+  // ---- Judge mode: a start card, a calm screen while playing, then a debrief one step at a time ----
+  const [judgeIntro, setJudgeIntro] = useState(false); // the start card is up; no session yet
+  const judgeFlow = judgeIntro || judge;
+  const verdictArrived = judge && !!verdictTask;
+  const [debrief, setDebrief] = useState<0 | 1 | 2 | null>(null);
+  const [debriefDone, setDebriefDone] = useState(false);
+  const judgePlaying = judgeFlow && !verdictArrived;
+  const calm = judgeFlow && !debriefDone; // no picker, demo, tour, strip or timeline until the debrief is over
+  const timeUp = judge && !verdictArrived && rotation.events.some(isTimeUp);
+
   // In the demo it waits for the end of the recording, the way the old clip ended on its results.
   // After the last task: every task has its result, or the session says it ended.
   const sessionOver =
     rotation.events.some((e) => e.k === "session.end") || (rotation.tasks.length > 0 && rotation.tasks.every((x) => rotation.results[x.id]));
   const [resultsHeld, setResultsHeld] = useState(false); // the visitor left the results card
   const resultsShown = isRotation && !judge && sessionOver && !resultsHeld && (demoOn ? demoEnded && !demoHeld : !!verdictTask && closedVerdicts.includes(verdictTask));
-  const verdictShown = demoOn ? demoEnded && !demoHeld && !sessionOver : !!verdictTask && !closedVerdicts.includes(verdictTask);
+  const verdictShown = demoOn
+    ? demoEnded && !demoHeld && !sessionOver
+    : judge
+      ? debrief === 0
+      : !!verdictTask && !closedVerdicts.includes(verdictTask);
   const verdictCard = isRotation && verdictTask && verdictShown ? verdictFromEvents(rotation.events, verdictTask) : null;
   const verdictTitle = (() => {
     const i = rotation.tasks.findIndex((x) => x.id === verdictTask);
@@ -297,19 +312,36 @@ export function App() {
     else if (verdictTask) setClosedVerdicts((c) => [...c, verdictTask]);
   };
 
-  /** Start a session in the chosen mode, then walk in. Judge mode goes straight to the Workspace. */
-  const begin = (m: "rotation" | "judge") => {
+  /** Start the session in the chosen mode. The session (and its clock) starts here. */
+  const startMode = (m: "rotation" | "judge") => {
     session.configure({ mode: m });
     setMode(m);
-    enter(m === "judge");
     if (m === "judge") setPanel("workspace");
   };
+  /** Your rotation: start, then walk in. */
+  const begin = () => {
+    startMode("rotation");
+    enter();
+  };
+  /** Judge mode: walk in to the start card; the clock starts on its Start button. */
+  const beginJudge = () => {
+    setJudgeIntro(true);
+    setFollowOn(false); // the camera holds still for the judge
+    if (engineRef.current) engineRef.current.followAction = false;
+    enter(true);
+  };
 
-  // Judge mode's debrief: when the verdict arrives, the Panel room opens beside the verdict card.
-  const judgeVerdict = judge && !!verdictTask;
+  // Judge mode's debrief: when the verdict arrives, everything else steps aside for the verdict card.
   useEffect(() => {
-    if (judgeVerdict) setPanel("room");
-  }, [judgeVerdict]);
+    if (!verdictArrived) return;
+    setDebrief(0);
+    setPanel(null);
+    setSelected(null);
+  }, [verdictArrived]);
+  const endDebrief = () => {
+    setDebrief(null);
+    setDebriefDone(true);
+  };
 
   const goTour = (i: number | null) => {
     const e = engine();
@@ -371,8 +403,9 @@ export function App() {
       } else if (ev.key === "ArrowRight") nextMoment(1);
       else if (ev.key === "ArrowLeft") nextMoment(-1);
       else if (ev.key === "Escape") {
-        // Esc closes what is on top first: the tour, then a verdict or results card, then the side panel.
+        // Esc closes what is on top first: the tour, the debrief, a verdict or results card, then the side panel.
         if (tour !== null) setTour(null);
+        else if (debrief !== null) endDebrief();
         else if (verdictCard && verdictTask) closeVerdict();
         else if (resultsShown) {
           if (demoOn) setDemoHeld(true);
@@ -421,7 +454,7 @@ export function App() {
 
   return (
     <>
-      <div className={`lab${isRotation ? " with-strip" : ""}`} inert={view !== "lab" ? true : undefined}>
+      <div className={`lab${isRotation && !calm ? " with-strip" : ""}`} inert={view !== "lab" ? true : undefined}>
         <canvas ref={canvasRef} className="floor" aria-label="The lab floor. Click a person to see what they are working on." />
         {R && view !== "landing" && (
           <>
@@ -429,6 +462,8 @@ export function App() {
               <button className="brand" onClick={() => location.reload()} title="Back to the start">
                 <b>Lab Rotation</b>
               </button>
+              {!calm && (
+                <>
               <label className="sr-only" htmlFor="run">
                 Run
               </label>
@@ -448,14 +483,16 @@ export function App() {
                 <option value={ROTATION}>Your rotation</option>
                 <option value={DEMO}>Demo</option>
               </select>
+                </>
+              )}
               {isRotation ? (
                 <>
-                  {judge && (
+                  {judgeFlow && (
                     <span className="chip" title="One task, four minutes, then the debrief">
                       Judge mode
                     </span>
                   )}
-                  <TaskChips rotation={judge ? { ...rotation, tasks: rotation.tasks.slice(0, 1) } : rotation} onOpen={() => setPanel("workspace")} />
+                  <TaskChips rotation={judge ? { ...rotation, tasks: rotation.tasks.slice(0, 1) } : rotation} onOpen={() => setPanel("workspace")} noTimer={judgeFlow} />
                 </>
               ) : (
                 <nav className="chips" aria-label="Studies">
@@ -476,7 +513,7 @@ export function App() {
                   })}
                 </nav>
               )}
-              {isRotation && (
+              {isRotation && !calm && (
                 <button
                   className="btn quiet hide-sm"
                   aria-pressed={demoOn}
@@ -486,9 +523,11 @@ export function App() {
                   {demoOn ? "Your rotation" : "Demo"}
                 </button>
               )}
-              <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
-                Tour
-              </button>
+              {!calm && (
+                <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
+                  Tour
+                </button>
+              )}
               {isRotation && (
                 <Safe name="The mute button">
                   <MuteButton />
@@ -603,7 +642,51 @@ export function App() {
               <StoryCaption scenes={scenes} index={sceneIdx} events={rotation.events} onBack={() => goScene(sceneIdx - 1)} onNext={() => goScene(sceneIdx + 1)} />
             )}
 
-            {tour === null && !welcome && !(story && demoOn) && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} />}
+            {tour === null && !welcome && !(story && demoOn) && !judgeIntro && debrief === null && !timeUp && (
+              <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} compact={judgePlaying} />
+            )}
+
+            {judgeIntro && (
+              <div className="tour box" role="dialog" aria-label="Judge mode">
+                <span className="count">Judge mode</span>
+                <h2>You have 4 minutes</h2>
+                <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "var(--mist)", lineHeight: 1.6 }}>
+                  <li>Read the claim.</li>
+                  <li>Check the data in the tables or with SQL.</li>
+                  <li>Decide whether the claim holds, fails or can't be told, pick the trap, cite the rows, and submit.</li>
+                </ol>
+                <div className="row">
+                  <button
+                    className="btn gold"
+                    onClick={() => {
+                      setJudgeIntro(false);
+                      startMode("judge"); // the session, and its clock, start now
+                    }}
+                    autoFocus
+                  >
+                    Start
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {timeUp && (
+              <div className="tour box" role="status" aria-label="Time's up">
+                <span className="count">Judge mode</span>
+                <h2>{TIME_UP}</h2>
+                <p>Ines is checking it against the answer key now.</p>
+              </div>
+            )}
+
+            {debrief !== null && debrief > 0 && (
+              <Debrief
+                step={debrief as 1 | 2}
+                events={rotation.events}
+                onBack={() => setDebrief((debrief - 1) as 0 | 1)}
+                onNext={() => setDebrief(2)}
+                onDone={endDebrief}
+              />
+            )}
 
             {welcome && tour === null && (
               <div className="tour box" role="dialog" aria-label="Welcome">
@@ -683,16 +766,8 @@ export function App() {
                     setPanel("room");
                   }}
                   onAgain={demoOn ? watchAgain : undefined}
-                >
-                  {judge && (
-                    <section className="section">
-                      <h3>Your mastery</h3>
-                      <Safe name="The mastery chart">
-                        <MasteryChart compact />
-                      </Safe>
-                    </section>
-                  )}
-                </VerdictCard>
+                  onNext={judge ? () => setDebrief(1) : undefined}
+                />
               </Safe>
             )}
 
@@ -749,7 +824,7 @@ export function App() {
               </div>
             )}
 
-            {isRotation && (
+            {isRotation && !calm && (
               <div className="strip-slot">
                 <Safe name="The sponsor strip">
                   <SponsorStrip />
@@ -757,35 +832,38 @@ export function App() {
               </div>
             )}
 
-            <Timeline
-              R={R}
-              t={t}
-              playing={demoOn ? demoState.playing : playing}
-              speed={demoOn ? demoState.speed : speed}
-              filter={filter}
-              lo={demoOn ? demoState.start : lo}
-              hi={demoOn ? demoState.end : hi}
-              onPlay={() => {
-                if (demoOn) {
-                  if (demoEnded) watchAgain();
-                  else demoPlayer.toggle();
-                } else engine()?.setPlaying(!engine()!.playing);
-              }}
-              onSeek={(x) => {
-                if (demoOn) {
-                  setDemoEnded(false);
-                  demoPlayer.seek(x);
-                } else engine()?.seek(x);
-              }}
-              onSpeed={(s) => {
-                if (demoOn) return demoPlayer.setSpeed(s);
-                setSpeed(s);
-                engine()?.setSpeed(s);
-              }}
-              onNext={nextMoment}
-              live={isRotation && !demoOn ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
-              session={isRotation}
-            />
+            {!calm && (
+              <Timeline
+                R={R}
+                t={t}
+                playing={demoOn ? demoState.playing : playing}
+                speed={demoOn ? demoState.speed : speed}
+                filter={filter}
+                lo={demoOn ? demoState.start : lo}
+                hi={demoOn ? demoState.end : hi}
+                onPlay={() => {
+                  if (demoOn) {
+                    if (demoEnded) watchAgain();
+                    else demoPlayer.toggle();
+                  } else engine()?.setPlaying(!engine()!.playing);
+                }}
+                onSeek={(x) => {
+                  if (demoOn) {
+                    setDemoEnded(false);
+                    demoPlayer.seek(x);
+                  } else engine()?.seek(x);
+                }}
+                onSpeed={(s) => {
+                  if (demoOn) return demoPlayer.setSpeed(s);
+                  setSpeed(s);
+                  engine()?.setSpeed(s);
+                }}
+                onNext={nextMoment}
+                live={isRotation && !demoOn ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
+                session={isRotation}
+                quiet={isRotation && !demoOn && !(sessionOver || verdictArrived)}
+              />
+            )}
           </>
         )}
       </div>
@@ -797,8 +875,8 @@ export function App() {
       )}
       {view !== "lab" && (
         <Landing
-          onEnter={() => begin("rotation")}
-          onJudge={() => begin("judge")}
+          onEnter={begin}
+          onJudge={beginJudge}
           onDemo={() => {
             startStory();
             enter(true);

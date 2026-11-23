@@ -3,6 +3,7 @@
 
 import type { LabEvent } from "../api/types";
 import type { AgentRec, Ev, Note, Role, Run, Search, Study } from "../data/types";
+import { trapLabel } from "../api/traps";
 import { headDept } from "../world/palette";
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -88,7 +89,7 @@ export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Ke
 const LOG_SKIP = new Set(["sponsor.call", "meter.update", "voice.line", "agent.move"]);
 
 /** Whether a why reads like a sentence for people, not a note for the machine. */
-function readsWell(why: string | undefined): boolean {
+export function readsWell(why: string | undefined): boolean {
   if (!why) return false;
   const words = why.trim().split(/\s+/);
   return words.length >= 4 && !/^(speak|play|log|emit|set|call|run|poll|send)\b/i.test(why.trim());
@@ -96,16 +97,47 @@ function readsWell(why: string | undefined): boolean {
 
 const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Scores arrive as 0 to 1; people read them as percentages. */
+export const plainNumbers = (s: string) => s.replace(/\b([01])\.(\d+)\b/g, (m) => `${Math.round(Number(m) * 100)}%`);
+
+/** A reason that leans on scores or internal gauges ("struggle meter 0.62") is not for people. */
+const technical = (why: string) => /\d\.\d|meter|bandit|epsilon|tier \d/i.test(why);
+
+/** The clock ran out and the server answered for the learner. */
+export function isTimeUp(e: LabEvent): boolean {
+  const d = (e.data ?? {}) as { verdict?: string };
+  return e.k === "learner.answer" && d.verdict === "cant_tell" && /time|clock|ran out|expired/i.test(e.why ?? "");
+}
+export const TIME_UP = "Time's up. The panel recorded 'can't tell'.";
+
+/** An event's line for people: our own words where the backend's carry raw scores. */
+export function plainLine(e: LabEvent): string {
+  const d = (e.data ?? {}) as { result?: string; trap?: string; from?: number; to?: number };
+  if (isTimeUp(e)) return TIME_UP;
+  if (e.k === "verdict") return d.result === "passed" ? "You passed this task." : "This task was not passed.";
+  if (e.k === "learner.query") {
+    const q = (e.data ?? {}) as { ok?: boolean; rowCount?: number };
+    return q.ok === false ? "Your query hit an error." : `You ran a query${typeof q.rowCount === "number" ? ` and got ${q.rowCount} row${q.rowCount === 1 ? "" : "s"}` : ""}.`;
+  }
+  if (e.k === "mastery.update" && typeof d.from === "number" && typeof d.to === "number") {
+    const name = trapLabel(d.trap ?? "").toLowerCase();
+    return `Your ${name} skill went ${d.to >= d.from ? "up" : "down"}, from ${Math.round(d.from * 100)}% to ${Math.round(d.to * 100)}%.`;
+  }
+  return plainNumbers(e.text ?? "");
+}
+
 export function describeLive(e: LabEvent, seen: LabEvent[]): { text: string; why: string; tone?: "bad" } | null {
   if (LOG_SKIP.has(e.k)) return null;
   if (whisperHidden(e, seen)) return { ...PRIVATE_NOTE };
   // The event's own line first. Without one, a system event says nothing; an agent's reason
   // stands in only when it reads like a sentence.
-  const text = e.text || (e.agent !== "system" && readsWell(e.why) ? sentence(e.why) : "");
+  const own = e.text || isTimeUp(e) || e.k === "verdict" ? plainLine(e) : "";
+  const goodWhy = readsWell(e.why) && !technical(e.why);
+  const text = own || (e.agent !== "system" && goodWhy ? sentence(e.why) : "");
   if (!text) return null;
   const d = (e.data ?? {}) as { passed?: boolean; result?: string };
   const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.result === "failed");
-  return { text, why: e.text && readsWell(e.why) ? sentence(e.why) : "", tone: bad ? "bad" : undefined };
+  return { text, why: own && goodWhy ? sentence(e.why) : "", tone: bad ? "bad" : undefined };
 }
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */

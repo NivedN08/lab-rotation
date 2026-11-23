@@ -6,9 +6,10 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "
 /**
  * Task 1, 2, 3 in the top bar, with the marks the backend sent and the time left on the current
  * task. Everything comes from the shared rotation state: the countdown counts from the same
- * start time the workspace timer uses, so the two always agree.
+ * start time the workspace timer uses, so the two always agree. `noTimer`: judge mode keeps one
+ * clock only, the workspace's.
  */
-export function TaskChips({ rotation, onOpen }: { rotation: RotationState; onOpen: () => void }) {
+export function TaskChips({ rotation, onOpen, noTimer = false }: { rotation: RotationState; onOpen: () => void; noTimer?: boolean }) {
   const { tasks, current, startedAt, results } = rotation;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -17,7 +18,9 @@ export function TaskChips({ rotation, onOpen }: { rotation: RotationState; onOpe
     return () => clearInterval(id);
   }, [current, startedAt]);
 
-  const left = current && startedAt ? Math.max(0, current.seconds - Math.floor((now - startedAt) / 1000)) : null;
+  // The clock stops once the task has its verdict.
+  const done = !!(current && results[current.id]);
+  const left = current && startedAt && !done && !noTimer ? Math.max(0, current.seconds - Math.floor((now - startedAt) / 1000)) : null;
 
   return (
     <nav className="chips" aria-label="Tasks">

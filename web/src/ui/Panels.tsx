@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LabEvent } from "../api/types";
 import type { Note, Role } from "../data/types";
-import { fmtElapsed, MODEL_NAME, PRIVATE_NOTE, ROLE_READS, roleLabel, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
+import { fmtElapsed, MODEL_NAME, plainLine, PRIVATE_NOTE, ROLE_READS, roleLabel, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
@@ -149,7 +149,7 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
       </div>
       <p className="now-line">
         <small>{latest ? "Latest" : "Now"}</small>
-        {latest?.text ?? "At their desk."}
+        {latest ? plainLine(latest) : "At their desk."}
       </p>
       {(a.reads ?? ROLE_READS[a.role]) && (
         <p className="reads">
@@ -175,7 +175,7 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
         {!mine.length && <p className="empty">Nothing yet.</p>}
         {mine.map((e) => (
           <div className="item" key={e.seq}>
-            <div className="label">{e.text ?? plainKind(e)}</div>
+            <div className="label">{e.text ? plainLine(e) : plainKind(e)}</div>
             <div className="meta">{fmtElapsed(e.t)} into the session</div>
             <span className="why">Why: {e.why}</span>
           </div>

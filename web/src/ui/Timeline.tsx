@@ -31,9 +31,11 @@ type Props = {
   live?: { on: boolean; go: () => void };
   /** A rotation (yours or the demo): time is counted into the session, not the run. */
   session?: boolean;
+  /** A live session still under way: just the time so far; the full timeline comes once it ends. */
+  quiet?: boolean;
 };
 
-export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext, live, session }: Props) {
+export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext, live, session, quiet }: Props) {
   const into = session ? "into the session" : "into the run";
   const ref = useRef<HTMLDivElement>(null);
   const span = Math.max(1, hi - lo);
@@ -43,8 +45,8 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
     onSeek(lo + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * span);
   };
   const moments = R.moments.filter((m) => (!filter || !m.study || m.study === filter) && m.t >= lo && m.t <= hi);
-  // A live rotation starts quiet: just the time so far, until there is a moment to go back to.
-  if (live && (!moments.length || hi - lo < 30)) {
+  // A live session shows just the time so far; the full timeline comes once it ends, for replaying it.
+  if (quiet) {
     return (
       <div className="timeline box" role="group" aria-label="Session time">
         <div className="clock">

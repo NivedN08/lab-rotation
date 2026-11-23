@@ -23,7 +23,7 @@ export function Landing({ onEnter, onJudge, onDemo, ready, status, live, leaving
           <br />
           Rotation
         </h1>
-        <p>A research lab run by AI agents. Two teams analyse each study without seeing each other's work, so when they agree, it means something.</p>
+        <p>Your first week as a data analyst. A panel of AI scientists hands you a dataset that may hide a trap, watches how you work, and grades you against a real answer key.</p>
         <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
           Start your rotation
         </button>

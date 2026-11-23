@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { trapLabel } from "../api/traps";
 import type { LabEvent, Verdict } from "../api/types";
+import { plainNumbers } from "../sim/replay";
 
 // The verdict card shows what the backend sent and nothing else (contract/events.md); it never
 // grades or decides anything.
@@ -25,6 +26,8 @@ export type VerdictCardProps = {
   onPanelRoom?: () => void;
   /** The demo's end: play it again. */
   onAgain?: () => void;
+  /** Judge mode's debrief: the next step instead of closing. */
+  onNext?: () => void;
 };
 
 type CardData = Pick<VerdictCardProps, "verdict" | "yours" | "riley" | "checks">;
@@ -48,7 +51,7 @@ export function verdictFromEvents(events: LabEvent[], taskId: string): CardData 
       key: v.correctVerdict ?? "cant_tell",
       trap: v.correctTrap ?? "none",
       sealed: !!v.ledger || mine.some((e) => e.k === "ledger.seal"),
-      feedback: v.text,
+      feedback: v.text ? plainNumbers(v.text) : undefined,
     },
     yours: { verdict: answer?.verdict ?? "cant_tell", trap: answer?.trap ?? "none", evidence: [...new Set(cited)], words: answer?.note || undefined },
     riley: rival?.verdict ? { verdict: rival.verdict, trap: rival.trap ?? "none" } : null,
@@ -69,7 +72,7 @@ function Mark({ ok, yes = "passed", no = "failed" }: { ok: boolean; yes?: string
   return <span className={`mark ${ok ? "pass" : "fail"}`}>{ok ? yes : no}</span>;
 }
 
-export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children, onClose, onPanelRoom, onAgain }: VerdictCardProps) {
+export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children, onClose, onPanelRoom, onAgain, onNext }: VerdictCardProps) {
   const failing = checks.filter((c) => !c.passed);
   return (
     <div className="tour box verdict" role="dialog" aria-label={`Verdict for ${taskTitle}`}>
@@ -138,24 +141,32 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
       {children}
 
       <div className="row">
-        {onPanelRoom && (
-          <button className="btn" onClick={onPanelRoom}>
-            Open the panel room
+        {onNext ? (
+          <button className="btn gold" onClick={onNext} autoFocus>
+            Next
           </button>
-        )}
-        {onAgain ? (
-          <>
-            <button className="btn" onClick={onClose}>
-              Explore the lab
-            </button>
-            <button className="btn gold" onClick={onAgain} autoFocus>
-              Watch again
-            </button>
-          </>
         ) : (
-          <button className="btn gold" onClick={onClose} autoFocus>
-            Back to the lab
-          </button>
+          <>
+            {onPanelRoom && (
+              <button className="btn" onClick={onPanelRoom}>
+                Open the panel room
+              </button>
+            )}
+            {onAgain ? (
+              <>
+                <button className="btn" onClick={onClose}>
+                  Explore the lab
+                </button>
+                <button className="btn gold" onClick={onAgain} autoFocus>
+                  Watch again
+                </button>
+              </>
+            ) : (
+              <button className="btn gold" onClick={onClose} autoFocus>
+                Back to the lab
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

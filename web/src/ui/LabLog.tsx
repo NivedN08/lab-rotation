@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { LabEvent } from "../api/types";
 import { describeLive, fmtElapsed, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 
 /** The last few things that happened, in plain words. Click one to go to whoever did it. */
-export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: number; filter: string | null; select: (t: Target) => void; live?: LabEvent[] }) {
+/** `compact` (judge mode, while playing): only the latest line, kept short; click it for the why. */
+export function LabLog({ R, t, filter, select, live = [], compact = false }: { R: Replay; t: number; filter: string | null; select: (t: Target) => void; live?: LabEvent[]; compact?: boolean }) {
+  const [openWhy, setOpenWhy] = useState<number | null>(null);
   // During a rotation the log shows the session's events, in the backend's own words.
   const liveLines = useMemo(() => {
     const out: { e: LabEvent; text: string; why: string; tone?: string }[] = [];
@@ -22,6 +24,22 @@ export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: numb
         .filter((x) => x.d && !["memory.write"].includes(x.e.k)),
     [R],
   );
+  if (liveLines.length && compact) {
+    const { e, text, why, tone } = liveLines[liveLines.length - 1];
+    const short = text.length > 90 ? `${text.slice(0, 88).replace(/\s+\S*$/, "")}…` : text;
+    const open = openWhy === e.seq;
+    return (
+      <div className="log" aria-label="Lab log">
+        <button className={tone ?? ""} onClick={() => setOpenWhy(open ? null : e.seq)} aria-expanded={open} title={why ? "Why?" : undefined}>
+          <time>{fmtElapsed(e.t)}</time>
+          <span>
+            {open ? text : short}
+            {open && why && <small className="why">Why: {why}</small>}
+          </span>
+        </button>
+      </div>
+    );
+  }
   if (liveLines.length) {
     return (
       <div className="log" aria-label="Lab log">

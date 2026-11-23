@@ -1,4 +1,5 @@
 import type { LabEvent } from "../api/types";
+import { plainLine, plainNumbers } from "../sim/replay";
 
 // The demo as a guided story: one scene at a time, following the task as the recording has it.
 // Scene starts come from the recording's own events; the words under each come from those events
@@ -70,14 +71,14 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
       <p>{s.intro}</p>
       {key && (
         <p style={{ marginTop: 6 }}>
-          {key.text && key.k !== "learner.query" ? <span style={{ color: "var(--snow)" }}>{key.text} </span> : null}
-          <span className="why">Why: {key.why}</span>
+          {key.text && key.k !== "learner.query" ? <span style={{ color: "var(--snow)" }}>{plainLine(key)} </span> : null}
+          {!/\d\.\d|meter|bandit/i.test(key.why) && <span className="why">Why: {key.why}</span>}
         </p>
       )}
       {realCase && (
         <p style={{ marginTop: 6 }}>
           <span style={{ color: "var(--snow)" }}>Telem brings a real case of this mistake. </span>
-          <span className="why">{realCase.text}</span>
+          <span className="why">{plainNumbers(realCase.text ?? "")}</span>
         </p>
       )}
       <div className="row">
