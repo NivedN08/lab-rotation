@@ -7,10 +7,7 @@ default_connections:
 variables:
     stage:
         type: string
-        default: "data/bruin/task"
-    sessions:
+        default: "bruin/sample/task"
+    learn:
         type: string
-        default: "data/sessions"
-    bench:
-        type: string
-        default: "data/bench"
+        default: "bruin/sample/learn"

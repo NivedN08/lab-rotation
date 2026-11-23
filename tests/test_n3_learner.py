@@ -103,3 +103,20 @@ def test_rules_fallback():
     assert p["fallback"] is True and p["bandit"] is None
     assert p["skill"] == "unit_mismatch"  # lowest mastery, fewest attempts, fixed order
     assert "fallback" in p["reason"]
+
+
+def test_refresh_flattens_the_mock_session(tmp_path):
+    from pathlib import Path
+
+    from lab.learner import refresh
+    root = Path(__file__).resolve().parent.parent
+    out = refresh.stage(sessions=root / "contract", bench=tmp_path / "missing.csv", dest=tmp_path / "learn")
+    assert out == {"sessions": 1, "events": 68, "bench": 0}
+    import csv
+    rows = list(csv.DictReader(open(tmp_path / "learn" / "session_events.csv")))
+    end = [r for r in rows if r["k"] == "task.end"]
+    assert len(end) == 1 and end[0]["trap"] == "unit_mismatch" and end[0]["learner"] == "guest"
+    assert (tmp_path / "learn" / "bench.csv").read_text().startswith("split,dimension,system")
+    # the batch replay (Bruin's bkt_mastery) gives the same mastery as the live model
+    st = bkt.trace([{"skill": r["trap"], "correct": float(r["score"]) >= bkt.CORRECT_SCORE} for r in end])
+    assert round(st["unit_mismatch"]["score"], 2) == 0.61
