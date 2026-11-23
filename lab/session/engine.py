@@ -28,7 +28,7 @@ import secrets
 import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait as wait_all
 from dataclasses import dataclass, field
 
 from lab import ledger
@@ -213,6 +213,7 @@ class Session:
         self.thread: threading.Thread | None = None
         self.worker_lock = threading.Lock()   # the worker's exit and a restart never cross
         self.save_lock = threading.Lock()
+        self.voices: list = []   # pending voice.line jobs; session.end waits a little for them
 
     @property
     def sponsors(self) -> sources.Sponsors:
@@ -257,7 +258,7 @@ class Session:
     def say(self, agent: str, text: str, why: str, to: str | None = "learner", task: str | None = None,
             data: dict | None = None) -> dict:
         e = self.emit("agent.say", agent, why, to=to, text=text, task=task, data=data)
-        VOICE_POOL.submit(self._voice, agent, text, e["seq"], task)
+        self.voices.append(VOICE_POOL.submit(self._voice, agent, text, e["seq"], task))
         return e
 
     def _voice(self, agent: str, text: str, line_of: int, task: str | None) -> None:
@@ -699,10 +700,9 @@ class Session:
                      "score": x.grade["score"], "result": x.grade["result"]} for x in self.slots if x.grade]
             sources.teamily_post(self.id, done, self.mastery_now(), self.learner, self.on_call)
         refresh = speaker.POOL.submit(sources.learner_refresh, self.on_call)   # N3's Bruin learner tables
-        try:   # wait a little so session.end stays last; a slow refresh reports when it is done
-            refresh.result(timeout=20)
-        except Exception:
-            pass
+        # Wait a little so session.end stays last: the refresh, and the last lines' voices (a slow
+        # one still reports when it is done).
+        wait_all([refresh, *self.voices], timeout=20)
         self.finished = True
         self.emit("session.end", "system", "judge mode is one task" if self.mode == "judge"
                   else "all three rotation tasks are graded", data={"tasks": len(self.slots), "totalScore": total})
