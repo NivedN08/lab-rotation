@@ -859,7 +859,7 @@ export class LabEngine {
     const moving = this.ext ? this.ext.playing : this.playing;
     if (!this.replay.cast.size || !moving) return;
     for (const a of this.actors.values()) {
-      if (!a.visible || !a.atHome || a.bubble || a.steps.length || a.path.length) continue;
+      if (!a.visible || a.bubble || a.steps.length || a.path.length) continue;
       const due = this.nextIdle.get(a.id);
       if (due === undefined) {
         this.nextIdle.set(a.id, this.real + 2 + (hashOf(a.id) % 50) / 10);
@@ -881,6 +881,9 @@ export class LabEngine {
       const a = this.actors.get(this.replay.liveAgent(id) ?? "");
       return !a ? null : a === who ? who.home : this.visitSpot(a);
     };
+    // A person's own station is their seat: Dr. Vale's office, Ines's Bruin terminal.
+    const OWN: Record<string, string> = { vale: "vale_office", ines: "terminal", learner: "learner_desk", riley: "riley_desk" };
+    if (OWN[who.id] === to) return who.home;
     switch (to) {
       // The places in contract/events.md.
       case "door":
