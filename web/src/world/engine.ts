@@ -3,6 +3,7 @@
 // travel the corridors; answers meet only at the hatch in the blind wall. Every movement is
 // started by a real event in the run's log.
 
+import type { LabEvent } from "../api/types";
 import type { Ev, Role } from "../data/types";
 import type { Replay } from "../sim/replay";
 import { bubble, type Icon } from "./icons";
@@ -81,6 +82,12 @@ export class LabEngine {
   private hatchFlash: { until: number; agree: boolean; study: string } | null = null;
   private exaFlash = 0;
   private drawerFlash = new Map<string, number>();
+  /** Cast members a live event has brought onto the floor; they stay visible through seeks. */
+  private liveSeen = new Set<string>();
+  /** Each side's latest answer at the hatch, to flash it once both are in. */
+  private liveAnswers: { learner?: string; rival?: string } = {};
+  /** Live animations keep moving until this real time, even while the replay is paused. */
+  private liveUntil = 0;
   private roomLight = new Map<RoomId, number>();
   private elevatorNext = 0;
   private visitorSlot = 0;
@@ -167,7 +174,7 @@ export class LabEngine {
     while (this.evIndex < this.events.length && this.replay.timeOf(this.events[this.evIndex]) <= this.t) this.evIndex++;
     for (const a of this.actors.values()) {
       const st = this.replay.status(a.id, this.t);
-      a.visible = a.role === "director" || st.present;
+      a.visible = a.role === "director" || st.present || this.liveSeen.has(a.id);
       a.x = a.home.px;
       a.y = a.home.py;
       a.dir = 0;
@@ -446,6 +453,119 @@ export class LabEngine {
     }
   }
 
+  // ---- Live rotation events -------------------------------------------------------------------
+  // Each event from the backend plays an animation the floor already has. Nothing is decided
+  // here: the floor only shows what the event says.
+
+  /** The cast member a backend agent id stands for, brought onto the floor if needed. */
+  private liveActor(id: string | undefined): Actor | undefined {
+    const agent = this.replay.liveAgent(id);
+    const a = agent ? this.actors.get(agent) : undefined;
+    if (a && !a.visible) {
+      a.visible = true;
+      a.x = a.home.px;
+      a.y = a.home.py;
+      a.atHome = true;
+    }
+    if (a) this.liveSeen.add(a.id);
+    return a;
+  }
+
+  private visit(a: Actor, target: Actor, icon: Icon, carry: Carry) {
+    this.plan(a, [{ go: this.visitSpot(target), face: 1 }, { wait: 2.2, icon, face: 1, carry: carry ?? undefined }, { go: a.home, face: 0 }], carry);
+  }
+
+  playLive(e: LabEvent) {
+    this.liveUntil = this.real + 20;
+    const d = (e.data ?? {}) as Record<string, unknown>;
+    const who = this.liveActor((e as { a?: string }).a);
+    const to = this.liveActor((e as { to?: string }).to);
+    const you = this.liveActor("learner");
+    const color = who ? colorOf(who.role, who.id) : DEPT.director;
+    switch (e.k) {
+      case "session.start":
+        if (you) this.arrive(you);
+        break;
+      case "task.picked":
+        if (you) this.directorVisit(you, "paper");
+        break;
+      case "search":
+        this.exaFlash = this.real + 1.2;
+        if (!who) break;
+        this.say(who, "search", DEPT.library, 1.6);
+        if (you) this.visit(who, you, "scroll", "scroll");
+        break;
+      case "monitor.hit":
+        if (who) this.say(who, "alert", DEPT.library, 3);
+        break;
+      case "learner.query":
+        if (who) this.say(who, "write", color, 1.8);
+        break;
+      case "learner.evidence":
+        if (who) this.say(who, "paper", color, 1.8);
+        break;
+      case "agent.say":
+        if (!who) break;
+        if (you && who !== you && who.role !== "director") this.visit(who, you, "question", null);
+        else if (you && who.role === "director") this.directorVisit(you, "question");
+        else this.say(who, "question", color, 2.5);
+        break;
+      case "panel.whisper":
+      case "appeal.open":
+      case "appeal.message": {
+        const from = who ?? you;
+        const dest = to ?? this.liveActor("vale");
+        if (from && dest) this.fly(this.spotOf(from), this.deskSpot(dest), colorOf(from.role, from.id), "envelope", () => this.say(dest, "paper", colorOf(from.role, from.id), 1.6));
+        break;
+      }
+      case "learner.answer":
+      case "rival.answer": {
+        if (!who) break;
+        const mine = e.k === "learner.answer";
+        this.say(who, "paper", color, 1.8);
+        this.fly(this.deskSpot(who), mine ? FIX.hatchA : FIX.hatchB, color, "answer");
+        this.liveAnswers[mine ? "learner" : "rival"] = `${d.verdict}|${d.trap}`;
+        const { learner, rival } = this.liveAnswers;
+        if (learner && rival) {
+          // Both answers are at the hatch: it shows whether the two say the same thing.
+          const agree = learner === rival;
+          this.hatchFlash = { until: this.real + 4, agree, study: "" };
+          this.floater(FIX.hatch.px, FIX.hatch.py - 26, agree ? "answers match" : "answers differ", agree ? C.green : C.red, 4);
+          this.liveAnswers = {};
+        }
+        break;
+      }
+      case "check.result": {
+        if (who) this.say(who, "check", DEPT.referee, 2.5);
+        const name = String(d.check ?? "check");
+        const passed = d.passed !== false;
+        const at = who ?? null;
+        this.floater(at ? at.home.px : FIX.refTable.px, (at ? at.home.py : FIX.refTable.py) - 30, `${name} check ${passed ? "passed" : "failed"}`, passed ? C.green : C.red, 4);
+        break;
+      }
+      case "verdict":
+      case "appeal.ruling": {
+        if (who) this.say(who, "gavel", DEPT.referee, 3.5);
+        const ok = e.k === "verdict" ? d.correct === true : d.upheld === true;
+        const text = e.k === "verdict" ? (ok ? "you found the trap" : "trap missed") : ok ? "appeal upheld" : "verdict stands";
+        this.floater(FIX.refTable.px, FIX.refTable.py - 6, text, ok ? C.green : C.red, 4.5);
+        break;
+      }
+      case "mastery.update": {
+        const from = who ?? you;
+        if (!from) break;
+        const cab = CABINETS[0];
+        const dest: Spot = { tx: cab.x, ty: cab.y + 2, px: cab.x * TILE + TILE, py: cab.y * TILE + 6 };
+        this.fly(this.deskSpot(from), dest, C.lamp, "note", () => this.drawerFlash.set("0-1", this.real + 1.5));
+        break;
+      }
+      case "voice.line":
+        if (who && !who.bubble) this.say(who, "question", color, 2);
+        break;
+      // sponsor.call: counted by the sponsor strip, no floor animation.
+    }
+  }
+
   private throttle(key: string, runSeconds: number) {
     const last = this.lastFlyAt.get(key) ?? -1e9;
     if (this.t - last < runSeconds) return false;
@@ -545,7 +665,8 @@ export class LabEngine {
   // ---- Movement -------------------------------------------------------------------------------
 
   private walkFactor() {
-    return this.playing ? Math.max(0.7, Math.min(3, this.speed / 10)) : 0;
+    if (this.playing) return Math.max(0.7, Math.min(3, this.speed / 10));
+    return this.real < this.liveUntil ? 1 : 0;
   }
 
   private update(dt: number) {
@@ -601,7 +722,7 @@ export class LabEngine {
       }
     }
     // Notes in flight.
-    const fly = this.playing ? 1 : 0.0;
+    const fly = this.playing || this.real < this.liveUntil ? 1 : 0.0;
     for (const fl of this.flyers) fl.d += fl.speed * dt * Math.max(fly, 0) * Math.max(0.8, Math.min(2.5, this.speed / 12));
     const arrived = this.flyers.filter((fl) => fl.d >= fl.len);
     this.flyers = this.flyers.filter((fl) => fl.d < fl.len);

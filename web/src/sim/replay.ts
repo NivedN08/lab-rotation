@@ -1,6 +1,7 @@
 // What the lab looks like at any moment of a run: who is in, what they are doing, where each
 // study stands. Everything is derived from the run's events, so scrubbing is exact.
 
+import type { LabEvent } from "../api/types";
 import type { AgentRec, Ev, Note, Role, Run, Search, Study } from "../data/types";
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -52,6 +53,17 @@ const CAST: Record<CastKey, string> = {
   "team-a": "You",
   "team-b": "Riley",
 };
+
+/** Backend agent ids in the rotation's events, and the cast part each one plays. */
+const LIVE_CAST: Record<string, CastKey> = { learner: "team-a", vale: "director", sam: "head-team-a", telem: "library", ines: "referee", riley: "team-b" };
+
+/** A lab log line for a live event: the backend's own words, nothing added. */
+export function describeLive(e: LabEvent): { text: string; tone?: "bad" } | null {
+  if (!e.text || e.k === "sponsor.call") return null;
+  const d = (e.data ?? {}) as { passed?: boolean; correct?: boolean };
+  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.correct === false);
+  return { text: e.text, tone: bad ? "bad" : undefined };
+}
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */
 const NAMES = [
@@ -146,6 +158,15 @@ export class Replay {
     this.end = Math.min(run.duration, last + 20);
     if (!run.finished) this.end = run.duration;
     this.buildMoments();
+  }
+
+  /** The floor agent behind a backend agent id (learner, vale, ines, sam, telem, riley), if this run has one. */
+  liveAgent(id: string | undefined): string | undefined {
+    if (!id) return undefined;
+    const part = LIVE_CAST[id];
+    if (!part) return undefined;
+    for (const [agent, key] of this.cast) if (key === part) return agent;
+    return undefined;
   }
 
   name(id: string) {

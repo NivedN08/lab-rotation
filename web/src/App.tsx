@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRotation } from "./api/client";
+import { subscribeEvents, useRotation } from "./api/client";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
@@ -113,6 +113,9 @@ export function App() {
     return () => engine.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replay]);
+
+  // The rotation's events play on the floor as they arrive, with the animations it already has.
+  useEffect(() => subscribeEvents((events) => events.forEach((e) => engineRef.current?.playLive(e))), []);
 
   // Play only the clip while demo mode is on.
   useEffect(() => {
@@ -466,7 +469,7 @@ export function App() {
               </button>
             </div>
 
-            {tour === null && !welcome && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} />}
+            {tour === null && !welcome && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} />}
 
             {welcome && tour === null && (
               <div className="tour box" role="dialog" aria-label="Welcome">
