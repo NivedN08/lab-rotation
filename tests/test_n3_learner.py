@@ -206,3 +206,16 @@ def test_update_and_learners_dir_env(tmp_path, monkeypatch):
     assert u == {"trap": "unit_mismatch", "from": 0.15, "to": 0.61, "correct": True, "attempts": 1}
     assert (tmp_path / "elsewhere" / "jo.json").exists()
     assert {t["trap"]: t["attempts"] for t in L.mastery("jo")["traps"]}["unit_mismatch"] == 1
+
+
+def test_refresh_reads_lab_sessions_dir(tmp_path, monkeypatch):
+    import shutil
+    from pathlib import Path
+
+    from lab.learner import refresh
+    d = tmp_path / "sess"
+    d.mkdir()
+    shutil.copy(Path(__file__).resolve().parent.parent / "contract" / "mock_session.jsonl", d / "s1.jsonl")
+    monkeypatch.setenv("LAB_SESSIONS_DIR", str(d))
+    out = refresh.stage(bench=tmp_path / "none.csv", dest=tmp_path / "learn")
+    assert out["sessions"] == 1 and out["events"] > 0
