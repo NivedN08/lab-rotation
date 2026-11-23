@@ -102,3 +102,14 @@ def test_table_one_row_per_split_and_system():
             for d in data.DIMENSIONS]
     out = table.table(rows).splitlines()
     assert out[2] == "| dev-B | s | 50.0 | 50.0 | 50.0 | 50.0 | 8 |" and out[-1].startswith("| test | record")
+
+
+def test_bootstrap_zero_for_same_preds_and_sign_for_better():
+    from bench import compare
+    ds = data.parse(TOY)
+    gold = {r.key: dict(r.labels) for d in ds for r in d.replies}
+    worse = {k: {**v, "Mistake_Identification": "Yes"} for k, v in gold.items()}
+    same = compare.bootstrap(ds, gold, gold, reps=50)
+    assert all(v == (0.0, 0.0, 0.0) for v in same.values())
+    better = compare.bootstrap(ds, worse, gold, reps=50)
+    assert better["MI"][0] > 0 and better["MI"][1] > 0 and better["ML"] == (0.0, 0.0, 0.0)

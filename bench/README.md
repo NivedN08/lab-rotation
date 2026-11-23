@@ -58,4 +58,48 @@ which Bruin loads as `bench_results`.
 
 ## Results
 
-See the table below (filled in from `data/bench/results.csv` as runs finish).
+3-class macro-F1 (%), model `claude-opus-5-5` for every agent, first 50 dialogues of each
+half (`uv run python -m bench.table`). dev-A rows with the tuned guide are on the very
+dialogues it was tuned on, so they flatter it; **dev-B is the held-out check**. The records
+are test-set scores from other teams' systems; our dev numbers are not test numbers.
+
+| split | system | MI | ML | PG | AC | replies |
+|---|---|---|---|---|---|---|
+| dev-A | single, starting guide | 62.6 | 55.7 | 57.9 | 61.4 | 412 |
+| dev-A | panel, starting guide | 63.8 | 58.2 | 57.9 | 64.5 | 412 |
+| dev-A (tuning set) | single, tuned guide | 71.8 | 64.5 | 64.8 | 74.7 | 412 |
+| **dev-B** | single, starting guide | 58.2 | 57.9 | 56.6 | 59.9 | 411 |
+| **dev-B** | single, tuned guide | 66.4 | 57.1 | 59.7 | 69.8 | 411 |
+| **dev-B** | panel, starting guide | 59.0 | 58.0 | 56.3 | 60.3 | 411 |
+| **dev-B** | panel, tuned guide | 66.5 | 57.3 | 60.6 | 70.6 | 411 |
+| test | record (best team per track) | 71.8 | 59.8 | 58.3 | 70.9 | 1,547 |
+
+Paired differences on dev-B with a 95% bootstrap interval over dialogues
+(`uv run python -m bench.compare --split dev-B --a <system> --b <system>`):
+
+| comparison (dev-B) | MI | ML | PG | AC | mean of 4 |
+|---|---|---|---|---|---|
+| tuned minus starting guide (single) | +8.2 [+3.1, +13.9] | -0.8 [-7.4, +5.1] | +3.1 [-4.0, +10.0] | +9.9 [+4.3, +15.4] | **+5.1 [+2.1, +8.0]** |
+| panel minus single (tuned guide) | +0.1 [-2.0, +2.6] | +0.2 [-2.8, +3.6] | +0.9 [-0.5, +2.4] | +0.7 [-1.3, +2.8] | +0.5 [-0.8, +1.8] |
+| panel minus single (starting guide) | +0.8 [-1.7, +3.3] | +0.1 [-2.6, +2.8] | -0.3 [-2.5, +1.9] | +0.4 [-1.4, +2.0] | +0.2 [-1.0, +1.4] |
+
+What it shows:
+
+- **Tuning transfers.** The tuned guide gains 5.1 points of mean macro-F1 on held-out
+  dev-B (interval clear of zero), mostly on MI (+8.2) and AC (+9.9). On dev-A's tuning
+  dialogues it gained 9.5, so about half the tuning-set gain carries over. ML does not
+  improve on dev-B (-0.8, interval spans zero): the ML rewrite fit dev-A only.
+- **The panel buys almost nothing here.** Two readers and a referee are within a point of
+  one reader (+0.5, interval spans zero) at about 2.9 times the calls. The readers agree on
+  88-90% of labels, so the referee rarely changes the outcome.
+- **Against the records** (test set, not comparable): on dev-B the tuned guide reaches
+  66.4 / 57.3 / 60.6 / 70.6 (panel). PG is above the PG record of 58.3; MI, ML and AC are
+  below theirs. A test-set run would be needed before claiming any of this on test.
+- The starting guide's main error was answering "To some extent" where annotators said
+  "Yes" (on dev-A MI, 102 of 309 human Yes); the seed move from the annotator guideline
+  fixed most of that.
+
+Tuning run (`bench/tune_ledger.jsonl`): starting guide 59.4 on dev-A (A/A noise 0.22, so
+T = 1.0). Kept: the seed move (+6.5, replicate +5.6), an MI + ML rewrite (+1.3, +0.4), a
+PG rewrite (+1.75, +2.2). Rejected: a second "How to decide" rewrite (+0.07) and a PG + AC
+bundle (-2.1). Five moves, about 450 calls.
