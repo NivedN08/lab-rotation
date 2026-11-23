@@ -20,7 +20,8 @@ export type TaskInfo = {
   seconds: number;
 };
 
-export type SessionInfo = { sessionId: string; tasks: TaskInfo[] };
+/** Tasks arrive one at a time. `task` is the current one, or null when all are done. */
+export type SessionInfo = { sessionId: string; task: TaskInfo | null };
 
 /** One thing from the event stream. The floor and the workspace both read these. */
 export type LabEvent = {
@@ -47,6 +48,8 @@ export type EvidenceRef = {
   value?: Cell;
   label: string;
 };
+
+export type CurrentTask = { task: TaskInfo | null };
 
 export type Verdict = "holds" | "fails" | "cant_tell";
 

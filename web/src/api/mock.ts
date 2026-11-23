@@ -1,7 +1,7 @@
 // Fake backend: same shapes as client.ts returns, used until Nived's routes exist.
 // This stands in for the server only. Nothing outside this file should interpret SQL or invent data.
 
-import type { AnswerSubmission, Cell, EventsPage, EvidenceRef, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { AnswerSubmission, Cell, CurrentTask, TaskInfo, EventsPage, EvidenceRef, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -98,18 +98,37 @@ const FAKE_TABLES: FakeTable[] = [
 
 // ---- the fake routes ----
 
+const TASKS: TaskInfo[] = [
+  { id: "t1", title: "Task 1", brief: "Does the treated arm really show higher expression? Check the data before you say.", seconds: 600 },
+  { id: "t2", title: "Task 2", brief: "Is the batch C result comparable with the others?", seconds: 600 },
+  { id: "t3", title: "Task 3", brief: "Do the variant calls support the claim?", seconds: 600 },
+];
+
+// Which task the fake server is on. Kept in sessionStorage so a page reload does not restart it.
+const TASK_KEY = "lab-rotation.mock.task";
+function taskIndex(): number {
+  try {
+    return Number(sessionStorage.getItem(TASK_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+}
+function advanceTask(afterMs: number) {
+  setTimeout(() => {
+    try {
+      sessionStorage.setItem(TASK_KEY, String(taskIndex() + 1));
+    } catch {
+      /* ignore */
+    }
+  }, afterMs);
+}
+
 const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => res(v), ms));
 
 export const mock = {
-  startSession: () =>
-    wait<SessionInfo>({
-      sessionId: "mock-session",
-      tasks: [
-        { id: "t1", title: "Task 1", brief: "Does the treated arm really show higher expression? Check the data before you say.", seconds: 600 },
-        { id: "t2", title: "Task 2", brief: "Is the batch C result comparable with the others?", seconds: 600 },
-        { id: "t3", title: "Task 3", brief: "Do the variant calls support the claim?", seconds: 600 },
-      ],
-    }),
+  startSession: () => wait<SessionInfo>({ sessionId: "mock-session", task: TASKS[taskIndex()] ?? null }),
+
+  getCurrentTask: () => wait<CurrentTask>({ task: TASKS[taskIndex()] ?? null }, 50),
 
   getTables: () => wait<TableInfo[]>(FAKE_TABLES.map(({ rows, ...info }) => ({ ...info, rowCount: rows.length }))),
 
@@ -156,7 +175,10 @@ export const mock = {
     return wait({ columns: cols, rows: rows.slice(0, lim ? Number(lim) : 200).map((r) => idx.map((i) => r[i])), ms: 4 });
   },
 
-  submitAnswer: (_a: AnswerSubmission) => wait({ accepted: true }),
+  submitAnswer: (_a: AnswerSubmission) => {
+    advanceTask(2000); // the next task is handed out a moment after the answer
+    return wait({ accepted: true });
+  },
   openAppeal: (_taskId: string, _reason: string) => wait({ appealId: "mock-appeal" }),
   sendAppealMessage: (_appealId: string, _text: string) => wait({ ok: true }),
   getMastery: () =>

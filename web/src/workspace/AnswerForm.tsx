@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { submitAnswer, type TaskInfo, type Verdict } from "../api/client";
+import { useEffect, useState } from "react";
+import { submitAnswer, TRAPS, type TaskInfo, type Verdict } from "../api/client";
 import { useEvidence } from "./evidence";
-
-export const TRAPS = ["Duplicate rows", "Missing values", "Unit mix-up", "Wrong join", "Outliers", "Selection bias", "Something else", "No trap"];
 
 const VERDICTS: { id: Verdict; label: string; hint: string }[] = [
   { id: "holds", label: "Holds", hint: "The claim stands" },
@@ -22,11 +20,16 @@ function load(id: string): Draft {
   }
 }
 
-export function AnswerForm({ sessionId, task }: { sessionId: string; task: TaskInfo }) {
+export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; task: TaskInfo; onSent: () => void }) {
   const [draft, setDraft] = useState<Draft>(() => load(task.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const cited = useEvidence();
+
+  useEffect(() => {
+    if (draft.sent) onSent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function update(patch: Partial<Draft>) {
     const next = { ...draft, ...patch };
@@ -54,6 +57,7 @@ export function AnswerForm({ sessionId, task }: { sessionId: string; task: TaskI
         note: draft.note.trim(),
       });
       update({ sent: true });
+      onSent();
     } catch (e) {
       setError((e as Error).message);
     } finally {

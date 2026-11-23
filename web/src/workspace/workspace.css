@@ -382,3 +382,96 @@
 .ws-root > * {
   flex: none;
 }
+
+.ws-task {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-brief {
+  margin: 0;
+  color: var(--mist);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ---- Timer and states ---- */
+
+.ws-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ws-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.ws-timer-num {
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-timer-note {
+  color: var(--fog);
+  font-size: 12px;
+}
+
+.ws-timer.low {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-timer.low .ws-timer-num {
+  color: var(--gold);
+}
+
+.ws-timer.over {
+  box-shadow: 0 0 0 2px var(--bad);
+}
+
+.ws-timer.over .ws-timer-num,
+.ws-timer.over .ws-timer-note {
+  color: var(--bad);
+}
+
+.ws-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ws-skel {
+  height: 14px;
+  background: var(--night-3);
+  animation: ws-pulse 1s steps(3) infinite alternate;
+}
+
+.ws-skel.tall {
+  height: 120px;
+  width: 100%;
+}
+
+@keyframes ws-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-skel {
+    animation: none;
+  }
+}

@@ -7,7 +7,8 @@ Errors: any non-2xx reply, or a JSON body with `{"error": "plain words"}`, is sh
 
 | Job | Route | Sends | Gets back |
 |---|---|---|---|
-| Start a session | `POST /api/session/start` | nothing | `{sessionId, tasks: [{id, title, brief, seconds}]}` |
+| Start a session | `POST /api/session/start` | nothing | `{sessionId, task}` where task is `{id, title, brief, seconds}` or null |
+| Current task | `GET /api/session/:id/task` | nothing | `{task}` (same shape, null when all are done). Tasks come one at a time; polled after an answer is sent until the id changes. |
 | List tables | `GET /api/session/:id/tables` | nothing | `[{name, about, columns: [{name, type}], rowCount}]` (type: text, int, real or date) |
 | Read rows | `GET /api/session/:id/tables/:table/rows?offset=&limit=` | query string | `{rows: [[cell, ...], ...]}` (cell: string, number, boolean or null) |
 | New events | `GET /api/session/:id/events?since=N` | `since` = last `next` (0 first) | `{events: [{seq, t, k, text?, data?}], next}`. Polled every second. |
@@ -16,5 +17,7 @@ Errors: any non-2xx reply, or a JSON body with `{"error": "plain words"}`, is sh
 | Open appeal | `POST /api/session/:id/appeal` | `{taskId, reason}` | `{appealId}` |
 | Appeal message | `POST /api/session/:id/appeal/:appealId/message` | `{text}` | `{ok}`. Replies and the ruling arrive as events. |
 | Mastery | `GET /api/session/:id/mastery` | nothing | `{traps: [{trap, score 0..1, attempts}]}` |
+
+Trap names come from `traps.ts`: the `trap` field in the answer is one of those exact strings. If Nived's names differ, change that one list.
 
 `row` is 1-based within what the learner saw. For a SQL result, `source` is `"query"` and `sql` holds the query.

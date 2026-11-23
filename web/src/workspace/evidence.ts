@@ -5,22 +5,26 @@ import type { Cell, EvidenceRef } from "../api/client";
 export type Evidence = EvidenceRef & { key: string };
 
 const STORE = "lab-rotation.workspace.evidence";
+const NONE: Evidence[] = [];
 
-function read(): Evidence[] {
+function read(): Record<string, Evidence[]> {
   try {
-    return JSON.parse(sessionStorage.getItem(STORE) ?? "[]");
+    return JSON.parse(sessionStorage.getItem(STORE) ?? "{}");
   } catch {
-    return [];
+    return {};
   }
 }
 
-let items: Evidence[] = read();
+// Evidence is kept per task: each task has its own list.
+let all = read();
+let scope = "";
 const subs = new Set<() => void>();
+const current = () => all[scope] ?? NONE;
 
 function set(next: Evidence[]) {
-  items = next;
+  all = { ...all, [scope]: next };
   try {
-    sessionStorage.setItem(STORE, JSON.stringify(items));
+    sessionStorage.setItem(STORE, JSON.stringify(all));
   } catch {
     /* storage blocked: keep it in memory */
   }
@@ -28,11 +32,17 @@ function set(next: Evidence[]) {
 }
 
 export const evidence = {
-  has: (key: string) => items.some((e) => e.key === key),
-  toggle(e: Evidence) {
-    set(items.some((x) => x.key === e.key) ? items.filter((x) => x.key !== e.key) : [...items, e]);
+  /** Which task's list the picker reads and writes. */
+  setTask(id: string) {
+    if (id === scope) return;
+    scope = id;
+    subs.forEach((f) => f());
   },
-  remove: (key: string) => set(items.filter((x) => x.key !== key)),
+  has: (key: string) => current().some((e) => e.key === key),
+  toggle(e: Evidence) {
+    set(current().some((x) => x.key === e.key) ? current().filter((x) => x.key !== e.key) : [...current(), e]);
+  },
+  remove: (key: string) => set(current().filter((x) => x.key !== key)),
   clear: () => set([]),
 };
 
@@ -42,7 +52,7 @@ export function useEvidence(): Evidence[] {
       subs.add(f);
       return () => subs.delete(f);
     },
-    () => items,
+    current,
   );
 }
 

@@ -28,7 +28,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table?.name]);
 
-  if (!table) return <p className="empty">No tables to show.</p>;
+  if (!table) return <p className="empty">There are no tables for this task.</p>;
   const rows = cur?.rows ?? [];
 
   return (
@@ -42,6 +42,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
         ))}
       </div>
       <p className="empty ws-about">{table.about}</p>
+      {table.rowCount === 0 && <p className="empty">This table has no rows.</p>}
       {rows.length > 0 && <Grid source={table.name} columns={table.columns} rows={rows} label={`${table.name} rows`} />}
       {cur?.error && (
         <p className="ws-error" role="alert">
@@ -49,7 +50,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
         </p>
       )}
       <div className="ws-foot">
-        <span>{cur?.loading && rows.length === 0 ? "Loading rows…" : `Showing ${rows.length} of ${table.rowCount} rows`}</span>
+        <span>{cur?.loading && rows.length === 0 ? "Loading rows…" : table.rowCount === 0 ? "" : `Showing ${rows.length} of ${table.rowCount} rows`}</span>
         {rows.length < table.rowCount && rows.length > 0 && (
           <button className="btn" disabled={cur?.loading} onClick={() => more(table)}>
             {cur?.loading ? "Loading…" : `Show ${Math.min(ROW_CAP, table.rowCount - rows.length)} more`}

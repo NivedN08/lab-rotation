@@ -4,9 +4,10 @@
 // Mock mode is on by default for now. Add ?mock=0 to the URL to call the real /api routes.
 
 import { mock } from "./mock";
-import type { AnswerSubmission, Cell, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { AnswerSubmission, Cell, CurrentTask, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 export * from "./types";
+export * from "./traps";
 
 export const useMock = (): boolean => {
   try {
@@ -29,6 +30,7 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
   }
   const isJson = (res.headers.get("content-type") ?? "").includes("json");
   const data = isJson ? await res.json() : null;
+  if (res.status === 404 || res.status === 503) throw new Error("The lab server isn't ready for this yet. Try again in a moment.");
   if (!res.ok || data?.error) throw new Error(data?.error ?? `The server answered ${res.status}.`);
   if (!isJson) throw new Error("The server sent something unexpected.");
   return data as T;
@@ -36,8 +38,12 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
 
 const enc = encodeURIComponent;
 
-/** Start (or resume) a rotation session. */
+/** Start (or resume) a rotation session. Comes back with the current task. */
 export const startSession = (): Promise<SessionInfo> => (useMock() ? mock.startSession() : call("POST", "/api/session/start"));
+
+/** The task the learner is on now, or null when all are done. Poll this after submitting to get the next one. */
+export const getCurrentTask = (sessionId: string): Promise<CurrentTask> =>
+  useMock() ? mock.getCurrentTask() : call("GET", `/api/session/${enc(sessionId)}/task`);
 
 /** Table names, descriptions, columns and row counts. */
 export const getTables = (sessionId: string): Promise<TableInfo[]> =>
