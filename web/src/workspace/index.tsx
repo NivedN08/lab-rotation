@@ -67,7 +67,7 @@ export default function Workspace({ onTaskChange }: Props) {
           <div className="ws-skel tall" />
           <p className="empty">Loading your task and the tables…</p>
         </div>
-      ) : !task || !startedAt ? (
+      ) : !task ? (
         <p className="ws-sent" role="status">
           {awaitingNext ? "Waiting for the first task…" : "That was the last task. Nice work."}
         </p>

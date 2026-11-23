@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { getDemo, getEvents, useMock } from "./client";
 import { mock } from "./mock";
 import { drive } from "./session";
+import { taskClockStart } from "./clock";
 import { hideWhispers, withholdWhispers } from "./visibility";
 import type { AgentId, LabEvent, TaskInfo } from "./types";
 
@@ -73,8 +74,9 @@ function derive(pos: number) {
     const d = e.data as { taskId?: string; result?: "passed" | "failed" } | undefined;
     if (e.k === "verdict" && d?.taskId && d.result) results[d.taskId] = d.result;
   }
-  // The task clock, so the workspace Timer shows how far into the task the recording is (at normal speed).
-  const startedAt = current ? Date.now() - (pos - picks[pickIdx].t) * 1000 : null;
+  // The task clock starts when Riley sits down after the brief; null until the recording gets there (at normal speed).
+  const clockT = current ? taskClockStart(seen, current.id) : undefined;
+  const startedAt = clockT !== undefined ? Date.now() - (pos - clockT) * 1000 : null;
   return { tasks: tasks.map(({ id, title }) => ({ id, title })), seen, patch: { current, startedAt, results, events: seen, awaitingNext: !current } };
 }
 

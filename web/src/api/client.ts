@@ -10,6 +10,7 @@ import type { Health, DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskReques
 export * from "./types";
 export * from "./traps";
 export * from "./session";
+export * from "./clock";
 export * from "./demo";
 export * from "./sponsors";
 

@@ -188,8 +188,9 @@ function intro(s: Live, i: number, T: number) {
     { t: T + 12, k: "agent.move", agent: "vale", task: d.id, why: "brief done; let the learner work", data: { from: "learner_desk", place: "vale_office" } },
     { t: T + 12, k: "agent.move", agent: "telem", task: d.id, why: "back to the shelves", data: { from: "learner_desk", place: "shelves" } },
   );
-  if (first) plan(s, { t: T + 13, k: "agent.move", agent: "riley", task: d.id, why: "the intern races the learner on the same task", data: { from: "door", place: "riley_desk" } });
-  s.taskT = T;
+  // Riley sits down: the task's clock starts here, and so does the server's timer.
+  plan(s, { t: T + 13, k: "agent.move", agent: "riley", task: d.id, why: "the intern races the learner on the same task", data: { from: first ? "door" : "learner_desk", place: "riley_desk" } });
+  s.taskT = T + 13;
 }
 
 // ---- what the panel does once an answer is in ----
@@ -280,6 +281,7 @@ function react(s: Live, d: Def, a: Answer, r: ReturnType<typeof score>, T: numbe
     { t: T + 14.5, k: "search", agent: "telem", task: t, why: `this happens in real life: a real case of ${trapLabel(d.key.trap).toLowerCase()}`, text: `Telem found a real case: ${d.caseResult.title}`, data: { phase: "case", trap: d.key.trap, query: d.caseResult.query, cached: false, trace, results: [{ title: d.caseResult.title, url: d.caseResult.url, snippet: d.caseResult.snippet }] } },
     { t: T + 15.5, k: "agent.say", agent: "telem", to: "learner", task: t, why: "share one real case with its source, now that the verdict is in", text: d.realCase, ref: L("case") },
     ...voice(s, T + 15.9, "telem", t, L("case")),
+    { t: T + 16.5, k: "agent.move", agent: "riley", to: "learner", task: t, why: "the intern walks over to see who won", data: { from: "riley_desk", place: "learner_desk" } },
     { t: T + 17, k: "agent.move", agent: "telem", task: t, why: "back to the shelves", data: { from: "learner_desk", place: "shelves" } },
     { t: T + 17.5, k: "task.end", agent: "system", task: t, why: "the verdict is in", data: { taskId: t, score: a.score, beatRival: a.score > (d.riley.verdict === d.key.verdict ? 0.4 : 0), trap: d.key.trap, pickReason: d.pickReason, bandit: BANDIT } },
     { t: T + 18.5, k: "mastery.update", agent: "system", task: t, why: `knowledge tracing after ${a.result === "passed" ? "a correct" : "a missed"} answer on ${trapLabel(d.key.trap).toLowerCase()}`, text: `${trapLabel(d.key.trap)} mastery: ${from} to ${to}.`, data: { trap: d.key.trap, from, to, correct: a.result === "passed", attempts: m.attempts + 1, bruinRun: "run-mock-3" } },

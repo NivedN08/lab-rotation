@@ -1,33 +1,36 @@
 import { useEffect, useState } from "react";
-import { useDemo, useRotation, type LabEvent } from "../api/client";
+import { taskClockStart, useDemo, useRotation, type LabEvent } from "../api/client";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 /**
- * What the events say about this task's clock: when it began, when the answer stopped it, and whether the
- * learner answered before time ran out. Read from the events, so it holds after a reload and follows a demo's seek.
+ * The task's clock, from the events. It starts when Riley sits down at `riley_desk` after the brief (the server's timer starts
+ * there too), stops when the learner's answer is sent (so grading time does not count against them), and the answer counts as
+ * in time only if it came before the deadline. Read from events, so it holds after a reload and follows a demo's seek.
  */
 function clockFacts(events: LabEvent[], taskId: string, seconds: number) {
-  const idOf = (e: LabEvent) => (e.data as { taskId?: string } | undefined)?.taskId ?? e.task;
-  const picked = events.find((e) => e.k === "task.picked" && idOf(e) === taskId);
+  const start = taskClockStart(events, taskId);
   const answer = events.find((e) => e.k === "learner.answer" && e.task === taskId);
+  // An answer sent before the clock started used no time.
+  const used = start !== undefined && answer ? Math.max(0, answer.t - start) : undefined;
   return {
-    // The clock stops when the answer is sent, not at the verdict: grading time does not count against the learner.
-    stoppedAt: picked && answer ? Math.max(0, seconds - Math.floor(answer.t - picked.t)) : undefined,
-    // An answer that came in at or after the deadline is the server's "can't tell", not the learner's.
-    answeredInTime: !!(picked && answer && answer.t - picked.t < seconds),
+    start,
+    // Seconds left at the moment the answer arrived.
+    stoppedAt: used !== undefined ? Math.max(0, seconds - Math.floor(used)) : undefined,
+    // An answer at or after the deadline is the server's "can't tell", not the learner's.
+    answeredInTime: used !== undefined && used < seconds,
   };
 }
 
 /**
- * Counts down a task's time. Live, it counts real seconds from the shared clock (`startedAt`).
+ * Counts down a task's time. Live, it counts real seconds from the shared clock (`startedAt`, null until the clock starts).
  * In the demo it follows the recording's clock instead, so speed, pause, seek and loop all show correctly.
  * It stops when the answer is sent.
  */
-export function Timer({ taskId, startedAt, seconds }: { taskId: string; startedAt: number; seconds: number }) {
+export function Timer({ taskId, startedAt, seconds }: { taskId: string; startedAt: number | null; seconds: number }) {
   const demo = useDemo();
   const { events } = useRotation();
-  const left = () => Math.max(0, seconds - Math.floor((Date.now() - startedAt) / 1000));
+  const left = () => (startedAt === null ? seconds : Math.max(0, seconds - Math.floor((Date.now() - startedAt) / 1000)));
   const [live, setLive] = useState(left);
 
   useEffect(() => {
@@ -37,17 +40,29 @@ export function Timer({ taskId, startedAt, seconds }: { taskId: string; startedA
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startedAt, seconds]);
 
+  const { start, stoppedAt, answeredInTime } = clockFacts(events, taskId, seconds);
   let remaining = live;
+  let started = startedAt !== null;
   if (demo.status === "ready") {
-    // Recording time since this task was picked.
-    const picked = [...demo.timeline].reverse().find((e) => e.k === "task.picked" && e.t <= demo.position);
-    const elapsed = demo.position - (picked?.t ?? demo.start);
-    remaining = Math.max(0, seconds - Math.floor(elapsed));
+    // Recording time since Riley sat down.
+    started = start !== undefined && demo.position >= start;
+    remaining = started ? Math.max(0, seconds - Math.floor(demo.position - (start as number))) : seconds;
   }
 
-  const { stoppedAt, answeredInTime } = clockFacts(events, taskId, seconds);
   const stopped = stoppedAt !== undefined;
-  if (stopped) remaining = stoppedAt;
+  if (stopped) {
+    remaining = stoppedAt;
+    started = true;
+  }
+
+  if (!started) {
+    return (
+      <div className="ws-timer wait" role="timer" aria-label="Time allowed for this task">
+        <span className="ws-timer-num">{fmt(seconds)}</span>
+        <span className="ws-timer-note">The clock starts when the brief ends</span>
+      </div>
+    );
+  }
 
   const over = remaining === 0 && !answeredInTime;
   const state = over ? "over" : remaining === 0 || stopped ? "done" : remaining <= 60 ? "low" : "ok";

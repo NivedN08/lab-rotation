@@ -782,3 +782,13 @@
 .ws-timer.done .ws-timer-num {
   font-size: 16px;
 }
+
+/* The clock has not started: the brief is still going on. */
+.ws-timer.wait .ws-timer-num {
+  color: var(--fog);
+}
+
+.ws-timer.wait .ws-timer-note {
+  color: var(--fog);
+  font-size: 12px;
+}
