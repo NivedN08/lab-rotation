@@ -158,6 +158,10 @@ def handle(method: str, path: str, query: str | dict = "", body=None) -> tuple[i
         return e.status, {"error": e.message}
     except TableError as e:
         return e.status, {"error": str(e)}
+    except Exception as e:
+        if hasattr(e, "status") and hasattr(e, "message"):   # lab.session.engine.EngineError
+            return int(e.status), {"error": str(e.message)}
+        raise
 
 
 def route(method: str, path: str, q: dict, body):
@@ -192,17 +196,20 @@ def route(method: str, path: str, q: dict, body):
     eng = engine_for(sid)
 
     if method == "GET":
+        slot = (q.get("task") or [None])[0] or None
+        if slot is not None and not re.match(r"^t[1-9]$", slot):
+            raise ApiError(400, "task must be a slot id such as t1")
         if rest == ["task"]:
             return {"task": eng.current_task(sid)}
         if rest == ["tables"]:
-            return eng.tables(sid)
+            return eng.tables(sid, task=slot)
         if len(rest) == 3 and rest[0] == "tables" and rest[2] in ("rows", "profile"):
             table = rest[1]
             if not NAME_RE.match(table):
                 raise ApiError(400, "bad table name")
             if rest[2] == "rows":
-                return eng.rows(sid, table, _int(q, "offset", 0), _int(q, "limit", 100, 0, 500))
-            return eng.profile(sid, table)
+                return eng.rows(sid, table, _int(q, "offset", 0), _int(q, "limit", 100, 0, 500), task=slot)
+            return eng.profile(sid, table, task=slot)
         if rest == ["events"]:
             return eng.events_since(sid, _int(q, "since", 0))
         if rest == ["mastery"]:

@@ -89,13 +89,13 @@ class MockEngine:
         done = any(e["k"] == "session.end" for e in self.released(session_id))
         return None if done else self.task
 
-    def tables(self, session_id: str) -> list[dict]:
+    def tables(self, session_id: str, task: str | None = None) -> list[dict]:
         return self.tables_box.tables()
 
-    def rows(self, session_id: str, table: str, offset: int, limit: int) -> dict:
+    def rows(self, session_id: str, table: str, offset: int, limit: int, task: str | None = None) -> dict:
         return self.tables_box.rows(table, offset, limit)
 
-    def profile(self, session_id: str, table: str) -> dict:
+    def profile(self, session_id: str, table: str, task: str | None = None) -> dict:
         return self.tables_box.profile(table)
 
     def events_since(self, session_id: str, since: int) -> dict:
