@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { demo as demoPlayer, getAgents, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, useRotation, type LabEvent } from "./api/client";
+import { demo as demoPlayer, getAgents, rotation as session, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, type LabEvent } from "./api/client";
 import { SampleBadge } from "./api/SampleBadge";
+import { useLateRotation } from "./ui/useLateRotation";
 import { MasteryChart, MuteButton, PanelRoom, SponsorStrip, Voice } from "./panels";
 import type { Run } from "./data/types";
 import { Replay } from "./sim/replay";
@@ -35,7 +36,11 @@ export function App() {
   demoRef.current = demoState;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const replay = useMemo(() => (run ? new Replay(run) : null), [run, demoOn]);
-  const rotation = useRotation(); // the one shared session, clock and event poll
+  // Which session the visitor chose on the opening screen. Nothing reads (and so starts) a session before.
+  const [mode, setMode] = useState<"rotation" | "judge" | null>(null);
+  const started = mode !== null || demoOn;
+  const rotation = useLateRotation(started); // the one shared session, clock and event poll
+  const judge = mode === "judge" && !demoOn;
   const rotationEvents = useRef<LabEvent[]>([]);
   rotationEvents.current = rotation.events;
   const isRotation = run?.run === ROTATION;
@@ -49,7 +54,7 @@ export function App() {
   const sessionOver =
     rotation.events.some((e) => e.k === "session.end") || (rotation.tasks.length > 0 && rotation.tasks.every((x) => rotation.results[x.id]));
   const [resultsHeld, setResultsHeld] = useState(false); // the visitor left the results card
-  const resultsShown = isRotation && sessionOver && !resultsHeld && (demoOn ? demoEnded && !demoHeld : !!verdictTask && closedVerdicts.includes(verdictTask));
+  const resultsShown = isRotation && !judge && sessionOver && !resultsHeld && (demoOn ? demoEnded && !demoHeld : !!verdictTask && closedVerdicts.includes(verdictTask));
   const verdictShown = demoOn ? demoEnded && !demoHeld && !sessionOver : !!verdictTask && !closedVerdicts.includes(verdictTask);
   const verdictCard = isRotation && verdictTask && verdictShown ? verdictFromEvents(rotation.events, verdictTask) : null;
   const verdictTitle = (() => {
@@ -136,7 +141,7 @@ export function App() {
 
   // The rotation's events reach the floor as they arrive; each plays, with the animations the
   // floor already has, when the floor's clock reaches it.
-  useEffect(() => subscribeEvents((events) => engineRef.current?.addLive(events)), []);
+  useEffect(() => (started ? subscribeEvents((events) => engineRef.current?.addLive(events)) : undefined), [started]);
   // A demo seek or loop: the floor starts over from everything up to that moment.
   useEffect(() => subscribeJump((time, events) => engineRef.current?.jumpTo(time, events)), []);
 
@@ -202,6 +207,7 @@ export function App() {
     startDemo();
   };
   const leaveDemo = () => {
+    setMode((m) => m ?? "rotation");
     setStory(false);
     window.clearTimeout(storyWait.current);
     stopDemo();
@@ -278,6 +284,20 @@ export function App() {
       if (en && !en.playing && en.t < (replay?.end ?? 0) - 1) en.setPlaying(true);
     }, reduced ? 0 : 1050);
   };
+
+  /** Start a session in the chosen mode, then walk in. Judge mode goes straight to the Workspace. */
+  const begin = (m: "rotation" | "judge") => {
+    session.configure({ mode: m });
+    setMode(m);
+    enter(m === "judge");
+    if (m === "judge") setPanel("workspace");
+  };
+
+  // Judge mode's debrief: when the verdict arrives, the Panel room opens beside the verdict card.
+  const judgeVerdict = judge && !!verdictTask;
+  useEffect(() => {
+    if (judgeVerdict) setPanel("room");
+  }, [judgeVerdict]);
 
   const goTour = (i: number | null) => {
     const e = engine();
@@ -411,7 +431,14 @@ export function App() {
                 <option value={DEMO}>Demo</option>
               </select>
               {isRotation ? (
-                <TaskChips rotation={rotation} onOpen={() => setPanel("workspace")} />
+                <>
+                  {judge && (
+                    <span className="chip" title="One task, four minutes, then the debrief">
+                      Judge mode
+                    </span>
+                  )}
+                  <TaskChips rotation={judge ? { ...rotation, tasks: rotation.tasks.slice(0, 1) } : rotation} onOpen={() => setPanel("workspace")} />
+                </>
               ) : (
                 <nav className="chips" aria-label="Studies">
                   <button className="chip" aria-pressed={filter === null} onClick={() => chooseStudy(null)}>
@@ -627,7 +654,16 @@ export function App() {
                     setPanel("room");
                   }}
                   onAgain={demoOn ? watchAgain : undefined}
-                />
+                >
+                  {judge && (
+                    <section className="section">
+                      <h3>Your mastery</h3>
+                      <Safe name="The mastery chart">
+                        <MasteryChart compact />
+                      </Safe>
+                    </section>
+                  )}
+                </VerdictCard>
               </Safe>
             )}
 
@@ -725,12 +761,15 @@ export function App() {
         )}
       </div>
       <SampleBadge />
-      <Safe name="Voice lines">
-        <Voice />
-      </Safe>
+      {started && (
+        <Safe name="Voice lines">
+          <Voice />
+        </Safe>
+      )}
       {view !== "lab" && (
         <Landing
-          onEnter={enter}
+          onEnter={() => begin("rotation")}
+          onJudge={() => begin("judge")}
           onDemo={() => {
             startStory();
             enter(true);

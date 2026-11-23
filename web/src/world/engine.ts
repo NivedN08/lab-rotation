@@ -1275,7 +1275,12 @@ export class LabEngine {
       for (let i = 0; i < owners.length; i++) {
         const a = owners[i];
         if (!a || !a.visible) continue;
-        this.drawMonitor(ctx, SEATS.referee[i].px - 9, y - 9, 6, 6, a);
+        if (a.id === "ines") {
+          // The Bruin terminal: a bigger screen on a green base, under the Bruin sign.
+          ctx.fillStyle = DEPT.referee;
+          ctx.fillRect(SEATS.referee[i].px - 14, y - 2, 16, 3);
+          this.drawMonitor(ctx, SEATS.referee[i].px - 13, y - 13, 14, 10, a);
+        } else this.drawMonitor(ctx, SEATS.referee[i].px - 9, y - 9, 6, 6, a);
       }
     } else if (d.kind === "small") {
       ctx.fillStyle = C.laminateShade;
