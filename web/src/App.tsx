@@ -58,6 +58,9 @@ export function App() {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [liveOn, setLiveOn] = useState(false);
+  const [followOn, setFollowOn] = useState(true); // the camera glides to where things happen
+  const followRef = useRef(followOn);
+  followRef.current = followOn;
   const [speed, setSpeed] = useState(12);
   const [selected, setSelected] = useState<Target | null>(null);
   const [panel, setPanel] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
@@ -145,6 +148,7 @@ export function App() {
     });
     engine.setSpeed(speed);
     engineRef.current = engine;
+    engine.followAction = followRef.current;
     if (replay.run.run === ROTATION) {
       // Frame the rooms in use; the closed ones stay out of view until you zoom out.
       engine.setFrame(["director", "library", "team-a", "team-b", "referee", "vault"]);
@@ -577,6 +581,21 @@ export function App() {
             )}
 
             <div className="mapctl">
+              {isRotation && (
+                <button
+                  className="btn"
+                  aria-pressed={followOn}
+                  onClick={() => {
+                    const on = !followOn;
+                    setFollowOn(on);
+                    if (engine()) engine()!.followAction = on;
+                  }}
+                  title={followOn ? "The camera follows the action. Click to keep it still." : "The camera stays where you put it. Click to follow the action."}
+                >
+                  <span className={`dot ${followOn ? "working" : ""}`} aria-hidden="true" />
+                  Follow
+                </button>
+              )}
               <button className="btn icon" onClick={() => engine()?.zoomBy(1.3)} aria-label="Zoom in" title="Zoom in (+)">
                 +
               </button>

@@ -249,6 +249,7 @@ export class LabEngine {
   }
 
   zoomBy(f: number) {
+    this.userCam();
     const a = this.follow ? this.actors.get(this.follow) : null;
     if (a) {
       this.camTo = { x: this.cam.x, y: this.cam.y, z: this.clampZ(this.cam.z * f) };
@@ -267,6 +268,58 @@ export class LabEngine {
   /** The zoom that shows the whole building. */
   wholeZoom() {
     return Math.min(this.cw / ((W + 2) * TILE), this.ch / ((H + 3) * TILE));
+  }
+
+  // ---- Following the action (rotation and demo) ----------------------------------------------
+  /** Glide in to where the latest event happens, then drift back out when things go quiet. */
+  followAction = true;
+  /** Where the camera is gliding to, and when the last event happened; null when not gliding. */
+  private glide: { x: number; y: number; z: number; at: number } | null = null;
+  /** The last time you dragged, zoomed or pinched: the camera leaves you alone for a while after. */
+  private userCamAt = -1e9;
+
+  /** You moved the camera: stop any glide, and hold off for a few seconds. */
+  private userCam() {
+    this.userCamAt = this.real;
+    this.glide = null;
+  }
+
+  /** Aim the glide at the rooms these people are in (or at the hatch, the referee table, the vault). */
+  private glideTo(people: (Actor | undefined)[], extra: RoomId[] = []) {
+    if (!this.followAction || !this.replay.cast.size) return;
+    const rooms = new Set<RoomId>(extra);
+    for (const a of people) {
+      if (!a) continue;
+      const r = roomAt(Math.floor(a.x / TILE), Math.floor(a.y / TILE)) ?? roomAt(a.home.tx, a.home.ty);
+      if (r && r.id !== "corridor" && r.id !== "lobby") rooms.add(r.id);
+      else {
+        const h = roomAt(a.home.tx, a.home.ty);
+        if (h) rooms.add(h.id);
+      }
+    }
+    if (!rooms.size) return;
+    const rs = [...rooms].map((id) => roomById[id]);
+    const x0 = Math.min(...rs.map((r) => r.x));
+    const y0 = Math.min(...rs.map((r) => r.y));
+    const x1 = Math.max(...rs.map((r) => r.x + r.w));
+    const y1 = Math.max(...rs.map((r) => r.y + r.h));
+    const z = Math.max(this.fitZoom(), Math.min(3, this.cw / ((x1 - x0 + 8) * TILE), this.ch / ((y1 - y0 + 7) * TILE)));
+    this.glide = { x: ((x0 + x1) / 2) * TILE, y: ((y0 + y1) / 2) * TILE + 4, z, at: this.real };
+  }
+
+  /** Slow, smooth camera moves toward the glide target, or back to the framed rooms after 6 quiet seconds. */
+  private autoCam(dt: number) {
+    const g = this.glide;
+    if (!g) return;
+    if (!this.followAction || this.drag?.moved || this.pinch || this.follow || this.camTo || this.real - this.userCamAt < 4) return;
+    const quiet = this.real - g.at > 6;
+    const f = this.frameRect ?? { x: 0, y: 0, w: W, h: H };
+    const to = quiet ? { x: (f.x + f.w / 2) * TILE, y: (f.y + f.h / 2) * TILE + 4, z: this.fitZoom() } : g;
+    const k = Math.min(1, dt * 0.9);
+    this.cam.x += (to.x - this.cam.x) * k;
+    this.cam.y += (to.y - this.cam.y) * k;
+    this.cam.z += (to.z - this.cam.z) * k * 0.8;
+    if (quiet && Math.abs(to.x - this.cam.x) < 1 && Math.abs(to.y - this.cam.y) < 1 && Math.abs(to.z - this.cam.z) < 0.01) this.glide = null;
   }
 
   /** The rooms the camera frames by default (tiles), or null for the whole building. */
@@ -293,6 +346,7 @@ export class LabEngine {
 
   /** Show every room, closed ones too. */
   showWhole() {
+    this.userCam();
     this.follow = null;
     this.camTo = { x: (W * TILE) / 2, y: (H * TILE) / 2 + 4, z: this.wholeZoom() };
   }
@@ -584,6 +638,12 @@ export class LabEngine {
     const to = this.liveActor(e.to);
     const you = this.liveActor("learner");
     const color = who ? colorOf(who.role, who.id) : DEPT.director;
+    // The camera glides to where this happens (sponsor counters happen nowhere on the floor).
+    if (e.k !== "sponsor.call") {
+      const extra: RoomId[] =
+        e.k === "learner.answer" || e.k === "rival.answer" ? ["team-a", "team-b"] : e.k === "mastery.update" ? ["vault"] : e.k === "task.picked" ? ["director"] : [];
+      this.glideTo([who, to, e.k === "task.picked" || e.k === "search" ? you : undefined], extra);
+    }
     switch (e.k) {
       case "session.start":
         if (you) this.arrive(you);
@@ -844,6 +904,7 @@ export class LabEngine {
 
   private update(dt: number) {
     this.idleWork();
+    this.autoCam(dt);
     const f = this.walkFactor();
     for (const a of this.actors.values()) {
       if (!a.visible) continue;
@@ -1396,6 +1457,7 @@ export class LabEngine {
     if (this.pointers.size === 2) {
       const [p, q] = [...this.pointers.values()];
       this.pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), z: this.cam.z };
+      this.userCam();
       this.drag = null;
       return;
     }
@@ -1419,6 +1481,7 @@ export class LabEngine {
       const dy = ey - this.drag.sy;
       if (Math.abs(dx) + Math.abs(dy) > 4) this.drag.moved = true;
       if (this.drag.moved) {
+        this.userCam();
         this.cam.x = this.drag.cx - dx / this.cam.z;
         this.cam.y = this.drag.cy - dy / this.cam.z;
         this.camTo = null;
@@ -1452,6 +1515,7 @@ export class LabEngine {
   private onWheel = (e: WheelEvent) => {
     if (!this.interactive) return;
     e.preventDefault();
+    this.userCam();
     const { x: ex, y: ey } = this.pos(e);
     this.follow = null;
     const before = this.toWorld(ex, ey);
