@@ -4,11 +4,12 @@
 // Mock mode is on by default for now. Add ?mock=0 to the URL to call the real /api routes.
 
 import { mock } from "./mock";
-import type { AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 export * from "./types";
 export * from "./traps";
 export * from "./session";
+export * from "./demo";
 
 export const useMock = (): boolean => {
   try {
@@ -61,7 +62,7 @@ export const getRows = async (sessionId: string, table: string, offset: number, 
 
 /** Events after `since` (pass the previous page's `next`). */
 export const getEvents = (sessionId: string, since: number): Promise<EventsPage> =>
-  useMock() ? mock.getEvents(since) : call("GET", `/api/session/${enc(sessionId)}/events?since=${since}`);
+  useMock() ? mock.getEvents(since, sessionId) : call("GET", `/api/session/${enc(sessionId)}/events?since=${since}`);
 
 /** Polls getEvents every second until the returned function is called. */
 export function pollEvents(sessionId: string, onEvents: (events: LabEvent[]) => void, onError?: (e: Error) => void, ms = 1000): () => void {
@@ -119,3 +120,6 @@ export const audioUrl = (file: string): string => (useMock() ? mock.audioUrl(fil
 /** Totals for the sponsor strip. */
 export const getSponsors = (sessionId: string): Promise<SponsorTotals> =>
   useMock() ? mock.getSponsors() : call("GET", `/api/session/${enc(sessionId)}/sponsors`);
+
+/** The recorded session the backend picked for the demo. In mock mode only, the fake session stands in. */
+export const getDemo = (): Promise<DemoInfo> => (useMock() ? mock.getDemo() : call("GET", "/api/demo"));

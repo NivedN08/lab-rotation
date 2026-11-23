@@ -29,6 +29,7 @@ const POLL_MS = 1000;
 const startKey = (id: string) => `lab-rotation.workspace.start.${id}`;
 
 let state: RotationState = { sessionId: null, tasks: [], current: null, startedAt: null, results: {}, events: [], error: null, awaitingNext: false };
+
 const stateSubs = new Set<() => void>();
 const eventSubs = new Set<(events: LabEvent[]) => void>();
 
@@ -36,6 +37,11 @@ let since = 0;
 let running = false;
 let starting = false;
 let startOptions: StartOptions | undefined;
+let driven = false; // true while the demo player, not the live poll, feeds the state
+let epoch = 0;
+let retryHook: (() => void) | null = null;
+const jumpSubs = new Set<(t: number, events: LabEvent[]) => void>();
+const initial: RotationState = { sessionId: null, tasks: [], current: null, startedAt: null, results: {}, events: [], error: null, awaitingNext: false };
 
 function set(patch: Partial<RotationState>) {
   state = { ...state, ...patch };
@@ -58,8 +64,8 @@ function clockFor(id: string): number {
 const taskPatch = (task: TaskInfo | null) => ({ current: task, startedAt: task ? clockFor(task.id) : null });
 const nobodyReading = () => stateSubs.size === 0 && eventSubs.size === 0;
 
-async function tick() {
-  if (!running) return;
+async function tick(ep: number) {
+  if (!running || driven || ep !== epoch) return;
   if (nobodyReading()) {
     running = false;
     return;
@@ -83,11 +89,11 @@ async function tick() {
   } catch {
     /* a missed poll is not fatal: try again next second */
   }
-  setTimeout(tick, POLL_MS);
+  setTimeout(() => tick(ep), POLL_MS);
 }
 
 function begin() {
-  if (running || starting) return;
+  if (running || starting || driven) return;
   starting = true;
   (async () => {
     try {
@@ -96,7 +102,7 @@ function begin() {
         set({ sessionId: s.sessionId, tasks: s.tasks, ...taskPatch(s.task), error: null });
       }
       running = true;
-      tick();
+      tick(epoch);
     } catch (e) {
       set({ error: (e as Error).message });
     } finally {
@@ -113,13 +119,63 @@ export const rotation = {
   /** Try again after a failed start. */
   retry() {
     set({ error: null });
-    begin();
+    if (retryHook) retryHook();
+    else begin();
   },
   /** Call after the answer is sent: the next task is fetched on the shared poll. */
   answerSent() {
     if (!state.awaitingNext) set({ awaitingNext: true });
   },
 };
+
+/**
+ * For the demo player only. While it holds the state, the live poll is off and the same state and events
+ * a live session produces are fed in from a recorded session instead.
+ */
+export const drive = {
+  claim(onRetry: () => void) {
+    driven = true;
+    epoch++;
+    running = false;
+    since = 0;
+    retryHook = onRetry;
+    set({ ...initial, awaitingNext: true });
+  },
+  /** The recorded session is known: set its id and task list. */
+  open(sessionId: string, tasks: RotationState["tasks"]) {
+    set({ sessionId, tasks, error: null });
+  },
+  fail(message: string) {
+    set({ error: message });
+  },
+  /** Normal playback: new events are handed to subscribeEvents readers. */
+  frame(patch: Partial<RotationState>, fresh: LabEvent[]) {
+    set(patch);
+    if (fresh.length) eventSubs.forEach((f) => f(fresh));
+  },
+  /** A seek or a loop: the state is replaced and subscribeJump readers get everything up to `t` at once. */
+  jump(patch: Partial<RotationState>, t: number) {
+    set(patch);
+    jumpSubs.forEach((f) => f(t, patch.events ?? []));
+  },
+  release() {
+    driven = false;
+    retryHook = null;
+    epoch++;
+    since = 0;
+    set({ ...initial });
+    if (!nobodyReading()) begin();
+  },
+};
+
+/** Called when the demo seeks or loops, with the new time and every event up to it. Floors reset and redraw from this. */
+export function subscribeJump(cb: (t: number, events: LabEvent[]) => void): () => void {
+  jumpSubs.add(cb);
+  return () => jumpSubs.delete(cb);
+}
+
+/** The current state without subscribing (for code outside React). */
+export const getRotation = (): RotationState => state;
 
 export function useRotation(): RotationState {
   return useSyncExternalStore(

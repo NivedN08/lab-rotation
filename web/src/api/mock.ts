@@ -1,8 +1,8 @@
 // Fake backend: same shapes as client.ts returns, used until Nived's routes exist.
 // This stands in for the server only. Nothing outside this file should interpret SQL or invent data.
 
-import { eventsSoFar, scriptedEvents } from "./mockSession";
-import type { AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
+import { eventsSoFar, recordedEvents, scriptedEvents, SCRIPT } from "./mockSession";
+import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -124,6 +124,8 @@ function advanceTask(afterMs: number) {
   }, afterMs);
 }
 
+export const DEMO_SESSION = "mock-demo";
+
 const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => res(v), ms));
 
 export const mock = {
@@ -140,7 +142,15 @@ export const mock = {
     return wait({ rows: t.rows.slice(offset, offset + limit) });
   },
 
-  getEvents: (since: number) => wait<EventsPage>(scriptedEvents(since), 30),
+  getEvents: (since: number, sessionId?: string) =>
+    wait<EventsPage>(
+      // The fake recorded session is finished: it hands out every event at once.
+      sessionId === DEMO_SESSION ? (since >= SCRIPT.length ? { events: [], next: since } : recordedEvents()) : scriptedEvents(since),
+      30,
+    ),
+
+  // Mock mode only: the fake session stands in for the one the backend would pick.
+  getDemo: () => wait<DemoInfo>({ session: DEMO_SESSION, start: 0, end: SCRIPT[SCRIPT.length - 1].t + 6, speed: 1 }),
 
   // Canned stand-in for the server's SQL runner.
   runSql(sql: string): Promise<SqlResult> {

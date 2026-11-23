@@ -132,3 +132,6 @@ export type SponsorTotals = {
   runware: { lines: number; cost: number };
   glasser: { calls: number };
 };
+
+/** The recorded session the backend picked for the demo. `start` and `end` are seconds since that session began. */
+export type DemoInfo = { session: string; start: number; end: number; speed: number };

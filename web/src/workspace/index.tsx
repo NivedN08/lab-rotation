@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { getTables, rotation, useRotation, type TableInfo } from "../api/client";
+import { getTables, rotation, useDemo, useRotation, type TableInfo } from "../api/client";
 import { AnswerForm } from "./AnswerForm";
 import { ChartBuilder } from "./ChartBuilder";
 import { EvidenceTray } from "./EvidenceTray";
@@ -15,6 +15,8 @@ type Props = { onTaskChange?: (running: boolean) => void };
 /** Reads the one shared rotation state (session, current task, clock, poll) and shows the panel for it. */
 export default function Workspace({ onTaskChange }: Props) {
   const { sessionId, current: task, startedAt, awaitingNext, error: startError } = useRotation();
+  const demo = useDemo();
+  const watching = demo.status !== "off";
   const [tables, setTables] = useState<TableInfo[] | null>(null);
   const [tablesError, setTablesError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -64,10 +66,15 @@ export default function Workspace({ onTaskChange }: Props) {
         </div>
       ) : !task || !startedAt ? (
         <p className="ws-sent" role="status">
-          That was the last task. Nice work.
+          {awaitingNext ? "Waiting for the first task…" : "That was the last task. Nice work."}
         </p>
       ) : (
         <>
+          {watching && (
+            <p className="ws-sent" role="status">
+              Demo replay{demo.sample ? ". Sample data" : ""}: you're watching a recorded session, so answers are turned off.
+            </p>
+          )}
           <div className="ws-task" key={`brief-${task.id}`}>
             <div className="ws-task-head">
               <h2 className="ws-title">{task.title}</h2>
@@ -79,7 +86,7 @@ export default function Workspace({ onTaskChange }: Props) {
           <SqlBox key={`sql-${task.id}`} sessionId={sessionId} />
           <ChartBuilder sessionId={sessionId} tables={tables} />
           <EvidenceTray />
-          <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />
+          {!watching && <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />}
           {awaitingNext && (
             <p className="empty" role="status">
               Waiting for the next task…
