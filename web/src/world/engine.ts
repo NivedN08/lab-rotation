@@ -3,6 +3,7 @@
 // travel the corridors; answers meet only at the hatch in the blind wall. Every movement is
 // started by a real event in the run's log.
 
+import type { LabEvent } from "../api/types";
 import type { Ev, Role } from "../data/types";
 import type { Replay } from "../sim/replay";
 import { bubble, type Icon } from "./icons";
@@ -81,6 +82,17 @@ export class LabEngine {
   private hatchFlash: { until: number; agree: boolean; study: string } | null = null;
   private exaFlash = 0;
   private drawerFlash = new Map<string, number>();
+  /** Cast members a live event has brought onto the floor; they stay visible through seeks. */
+  private liveSeen = new Set<string>();
+  /** Each side's latest answer at the hatch, to flash it once both are in. */
+  private liveAnswers: { learner?: string; rival?: string } = {};
+  /** A rotation's events, in order, and how many of them the clock has passed. */
+  private liveEvents: LabEvent[] = [];
+  private liveIndex = 0;
+  /** Following the session as it happens: the clock runs in real time with the newest events. */
+  live = false;
+  /** The demo's clock, which this floor follows instead of keeping its own. */
+  private ext: { pos: number; at: number; speed: number; playing: boolean } | null = null;
   private roomLight = new Map<RoomId, number>();
   private elevatorNext = 0;
   private visitorSlot = 0;
@@ -104,12 +116,14 @@ export class LabEngine {
     this.staticCv = buildStatic();
     this.events = [...replay.run.events].sort((a, b) => replay.timeOf(a) - replay.timeOf(b));
     // Heads' desks appear only in runs that had department heads (D-23).
-    this.desks = replay.run.agents.some((a) => a.role === "head") ? [...DESKS, ...HEAD_DESKS] : DESKS;
+    // Sam's head desk at the back of Team A is always there; the other heads' desks only when a run has heads.
+    const teamAHead = HEAD_DESKS.find((d) => d.x === HEAD_SEATS["team-a"].tx - 1)!;
+    this.desks = replay.run.agents.some((a) => a.role === "head") ? [...DESKS, ...HEAD_DESKS] : [...DESKS, teamAHead];
     for (const a of replay.run.agents) {
       const home = this.homeOf(a.id, a.role, a.study);
       if (!home) continue;
       this.actors.set(a.id, {
-        id: a.id, role: a.role, study: a.study, look: lookFor(a.id, a.role), home,
+        id: a.id, role: a.role, study: a.study, look: lookFor(a.id, a.role, a.id === replay.you), home,
         x: home.px, y: home.py, dir: 0, path: [], steps: [], wait: 0, carry: null, walkPhase: 0,
         visible: false, atHome: true, bubble: null, releaseAt: 0,
       });
@@ -147,6 +161,7 @@ export class LabEngine {
   }
 
   setPlaying(p: boolean) {
+    if (!p) this.live = false;
     if (p && this.t >= this.hi - 0.01) this.seek(this.lo);
     this.playing = p;
     this.cb.onTick(this.t, this.playing);
@@ -157,6 +172,9 @@ export class LabEngine {
   }
 
   seek(t: number) {
+    this.live = false;
+    this.liveSeen.clear();
+    this.liveAnswers = {};
     this.t = Math.max(this.lo, Math.min(this.hi, t));
     this.flyers = [];
     this.floaters = [];
@@ -165,7 +183,7 @@ export class LabEngine {
     while (this.evIndex < this.events.length && this.replay.timeOf(this.events[this.evIndex]) <= this.t) this.evIndex++;
     for (const a of this.actors.values()) {
       const st = this.replay.status(a.id, this.t);
-      a.visible = a.role === "director" || st.present;
+      a.visible = a.role === "director" || st.present || this.liveSeen.has(a.id);
       a.x = a.home.px;
       a.y = a.home.py;
       a.dir = 0;
@@ -176,6 +194,9 @@ export class LabEngine {
       a.atHome = true;
       a.bubble = null;
     }
+    // A rotation: put people where its events up to now have them, without animating.
+    this.liveIndex = 0;
+    while (this.liveIndex < this.liveEvents.length && this.liveEvents[this.liveIndex].t <= this.t) this.placeLive(this.liveEvents[this.liveIndex++]);
     for (const r of ROOMS) this.roomLight.set(r.id, this.roomActive(r.id) ? 1 : 0);
     this.cb.onTick(this.t, this.playing);
   }
@@ -221,12 +242,14 @@ export class LabEngine {
 
   fit(animate: boolean) {
     this.follow = null;
-    const to = { x: (W * TILE) / 2, y: (H * TILE) / 2 + 4, z: this.fitZoom() };
+    const f = this.frameRect ?? { x: 0, y: 0, w: W, h: H };
+    const to = { x: (f.x + f.w / 2) * TILE, y: (f.y + f.h / 2) * TILE + 4, z: this.fitZoom() };
     if (animate) this.camTo = to;
     else this.cam = { ...to };
   }
 
   zoomBy(f: number) {
+    this.userCam();
     const a = this.follow ? this.actors.get(this.follow) : null;
     if (a) {
       this.camTo = { x: this.cam.x, y: this.cam.y, z: this.clampZ(this.cam.z * f) };
@@ -247,10 +270,85 @@ export class LabEngine {
     return Math.min(this.cw / ((W + 2) * TILE), this.ch / ((H + 3) * TILE));
   }
 
-  /** The starting zoom. On a phone the whole floor makes people a few pixels tall, so start closer. */
+  // ---- Following the action (rotation and demo) ----------------------------------------------
+  /** Glide in to where the latest event happens, then drift back out when things go quiet. */
+  followAction = true;
+  /** Where the camera is gliding to, and when the last event happened; null when not gliding. */
+  private glide: { x: number; y: number; z: number; at: number } | null = null;
+  /** The last time you dragged, zoomed or pinched: the camera leaves you alone for a while after. */
+  private userCamAt = -1e9;
+
+  /** You moved the camera: stop any glide, and hold off for a few seconds. */
+  private userCam() {
+    this.userCamAt = this.real;
+    this.glide = null;
+  }
+
+  /** Aim the glide at the rooms these people are in (or at the hatch, the referee table, the vault). */
+  private glideTo(people: (Actor | undefined)[], extra: RoomId[] = []) {
+    if (!this.followAction || !this.replay.cast.size) return;
+    const rooms = new Set<RoomId>(extra);
+    for (const a of people) {
+      if (!a) continue;
+      const r = roomAt(Math.floor(a.x / TILE), Math.floor(a.y / TILE)) ?? roomAt(a.home.tx, a.home.ty);
+      if (r && r.id !== "corridor" && r.id !== "lobby") rooms.add(r.id);
+      else {
+        const h = roomAt(a.home.tx, a.home.ty);
+        if (h) rooms.add(h.id);
+      }
+    }
+    if (!rooms.size) return;
+    const rs = [...rooms].map((id) => roomById[id]);
+    const x0 = Math.min(...rs.map((r) => r.x));
+    const y0 = Math.min(...rs.map((r) => r.y));
+    const x1 = Math.max(...rs.map((r) => r.x + r.w));
+    const y1 = Math.max(...rs.map((r) => r.y + r.h));
+    const z = Math.max(this.fitZoom(), Math.min(3, this.cw / ((x1 - x0 + 8) * TILE), this.ch / ((y1 - y0 + 7) * TILE)));
+    this.glide = { x: ((x0 + x1) / 2) * TILE, y: ((y0 + y1) / 2) * TILE + 4, z, at: this.real };
+  }
+
+  /** Slow, smooth camera moves toward the glide target, or back to the framed rooms after 6 quiet seconds. */
+  private autoCam(dt: number) {
+    const g = this.glide;
+    if (!g) return;
+    if (!this.followAction || this.drag?.moved || this.pinch || this.follow || this.camTo || this.real - this.userCamAt < 4) return;
+    const quiet = this.real - g.at > 6;
+    const f = this.frameRect ?? { x: 0, y: 0, w: W, h: H };
+    const to = quiet ? { x: (f.x + f.w / 2) * TILE, y: (f.y + f.h / 2) * TILE + 4, z: this.fitZoom() } : g;
+    const k = Math.min(1, dt * 0.9);
+    this.cam.x += (to.x - this.cam.x) * k;
+    this.cam.y += (to.y - this.cam.y) * k;
+    this.cam.z += (to.z - this.cam.z) * k * 0.8;
+    if (quiet && Math.abs(to.x - this.cam.x) < 1 && Math.abs(to.y - this.cam.y) < 1 && Math.abs(to.z - this.cam.z) < 0.01) this.glide = null;
+  }
+
+  /** The rooms the camera frames by default (tiles), or null for the whole building. */
+  private frameRect: { x: number; y: number; w: number; h: number } | null = null;
+
+  /** Frame just these rooms by default; the zoom buttons can still show the whole lab. */
+  setFrame(rooms: RoomId[] | null) {
+    if (!rooms?.length) {
+      this.frameRect = null;
+      return;
+    }
+    const rs = rooms.map((id) => roomById[id]);
+    const x = Math.min(...rs.map((r) => r.x)) - 1;
+    const y = Math.min(...rs.map((r) => r.y)) - 1;
+    this.frameRect = { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) + 1 - x, h: Math.max(...rs.map((r) => r.y + r.h)) + 1 - y };
+  }
+
+  /** The starting zoom: the framed rooms, or the whole building. On a phone, start closer. */
   fitZoom() {
-    const whole = this.wholeZoom();
-    return this.cw < 700 ? Math.max(whole, 0.8) : whole;
+    const f = this.frameRect;
+    const base = f ? Math.min(this.cw / ((f.w + 1) * TILE), this.ch / ((f.h + 3) * TILE)) : this.wholeZoom();
+    return this.cw < 700 ? Math.max(base, 0.8) : base;
+  }
+
+  /** Show every room, closed ones too. */
+  showWhole() {
+    this.userCam();
+    this.follow = null;
+    this.camTo = { x: (W * TILE) / 2, y: (H * TILE) / 2 + 4, z: this.wholeZoom() };
   }
 
   // ---- Homes ------------------------------------------------------------------------------------
@@ -284,6 +382,7 @@ export class LabEngine {
   }
 
   private roomActive(room: RoomId): boolean {
+    if (roomById[room]?.closed) return false;
     for (const a of this.actors.values()) {
       if (this.roomOf(a) !== room) continue;
       if (this.replay.status(a.id, this.t).working) return true;
@@ -299,7 +398,18 @@ export class LabEngine {
     const dt = Math.min(0.1, this.lastNow ? (now - this.lastNow) / 1000 : 0);
     this.lastNow = now;
     this.real += dt;
-    if (this.playing) {
+    if (this.ext) {
+      // The demo: follow its clock, smoothing between its updates.
+      const x = this.ext;
+      this.t = x.playing ? x.pos + Math.min(0.5, this.real - x.at) * x.speed : x.pos;
+      this.crossLive();
+    } else if (this.live) {
+      // Live: the clock runs in real time and never falls far behind the newest event.
+      const newest = this.liveEvents[this.liveEvents.length - 1]?.t ?? 0;
+      this.t = Math.max(this.t + dt, newest - 2);
+      this.replay.end = Math.max(this.replay.end, this.t);
+      this.crossLive();
+    } else if (this.playing) {
       const before = this.t;
       this.t = Math.min(this.hi, this.t + dt * this.speed);
       this.crossEvents(before, this.t);
@@ -326,6 +436,46 @@ export class LabEngine {
       this.handle(this.events[this.evIndex]);
       this.evIndex++;
     }
+    this.crossLive();
+  }
+
+  private crossLive() {
+    while (this.liveIndex < this.liveEvents.length && this.liveEvents[this.liveIndex].t <= this.t) {
+      this.playLive(this.liveEvents[this.liveIndex]);
+      this.liveIndex++;
+    }
+  }
+
+  /** Take in a rotation's new events. They play when the clock reaches them. */
+  addLive(events: LabEvent[]) {
+    const lastSeq = this.liveEvents[this.liveEvents.length - 1]?.seq ?? -Infinity;
+    const fresh = events.filter((e) => e.seq > lastSeq);
+    if (!fresh.length) return;
+    this.liveEvents.push(...fresh);
+    this.replay.addLive(fresh);
+  }
+
+  /** Follow the demo's clock: its position, speed and whether it is playing. */
+  followClock(pos: number, speed: number, playing: boolean) {
+    this.live = false;
+    this.ext = { pos, at: this.real, speed, playing };
+    this.playing = playing;
+  }
+
+  /** The demo jumped (a seek or a loop): start over from its events up to `t`, without animating them. */
+  jumpTo(t: number, events: LabEvent[]) {
+    this.liveEvents = [...events];
+    this.replay.addLive(events);
+    this.seek(t);
+    if (this.ext) this.ext = { ...this.ext, pos: t, at: this.real };
+  }
+
+  /** Jump to now and follow the session as it happens. */
+  goLive() {
+    this.seek(this.replay.end);
+    this.live = true;
+    this.playing = true;
+    this.cb.onTick(this.t, true);
   }
 
   private handle(e: Ev) {
@@ -375,7 +525,7 @@ export class LabEngine {
       case "memory.pass_down": {
         const target = e.to ? this.actors.get(e.to) : undefined;
         if (!target || !target.visible) break;
-        const sender = this.actors.get(e.a ?? "director") ?? this.actors.get("director");
+        const sender = (e.a ? this.actors.get(e.a) : undefined) ?? this.director();
         const color = sender ? colorOf(sender.role, sender.id) : DEPT.director;
         if (sender?.role === "director" && sender.steps.some((s) => "go" in s && s.go === this.visitSpot(target))) break;
         if (this.throttle(`pd-${e.a}-${e.to}`, 8)) this.fly(this.spotOf(sender), this.deskSpot(target), color, "envelope", () => this.say(target, "paper", color, 1.6));
@@ -405,7 +555,10 @@ export class LabEngine {
           break;
         }
         if (e.passed) this.directorVisit(target, "question");
-        else this.say(this.actors.get("director")!, "cross", C.red, 2.5);
+        else {
+          const d = this.director();
+          if (d) this.say(d, "cross", C.red, 2.5);
+        }
         break;
       }
       case "candidate": {
@@ -443,6 +596,151 @@ export class LabEngine {
     }
   }
 
+  // ---- Live rotation events -------------------------------------------------------------------
+  // Each event from the backend plays an animation the floor already has. Nothing is decided
+  // here: the floor only shows what the event says.
+
+  /** The cast member a backend agent id stands for, brought onto the floor if needed. */
+  private liveActor(id: string | undefined): Actor | undefined {
+    const agent = this.replay.liveAgent(id);
+    const a = agent ? this.actors.get(agent) : undefined;
+    if (a && !a.visible) {
+      a.visible = true;
+      a.x = a.home.px;
+      a.y = a.home.py;
+      a.atHome = true;
+    }
+    if (a) this.liveSeen.add(a.id);
+    return a;
+  }
+
+  private visit(a: Actor, target: Actor, icon: Icon, carry: Carry) {
+    this.plan(a, [{ go: this.visitSpot(target), face: 1 }, { wait: 2.2, icon, face: 1, carry: carry ?? undefined }, { go: a.home, face: 0 }], carry);
+  }
+
+  /** Catch up on an event from before this floor was drawn: put people where they are, no animation. */
+  placeLive(e: LabEvent) {
+    const who = this.liveActor(e.agent);
+    this.liveActor(e.to);
+    if (e.k === "agent.move" && who) {
+      const dest = this.placeSpot(String((e.data as { to?: string } | undefined)?.to ?? e.to ?? "desk"), who);
+      if (dest) {
+        who.x = dest.px;
+        who.y = dest.py;
+        who.atHome = dest === who.home;
+      }
+    }
+  }
+
+  playLive(e: LabEvent) {
+    const d = (e.data ?? {}) as Record<string, unknown>;
+    const who = this.liveActor(e.agent);
+    const to = this.liveActor(e.to);
+    const you = this.liveActor("learner");
+    const color = who ? colorOf(who.role, who.id) : DEPT.director;
+    // The camera glides to where this happens (sponsor counters happen nowhere on the floor).
+    if (e.k !== "sponsor.call") {
+      const extra: RoomId[] =
+        e.k === "learner.answer" || e.k === "rival.answer" ? ["team-a", "team-b"] : e.k === "mastery.update" ? ["vault"] : e.k === "task.picked" ? ["director"] : [];
+      this.glideTo([who, to, e.k === "task.picked" || e.k === "search" ? you : undefined], extra);
+    }
+    switch (e.k) {
+      case "session.start":
+        if (you) this.arrive(you);
+        break;
+      case "task.picked":
+        if (you) this.directorVisit(you, "paper");
+        break;
+      case "search":
+        this.exaFlash = this.real + 1.2;
+        if (!who) break;
+        this.say(who, "search", DEPT.library, 1.6);
+        if (you) this.visit(who, you, "scroll", "scroll");
+        break;
+      case "monitor.hit":
+        if (who) this.say(who, "alert", DEPT.library, 3);
+        break;
+      case "learner.query":
+        if (who) this.say(who, "write", color, 1.8);
+        break;
+      case "learner.evidence":
+        if (who) this.say(who, "paper", color, 1.8);
+        break;
+      case "agent.say":
+        if (!who) break;
+        if (you && who !== you && who.role !== "director") this.visit(who, you, "question", null);
+        else if (you && who.role === "director") this.directorVisit(you, "question");
+        else this.say(who, "question", color, 2.5);
+        break;
+      case "panel.whisper":
+      case "appeal.open":
+      case "appeal.message": {
+        const from = who ?? you;
+        const dest = to ?? this.liveActor("vale");
+        if (from && dest) this.fly(this.spotOf(from), this.deskSpot(dest), colorOf(from.role, from.id), "envelope", () => this.say(dest, "paper", colorOf(from.role, from.id), 1.6));
+        break;
+      }
+      case "learner.answer":
+      case "rival.answer": {
+        if (!who) break;
+        const mine = e.k === "learner.answer";
+        this.say(who, "paper", color, 1.8);
+        this.fly(this.deskSpot(who), mine ? FIX.hatchA : FIX.hatchB, color, "answer");
+        this.liveAnswers[mine ? "learner" : "rival"] = `${d.verdict}|${d.trap}`;
+        const { learner, rival } = this.liveAnswers;
+        if (learner && rival) {
+          // Both answers are at the hatch: it shows whether the two say the same thing.
+          const agree = learner === rival;
+          this.hatchFlash = { until: this.real + 4, agree, study: "" };
+          this.floater(FIX.hatch.px, FIX.hatch.py - 26, agree ? "answers match" : "answers differ", agree ? C.green : C.red, 4);
+          this.liveAnswers = {};
+        }
+        break;
+      }
+      case "check.result": {
+        if (who) this.say(who, "check", DEPT.referee, 2.5);
+        const name = String(d.check ?? "check");
+        const passed = d.passed !== false;
+        const at = who ?? null;
+        this.floater(at ? at.home.px : FIX.refTable.px, (at ? at.home.py : FIX.refTable.py) - 30, `${name} check ${passed ? "passed" : "failed"}`, passed ? C.green : C.red, 4);
+        break;
+      }
+      case "verdict":
+      case "appeal.ruling": {
+        if (who) this.say(who, "gavel", DEPT.referee, 3.5);
+        const ok = e.k === "verdict" ? d.correct === true : d.upheld === true;
+        const text = e.k === "verdict" ? (ok ? "you found the trap" : "trap missed") : ok ? "appeal upheld" : "verdict stands";
+        this.floater(FIX.refTable.px, FIX.refTable.py - 6, text, ok ? C.green : C.red, 4.5);
+        break;
+      }
+      case "mastery.update": {
+        const from = who ?? you;
+        if (!from) break;
+        const cab = CABINETS[0];
+        const dest: Spot = { tx: cab.x, ty: cab.y + 2, px: cab.x * TILE + TILE, py: cab.y * TILE + 6 };
+        this.fly(this.deskSpot(from), dest, C.lamp, "note", () => this.drawerFlash.set("0-1", this.real + 1.5));
+        break;
+      }
+      case "voice.line":
+        if (who && !who.bubble) this.say(who, "question", color, 2);
+        break;
+      case "agent.move": {
+        // Walk to wherever the event says, and stay there until the next move.
+        if (!who) break;
+        const dest = this.placeSpot(String(d.to ?? e.to ?? "desk"), who);
+        if (dest) this.plan(who, [{ go: dest, face: dest === who.home ? 0 : 1 }], null);
+        break;
+      }
+      // sponsor.call: counted by the sponsor strip, no floor animation.
+    }
+  }
+
+  /** The director on this floor: "director" in a recorded run, Dr. Vale in a rotation. */
+  private director(): Actor | undefined {
+    for (const a of this.actors.values()) if (a.role === "director") return a;
+    return undefined;
+  }
+
   private throttle(key: string, runSeconds: number) {
     const last = this.lastFlyAt.get(key) ?? -1e9;
     if (this.t - last < runSeconds) return false;
@@ -463,7 +761,7 @@ export class LabEngine {
   }
 
   private directorVisit(target: Actor, icon: Icon) {
-    const d = this.actors.get("director");
+    const d = this.director();
     if (!d) return;
     const spot = this.visitSpot(target);
     const busy = d.steps.length > 0 || d.path.length > 0;
@@ -542,10 +840,71 @@ export class LabEngine {
   // ---- Movement -------------------------------------------------------------------------------
 
   private walkFactor() {
+    if (this.ext) return this.ext.playing ? Math.max(1, Math.min(3, this.ext.speed / 2)) : 0;
+    if (this.live) return 1;
     return this.playing ? Math.max(0.7, Math.min(3, this.speed / 10)) : 0;
   }
 
+  /** When each person next shows a small working bubble at their desk (rotation floors only). */
+  private nextIdle = new Map<string, number>();
+
+  /** Between events, people at their desks look busy: a reading, writing or searching bubble now and then. */
+  private idleWork() {
+    const moving = this.ext ? this.ext.playing : this.playing;
+    if (!this.replay.cast.size || !moving) return;
+    for (const a of this.actors.values()) {
+      if (!a.visible || !a.atHome || a.bubble || a.steps.length || a.path.length) continue;
+      const due = this.nextIdle.get(a.id);
+      if (due === undefined) {
+        this.nextIdle.set(a.id, this.real + 2 + (hashOf(a.id) % 50) / 10);
+        continue;
+      }
+      if (this.real < due) continue;
+      const icons = IDLE[a.role] ?? IDLE.default;
+      const icon = icons[Math.floor(this.real * 7 + hashOf(a.id)) % icons.length];
+      this.say(a, icon, colorOf(a.role, a.id), 1.3);
+      this.nextIdle.set(a.id, this.real + 5 + ((hashOf(a.id) + Math.floor(this.real)) % 60) / 10);
+    }
+  }
+
+  /** Where an agent.move goes: another person, a fixture, a room, or back to the desk. */
+  private placeSpot(to: string, who: Actor): Spot | null {
+    const other = this.actors.get(this.replay.liveAgent(to) ?? "");
+    if (other && other !== who) return this.visitSpot(other);
+    switch (to) {
+      case "desk":
+      case "home":
+        return who.home;
+      case "hatch":
+        return who.role === "team-b" ? FIX.hatchB : FIX.hatchA;
+      case "terminal":
+      case "search":
+        return { tx: 34, ty: 4, px: 34 * TILE + TILE / 2, py: 4 * TILE + TILE - 1 };
+      case "table":
+      case "bruin":
+        return FIX.refTable;
+      case "vault":
+        return FIX.vaultDoor;
+      case "lobby":
+      case "elevator":
+        return ELEVATOR;
+      case "coffee":
+        return FIX.coffee;
+      case "office":
+        return VISITOR_SPOTS[1];
+    }
+    const room = (roomById as Record<string, (typeof ROOMS)[number] | undefined>)[to];
+    if (room) {
+      const tx = Math.floor(room.x + room.w / 2);
+      const ty = room.y + Math.floor(room.h / 2);
+      return { tx, ty, px: tx * TILE + TILE / 2, py: ty * TILE + TILE - 1 };
+    }
+    return null;
+  }
+
   private update(dt: number) {
+    this.idleWork();
+    this.autoCam(dt);
     const f = this.walkFactor();
     for (const a of this.actors.values()) {
       if (!a.visible) continue;
@@ -691,7 +1050,7 @@ export class LabEngine {
   private drawRoomLights(ctx: CanvasRenderingContext2D) {
     for (const r of ROOMS) {
       const light = this.roomLight.get(r.id) ?? 0;
-      const dim = 0.42 * (1 - light);
+      const dim = r.closed ? 0.62 : 0.42 * (1 - light);
       if (dim > 0.01) {
         ctx.fillStyle = `rgba(18, 22, 52, ${dim})`;
         ctx.fillRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
@@ -996,7 +1355,7 @@ export class LabEngine {
       ctx.fillStyle = "rgba(22, 26, 51, 0.88)";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), Math.round(w), Math.round(h));
       const role = (r.id in DEPT ? r.id : r.id === "director" ? "director" : null) as Role | null;
-      ctx.fillStyle = role ? DEPT[role] : r.id === "vault" ? "#7fe0ff" : "#a9b2d3";
+      ctx.fillStyle = r.closed ? "#5d6590" : role ? DEPT[role] : r.id === "vault" ? "#7fe0ff" : "#a9b2d3";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y + h / 2) - 2, Math.round(w), 2);
       ctx.fillStyle = "#eef2fa";
       ctx.fillText(text, p.x, p.y + 0.5);
@@ -1008,7 +1367,7 @@ export class LabEngine {
         if (!a.study || a.role === "solo") continue;
         const p = this.toScreen(a.home.px, (a.home.ty + 1) * TILE + 11);
         ctx.fillStyle = "rgba(27,31,58,0.55)";
-        ctx.fillText(a.study, p.x, p.y);
+        ctx.fillText(a.id === this.replay.you ? "Your desk" : a.id === this.replay.riley ? "Riley's desk" : a.study, p.x, p.y);
       }
     }
     // Floating outcome labels.
@@ -1029,6 +1388,9 @@ export class LabEngine {
     }
     // Name tags for the hovered and selected person.
     const tags: Target[] = [];
+    // You always wear a name tag, so you can find yourself on the floor.
+    const you = this.replay.you;
+    if (you && !(this.hover?.type === "agent" && this.hover.id === you) && !(this.selected?.type === "agent" && this.selected.id === you)) tags.push({ type: "agent", id: you });
     if (this.hover?.type === "agent") tags.push(this.hover);
     if (this.selected?.type === "agent" && !(this.hover?.type === "agent" && this.hover.id === this.selected.id)) tags.push(this.selected);
     for (const t of tags) {
@@ -1042,7 +1404,7 @@ export class LabEngine {
       const w = ctx.measureText(name).width + 14;
       ctx.fillStyle = "#161a33";
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - 22), Math.round(w), 20);
-      ctx.fillStyle = colorOf(a.role, a.id);
+      ctx.fillStyle = a.id === you ? C.lamp : colorOf(a.role, a.id);
       ctx.fillRect(Math.round(p.x - w / 2), Math.round(p.y - 4), Math.round(w), 2);
       ctx.fillStyle = "#eef2fa";
       ctx.fillText(name, p.x, p.y - 12);
@@ -1095,6 +1457,7 @@ export class LabEngine {
     if (this.pointers.size === 2) {
       const [p, q] = [...this.pointers.values()];
       this.pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), z: this.cam.z };
+      this.userCam();
       this.drag = null;
       return;
     }
@@ -1118,6 +1481,7 @@ export class LabEngine {
       const dy = ey - this.drag.sy;
       if (Math.abs(dx) + Math.abs(dy) > 4) this.drag.moved = true;
       if (this.drag.moved) {
+        this.userCam();
         this.cam.x = this.drag.cx - dx / this.cam.z;
         this.cam.y = this.drag.cy - dy / this.cam.z;
         this.camTo = null;
@@ -1151,6 +1515,7 @@ export class LabEngine {
   private onWheel = (e: WheelEvent) => {
     if (!this.interactive) return;
     e.preventDefault();
+    this.userCam();
     const { x: ex, y: ey } = this.pos(e);
     this.follow = null;
     const before = this.toWorld(ex, ey);
@@ -1197,4 +1562,21 @@ export class LabEngine {
   camera() {
     return { ...this.cam };
   }
+}
+
+/** The working bubbles each kind of person shows at their desk between events. */
+const IDLE: Record<string, Icon[]> = {
+  director: ["read", "write"],
+  library: ["search", "read", "scroll"],
+  referee: ["check", "read"],
+  head: ["read", "write"],
+  "team-a": ["write", "read"],
+  "team-b": ["write", "read", "search"],
+  default: ["read", "write"],
+};
+
+function hashOf(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
 }

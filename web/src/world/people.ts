@@ -32,7 +32,8 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-export function lookFor(id: string, role: Role): Look {
+/** `you` marks the visitor's own sprite: the same build, with a gold badge. */
+export function lookFor(id: string, role: Role, you = false): Look {
   const h = hash(id);
   const skin = SKINS[h % SKINS.length];
   const hair = HAIRS[(h >>> 4) % HAIRS.length];
@@ -74,7 +75,7 @@ export function lookFor(id: string, role: Role): Look {
     pants = "#4a5070";
   }
   return {
-    key: `${id}|${role}`,
+    key: `${id}|${role}${you ? "|you" : ""}`,
     skin,
     hair,
     style,
@@ -85,7 +86,7 @@ export function lookFor(id: string, role: Role): Look {
     shoes: "#24284a",
     stripes,
     glasses: ((h >>> 12) & 7) === 0 || role === "director" || role === "head",
-    badge: role === "head" ? DEPT[headDept(id) ?? "director"] : dept,
+    badge: you ? C.lamp : role === "head" ? DEPT[headDept(id) ?? "director"] : dept,
   };
 }
 

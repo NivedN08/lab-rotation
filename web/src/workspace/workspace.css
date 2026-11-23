@@ -1,0 +1,673 @@
+/* Workspace tab. Only uses the lab's variables from styles.css. */
+
+.ws-root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.ws-title {
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ws-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.ws-tabs {
+  display: flex;
+  gap: 2px;
+  box-shadow: inset 0 -2px 0 var(--line);
+}
+
+.ws-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--fog);
+  font-family: var(--pixel);
+}
+
+.ws-about {
+  line-height: 1.4;
+}
+
+.ws-grid-wrap {
+  max-height: 46vh;
+  overflow: auto;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.ws-grid {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12.5px;
+}
+
+.ws-grid th,
+.ws-grid td {
+  padding: 4px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--night-3);
+}
+
+.ws-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--night-3);
+  color: var(--snow);
+  font-weight: 700;
+  z-index: 1;
+}
+
+.ws-type {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--fog);
+  text-transform: uppercase;
+}
+
+.ws-grid tbody tr:hover {
+  background: var(--night-2);
+}
+
+.ws-rownum {
+  color: var(--fog);
+  text-align: right !important;
+  font-family: var(--pixel);
+  font-size: 11px;
+}
+
+.ws-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-null {
+  color: var(--fog);
+  font-style: italic;
+}
+
+.ws-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mist);
+  font-size: 13px;
+}
+
+/* ---- SQL box ---- */
+
+.ws-sql {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-editor {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  padding: 10px 12px;
+  background: var(--night);
+  color: var(--snow);
+  box-shadow: 0 0 0 2px var(--line);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ws-editor:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-error {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--bad);
+  color: var(--snow);
+  font-size: 13px;
+}
+
+/* ---- Evidence picker ---- */
+
+.ws-hit {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ws-hit:hover {
+  color: var(--gold-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ws-cell {
+  cursor: pointer;
+}
+
+.ws-cell:hover {
+  background: var(--night-3);
+}
+
+.ws-grid .ws-cited {
+  background: rgba(255, 201, 92, 0.16);
+}
+
+.ws-grid td.ws-cited {
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.ws-grid th.ws-cited .ws-hit {
+  color: var(--gold);
+}
+
+.ws-grid tr.ws-cited .ws-rownum .ws-hit {
+  color: var(--gold);
+}
+
+.ws-tray {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-tray-head .btn {
+  margin-left: auto;
+  min-height: 28px;
+}
+
+.ws-cites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-cites li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ws-cites .btn.icon {
+  margin-left: auto;
+  width: 28px;
+  min-height: 28px;
+  flex: none;
+}
+
+.ws-kind {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+  text-transform: uppercase;
+  cursor: default;
+  flex: none;
+}
+
+.ws-kind.row {
+  color: var(--team-a);
+}
+
+.ws-kind.column {
+  color: var(--library);
+}
+
+.ws-kind.cell {
+  color: var(--good);
+}
+
+.ws-cite-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ws-cite-sql {
+  display: block;
+  margin-top: 2px;
+  color: var(--fog);
+  font-size: 11.5px;
+}
+
+/* ---- Answer form ---- */
+
+.ws-answer {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.ws-field legend,
+.ws-legend {
+  padding: 0;
+  color: var(--mist);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ws-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-choice {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.ws-choice[aria-checked="true"] {
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.ws-choice.holds[aria-checked="true"] {
+  background: var(--good);
+}
+
+.ws-choice.fails[aria-checked="true"] {
+  background: var(--bad);
+}
+
+.ws-choice.cant_tell[aria-checked="true"] {
+  background: var(--gold);
+}
+
+.ws-field:disabled .chip,
+.ws-field[disabled] .chip {
+  cursor: default;
+}
+
+.ws-select {
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  color: var(--snow);
+}
+
+.ws-select:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-note {
+  font-family: var(--text);
+  font-size: 14px;
+}
+
+.ws-cites-plain {
+  list-style: disc;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--snow);
+  gap: 3px;
+}
+
+.ws-cites-plain li {
+  display: list-item;
+}
+
+.ws-sent {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--good);
+  font-size: 13px;
+}
+
+.ws-tasks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-brief {
+  line-height: 1.4;
+}
+
+/* Sections keep their height and the panel scrolls, instead of squeezing and overlapping. */
+.ws-root > * {
+  flex: none;
+}
+
+.ws-task {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-brief {
+  margin: 0;
+  color: var(--mist);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ---- Timer and states ---- */
+
+.ws-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ws-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.ws-timer-num {
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-timer-note {
+  color: var(--fog);
+  font-size: 12px;
+}
+
+.ws-timer.low {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-timer.low .ws-timer-num {
+  color: var(--gold);
+}
+
+.ws-timer.over {
+  box-shadow: 0 0 0 2px var(--bad);
+}
+
+.ws-timer.over .ws-timer-num,
+.ws-timer.over .ws-timer-note {
+  color: var(--bad);
+}
+
+.ws-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ws-skel {
+  height: 14px;
+  background: var(--night-3);
+  animation: ws-pulse 1s steps(3) infinite alternate;
+}
+
+.ws-skel.tall {
+  height: 120px;
+  width: 100%;
+}
+
+@keyframes ws-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-skel {
+    animation: none;
+  }
+}
+
+/* ---- Column profile ---- */
+
+.ws-prof {
+  margin-left: 6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fog);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ws-prof:hover,
+.ws-prof[aria-pressed="true"] {
+  color: var(--gold);
+}
+
+.ws-profile {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-profile-head .btn {
+  margin-left: auto;
+  width: 28px;
+  min-height: 28px;
+}
+
+.ws-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.ws-stats dt {
+  color: var(--fog);
+  font-size: 12px;
+}
+
+.ws-stats dd {
+  margin: 0;
+  font-family: var(--pixel);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-flag {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--gold-lo);
+  font-size: 13px;
+}
+
+.ws-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-bars li {
+  display: grid;
+  grid-template-columns: minmax(60px, 120px) 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ws-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-bar-track {
+  height: 10px;
+  background: var(--night);
+}
+
+.ws-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--team-a);
+}
+
+.ws-bar-n {
+  text-align: right;
+  color: var(--mist);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Chart builder ---- */
+
+.ws-chart {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ws-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+
+.ws-scatter {
+  width: 100%;
+  height: auto;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.ws-axis {
+  fill: none;
+  stroke: var(--line-hi);
+  stroke-width: 1;
+}
+
+.ws-dot {
+  fill: var(--gold);
+  opacity: 0.8;
+}
+
+.ws-tick {
+  fill: var(--mist);
+  font-size: 10px;
+  font-family: var(--text);
+}
+
+/* ---- Voice input ---- */
+
+.ws-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ws-mic {
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.ws-rec {
+  width: 8px;
+  height: 8px;
+  background: var(--fog);
+}
+
+.ws-rec.on {
+  background: var(--bad);
+  animation: ws-pulse 0.6s steps(2) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-rec.on {
+    animation: none;
+  }
+}
+
+.ws-tier {
+  margin-left: 10px;
+  padding: 1px 8px;
+  background: var(--night-3);
+  color: var(--mist);
+  font-family: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.ws-claim {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  font-size: 14px;
+}
