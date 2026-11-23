@@ -94,3 +94,11 @@ def test_submission_adds_annotations_with_fallback():
     assert out[0]["tutor_responses"]["Tutor_1"]["annotation"] == {"Mistake_Identification": "No"}
     assert out[0]["tutor_responses"]["Tutor_2"]["annotation"] == {"Mistake_Identification": "Yes"}
     assert fallbacks == 1 and "annotation" not in doc[0]["tutor_responses"]["Tutor_1"]
+
+
+def test_table_one_row_per_split_and_system():
+    from bench import table
+    rows = [{"split": "dev-B", "system": "s", "dimension": d, "macro_f1": "50.0", "n": "8", "record": "1"}
+            for d in data.DIMENSIONS]
+    out = table.table(rows).splitlines()
+    assert out[2] == "| dev-B | s | 50.0 | 50.0 | 50.0 | 50.0 | 8 |" and out[-1].startswith("| test | record")
