@@ -1288,3 +1288,22 @@ a {
     width: auto;
   }
 }
+
+/* ---- Verdict card: the results card, with room for the answers side by side ---------------------- */
+
+.tour.verdict {
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+}
+
+.verdict-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 860px) {
+  .verdict-pair {
+    grid-template-columns: 1fr;
+  }
+}

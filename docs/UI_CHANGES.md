@@ -46,7 +46,7 @@
 - [x] W2. SQL box: runs on the server (Nived's runner), shows results and errors
 - [x] W3. Evidence picker: click rows, columns or cells to cite them
 - [x] W4. Answer form: holds / fails / can't tell, the trap you found, your evidence, submit
-- [ ] W5. Timer and the empty, loading and error states
+- [x] W5. Timer and the empty, loading and error states
 - [ ] W6.* Column profile (one click per column)
 - [ ] W7.* Chart builder
 - [ ] W8.* Voice input (browser speech to text into the answer form)
@@ -98,3 +98,4 @@ No new animation types are needed. Each new event reuses one that the original a
 - 3: room plaques now read Dr. Vale's office, Telem's library, Team A: You and Sam, Team B: Riley, Referee: Ines, Your learner profile; the room panels say what each room means for the rotation. Team C and Solo agents are dimmed and labelled "Closed" (decided).
 - 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.
 - 5: Riley sits at the Team B desk nearest the hatch, plate reads "Riley's desk" when zoomed in; both answers fly to the hatch between the rooms.
+- 9 (layout only, not ticked): verdict card component built from the results card; takes the verdict, check.result and answer event data as props. Wired up once the shared rotation state lands.
