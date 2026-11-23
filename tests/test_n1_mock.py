@@ -1,0 +1,147 @@
+"""Mock mode answers every route of contract/api.md and replays the mock session at speed."""
+
+import json
+
+import pytest
+
+from lab.session import api
+from lab.session.mock import MockEngine
+from lab.session.tables import TaskTables
+from tests.test_n1_contract import CONTRACT
+
+
+class Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+@pytest.fixture
+def mock(monkeypatch):
+    monkeypatch.setenv("LAB_MOCK", "1")
+    monkeypatch.setenv("LAB_MOCK_SPEED", "1")
+    clock = Clock()
+    engine = MockEngine(clock=clock)
+    api.set_engines(mock=engine, real=None)
+    yield clock
+    api.set_engines()
+
+
+def call(method, path, body=None, query=""):
+    return api.handle(method, path, query, body)
+
+
+def start():
+    status, reply = call("POST", "/api/session/start")
+    assert status == 200
+    return reply
+
+
+def test_health_agents_demo(mock, monkeypatch):
+    assert call("GET", "/api/health") == (200, {"ok": True, "mock": True, "band": "local"})
+    status, agents = call("GET", "/api/agents")
+    assert status == 200 and {a["id"] for a in agents} == {"vale", "ines", "sam", "telem", "riley"}
+    for a in agents:
+        assert {"id", "name", "role", "reads", "portrait"} <= set(a)
+    monkeypatch.delenv("LAB_DEMO_SESSION", raising=False)
+    assert call("GET", "/api/demo") == (200, {"session": None})
+    monkeypatch.setenv("LAB_DEMO_SESSION", "s-abc")
+    monkeypatch.setenv("LAB_DEMO_START", "12.5")
+    monkeypatch.setenv("LAB_DEMO_SPEED", "2")
+    assert call("GET", "/api/demo") == (200, {"session": "s-abc", "start": 12.5, "end": None, "speed": 2.0})
+
+
+def test_start_and_task(mock):
+    reply = start()
+    task = json.loads((CONTRACT / "mock_task" / "task.json").read_text())
+    assert reply["sessionId"].startswith("mock-")
+    assert reply["tasks"] == [{"id": "t1", "title": task["title"]}]
+    assert reply["task"] == task
+    assert call("GET", f"/api/session/{reply['sessionId']}/task") == (200, {"task": task})
+
+
+def test_events_release_at_real_speed(mock, monkeypatch):
+    sid = start()["sessionId"]
+    status, first = call("GET", f"/api/session/{sid}/events", query="since=0")
+    assert status == 200 and [e["seq"] for e in first["events"]] == [1]   # only t=0 so far
+    assert first["next"] == 1
+    mock.now += 13
+    _, more = call("GET", f"/api/session/{sid}/events", query="since=1")
+    assert [e["seq"] for e in more["events"]] == list(range(2, 17))
+    _, none = call("GET", f"/api/session/{sid}/events", query=f"since={more['next']}")
+    assert none == {"events": [], "next": 16}
+    monkeypatch.setenv("LAB_MOCK_SPEED", "100")
+    _, rest = call("GET", f"/api/session/{sid}/events", query="since=16")
+    assert rest["events"][-1]["k"] == "session.end" and rest["next"] == 68
+    assert call("GET", f"/api/session/{sid}/task") == (200, {"task": None})
+
+
+def test_totals_and_mastery_follow_the_replay(mock):
+    sid = start()["sessionId"]
+    mock.now += 1000
+    _, totals = call("GET", f"/api/session/{sid}/sponsors")
+    assert totals["band"]["messages"] == 6
+    assert totals["bruin"] == {"checksRun": 2, "checksFailed": 1}
+    assert totals["runware"]["lines"] == 4
+    _, mastery = call("GET", f"/api/session/{sid}/mastery")
+    by_trap = {m["trap"]: m for m in mastery["traps"]}
+    assert len(by_trap) == 6 and by_trap["unit_mismatch"] == {"trap": "unit_mismatch", "score": 0.61, "attempts": 1}
+
+
+def test_tables_rows_profile_sql(mock):
+    sid = start()["sessionId"]
+    _, tables = call("GET", f"/api/session/{sid}/tables")
+    assert [t["name"] for t in tables] == ["visits", "customers", "stores"]
+    assert tables[0]["rowCount"] == 300 and "key" not in tables[0]
+    _, rows = call("GET", f"/api/session/{sid}/tables/visits/rows", query="offset=0&limit=2")
+    assert rows["rows"][0][0] == "v0001" and len(rows["rows"]) == 2
+    _, rows = call("GET", f"/api/session/{sid}/tables/visits/rows", query="limit=9999")
+    assert len(rows["rows"]) == 300
+    _, prof = call("GET", f"/api/session/{sid}/tables/visits/profile")
+    spend = next(c for c in prof["columns"] if c["column"] == "spend")
+    assert spend["type"] == "real" and spend["max"] == 5600.0 and "mean" in spend and len(spend["top"]) <= 5
+    status, res = call("POST", f"/api/session/{sid}/sql", {"sql": "select count(*) as n from visits"})
+    assert status == 200 and res["columns"] == ["n"] and res["rows"] == [[300]] and res["truncated"] is False
+    status, res = call("POST", f"/api/session/{sid}/sql", {"sql": "select * from nope"})
+    assert status == 200 and "error" in res
+    assert call("GET", f"/api/session/{sid}/tables/nope/rows")[0] == 404
+
+
+def test_canned_posts(mock):
+    sid = start()["sessionId"]
+    answer = {"taskId": "t1", "verdict": "fails", "trap": "unit_mismatch", "evidence": [], "note": "West is in cents"}
+    assert call("POST", f"/api/session/{sid}/answer", answer) == (200, {"accepted": True})
+    status, appeal = call("POST", f"/api/session/{sid}/appeal", {"taskId": "t1", "reason": "the hint came late"})
+    assert status == 200 and appeal["appealId"]
+    assert call("POST", f"/api/session/{sid}/appeal/{appeal['appealId']}/message", {"text": "see q5"}) == \
+        (200, {"ok": True})
+    status, reply = call("POST", f"/api/session/{sid}/ask", {"agent": "vale", "text": "why this task?"})
+    assert status == 200 and reply["agent"] == "vale" and reply["text"] and isinstance(reply["sources"], list)
+
+
+def test_bad_requests(mock):
+    sid = start()["sessionId"]
+    assert call("POST", f"/api/session/{sid}/answer", {"taskId": "t1", "verdict": "maybe", "trap": "none"})[0] == 400
+    assert call("POST", f"/api/session/{sid}/ask", {"agent": "learner", "text": "hi"})[0] == 400
+    assert call("GET", f"/api/session/{sid}/events", query="since=-1")[0] == 400
+    assert call("GET", "/api/session/bad id!/task")[0] == 400
+    assert call("GET", "/api/nothing")[0] == 404
+    assert call("POST", "/api/session/start", {"mode": "party"})[0] == 400
+
+
+@pytest.mark.parametrize("sql", [
+    "drop table visits", "select 1; select 2", "attach 'x.db'", "copy visits to 'out.csv'",
+    "select * from read_csv('/etc/passwd')", "select * from 'contract/mock_task/visits.csv'",
+    "install httpfs", "set enable_external_access = true", "select getenv('HOME')",
+    "create table x as select 1", "pragma database_list",
+])
+def test_sql_box_blocks_escapes(sql):
+    res = TaskTables(CONTRACT / "mock_task").query(sql)
+    assert "error" in res and "rows" not in res
+
+
+def test_sql_box_caps_rows():
+    res = TaskTables(CONTRACT / "mock_task").query("select * from visits a, visits b")
+    assert len(res["rows"]) == 500 and res["truncated"] is True
