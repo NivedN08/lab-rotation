@@ -132,3 +132,93 @@ def test_benchmark_respects_budget_before_paying():
 def test_benchmark_unknown_kind():
     with pytest.raises(ValueError):
         Glasser(offline=True).benchmark("weather")
+
+
+# -- concurrency: one paid lookup per item per session ----------------------------------------
+
+def slow(inner, gate):
+    """Wrap a transport so every Run blocks until `gate` opens, to force callers to overlap."""
+    def transport(tool, args):
+        transport.seen.append(args)
+        assert gate.wait(5)
+        return inner(tool, args)
+
+    transport.seen = []
+    return transport
+
+
+def test_two_threads_same_item_pay_once():
+    import threading
+
+    gate = threading.Event()
+    t = slow(fake(), gate)
+    calls = []
+    g = Glasser(on_call=calls.append, offline=False, transport=t)
+    out = []
+    threads = [threading.Thread(target=lambda: out.append(g.price_level("milk"))) for _ in range(2)]
+    for th in threads:
+        th.start()
+    while not t.seen:  # the first caller is inside the paid Run
+        pass
+    gate.set()
+    for th in threads:
+        th.join(5)
+    assert len(t.seen) == 1 and len(out) == 2 and out[0]["median"] == out[1]["median"]
+    assert sorted(c.count for c in calls) == [0, 1] and g.spent == 0.002
+
+
+def test_session_start_and_benchmark_race_buy_each_staple_once():
+    import threading
+
+    gate = threading.Event()
+    t = slow(fake(), gate)
+    g = Glasser(offline=False, transport=t)
+    res = {}
+    a = threading.Thread(target=lambda: res.setdefault("params", g.retail_params()))
+    b = threading.Thread(target=lambda: res.setdefault("basket", g.benchmark("basket", by="sam")))
+    a.start()
+    b.start()
+    gate.set()
+    a.join(10)
+    b.join(10)
+    queries = [x["input"].get("q") or x["input"].get("ticker") for x in t.seen]
+    assert sorted(queries) == sorted(set(queries))  # nothing bought twice
+    assert len(queries) == len(glasser.ITEMS) + 1
+    assert not res["params"]["cached"] and not res["basket"]["cached"]
+    assert round(g.spent, 6) == round(0.02 + 0.002 * len(glasser.ITEMS), 6)
+
+
+def test_waiter_falls_back_when_the_buyer_fails():
+    import threading
+
+    gate = threading.Event()
+    t = slow(fake(fail=True), gate)
+    g = Glasser(offline=False, transport=t)
+    out = []
+    threads = [threading.Thread(target=lambda: out.append(g.benchmark("retailer_kpi"))) for _ in range(2)]
+    for th in threads:
+        th.start()
+    while not t.seen:
+        pass
+    gate.set()
+    for th in threads:
+        th.join(5)
+    assert len(t.seen) == 1 and [o["cached"] for o in out] == [True, True]
+
+
+def test_in_flight_prices_count_against_budget():
+    import threading
+
+    gate = threading.Event()
+    t = slow(fake(), gate)
+    g = Glasser(offline=False, transport=t, budget_usd=0.003)  # room for one $0.002 Run
+    out = {}
+    a = threading.Thread(target=lambda: out.setdefault("milk", g.price_level("milk")))
+    a.start()
+    while not t.seen:
+        pass
+    with pytest.raises(glasser.GlasserError):
+        g.price_level("bread")  # would pass the budget while milk is still being bought
+    gate.set()
+    a.join(5)
+    assert len(t.seen) == 1 and out["milk"]["n"] == 5 and g.spent == 0.002
