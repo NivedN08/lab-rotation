@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { getTables, rotation, useRotation, type TableInfo } from "../api/client";
 import { AnswerForm } from "./AnswerForm";
+import { ChartBuilder } from "./ChartBuilder";
 import { EvidenceTray } from "./EvidenceTray";
 import { evidence } from "./evidence";
+import { lastQuery } from "./lastQuery";
 import { SqlBox } from "./SqlBox";
 import { TableBrowser } from "./TableBrowser";
 import { Timer } from "./Timer";
@@ -39,6 +41,7 @@ export default function Workspace({ onTaskChange }: Props) {
   // Each task has its own evidence list.
   useLayoutEffect(() => {
     evidence.setTask(task?.id ?? "");
+    lastQuery.set(null);
   }, [task?.id]);
 
   const error = startError || tablesError;
@@ -74,6 +77,7 @@ export default function Workspace({ onTaskChange }: Props) {
           </div>
           <TableBrowser sessionId={sessionId} tables={tables} />
           <SqlBox key={`sql-${task.id}`} sessionId={sessionId} />
+          <ChartBuilder sessionId={sessionId} tables={tables} />
           <EvidenceTray />
           <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />
           {awaitingNext && (

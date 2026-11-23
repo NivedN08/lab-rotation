@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Grid } from "./Grid";
+import { lastQuery } from "./lastQuery";
 import { runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
@@ -15,7 +16,9 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
     if (!sql.trim() || state === "running") return;
     setState("running");
     try {
-      setResult({ ...(await runSql(sessionId, sql)), sql });
+      const r = await runSql(sessionId, sql);
+      setResult({ ...r, sql });
+      lastQuery.set({ sql, columns: r.columns, rows: r.rows });
       setState("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

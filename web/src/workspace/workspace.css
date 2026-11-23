@@ -580,3 +580,42 @@
   color: var(--mist);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Chart builder ---- */
+
+.ws-chart {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ws-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+
+.ws-scatter {
+  width: 100%;
+  height: auto;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.ws-axis {
+  fill: none;
+  stroke: var(--line-hi);
+  stroke-width: 1;
+}
+
+.ws-dot {
+  fill: var(--gold);
+  opacity: 0.8;
+}
+
+.ws-tick {
+  fill: var(--mist);
+  font-size: 10px;
+  font-family: var(--text);
+}
