@@ -114,3 +114,38 @@
   color: var(--mist);
   font-size: 13px;
 }
+
+/* ---- SQL box ---- */
+
+.ws-sql {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-editor {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  padding: 10px 12px;
+  background: var(--night);
+  color: var(--snow);
+  box-shadow: 0 0 0 2px var(--line);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ws-editor:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.ws-error {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--bad);
+  color: var(--snow);
+  font-size: 13px;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SqlBox } from "./SqlBox";
 import { TableBrowser } from "./TableBrowser";
 import { loadTables } from "./fakeData";
 import type { Table } from "./types";
@@ -21,6 +22,7 @@ export default function Workspace(_props: Props) {
     <div className="ws-root">
       <h2 className="ws-title">Tables</h2>
       {tables ? <TableBrowser tables={tables} /> : <p className="empty">Loading tables…</p>}
+      <SqlBox />
     </div>
   );
 }
