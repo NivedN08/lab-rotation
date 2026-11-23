@@ -20,4 +20,12 @@ Errors: any non-2xx reply, or a JSON body with `{"error": "plain words"}`, is sh
 
 Trap names come from `traps.ts`: the `trap` field in the answer is one of those exact strings. If Nived's names differ, change that one list.
 
+## Events the floor plays
+
+`GET /api/session/:id/events` returns these kinds in `k`. `a` is the agent (provisional ids: `learner`, `vale`, `ines`, `sam`, `telem`, `riley`); `to` is the second agent for `panel.whisper` and appeal messages; `text` is a plain-words line for the lab log; `data` holds the details.
+
+`session.start`, `task.picked`, `search`, `monitor.hit`, `learner.query`, `learner.evidence`, `agent.say`, `panel.whisper`, `learner.answer`, `rival.answer`, `check.result`, `verdict`, `mastery.update`, `appeal.open`, `appeal.message`, `appeal.ruling`, `voice.line`, `sponsor.call` (`data.sponsor` is `band`, `telem`, `bruin`, `runware` or `glasser`).
+
+`mockSession.ts` plays all of them in about two minutes. Add `?mockspeed=10` to the URL to play it ten times faster.
+
 `row` is 1-based within what the learner saw. For a SQL result, `source` is `"query"` and `sql` holds the query.

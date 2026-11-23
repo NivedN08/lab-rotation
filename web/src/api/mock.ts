@@ -1,7 +1,8 @@
 // Fake backend: same shapes as client.ts returns, used until Nived's routes exist.
 // This stands in for the server only. Nothing outside this file should interpret SQL or invent data.
 
-import type { AnswerSubmission, Cell, CurrentTask, TaskInfo, EventsPage, EvidenceRef, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import { scriptedEvents } from "./mockSession";
+import type { AnswerSubmission, Cell, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 type FakeTable = Omit<TableInfo, "rowCount"> & { rows: Cell[][] };
 
@@ -138,7 +139,7 @@ export const mock = {
     return wait({ rows: t.rows.slice(offset, offset + limit) });
   },
 
-  getEvents: (since: number) => wait<EventsPage>({ events: [] as LabEvent[], next: since }, 50),
+  getEvents: (since: number) => wait<EventsPage>(scriptedEvents(since), 30),
 
   // Canned stand-in for the server's SQL runner.
   runSql(sql: string): Promise<SqlResult> {

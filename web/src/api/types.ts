@@ -30,6 +30,10 @@ export type LabEvent = {
   t: number;
   /** Event kind, e.g. "task.picked", "check.result", "verdict". */
   k: string;
+  /** Agent the event is about: learner, vale, ines, sam, telem or riley (provisional until the backend confirms its ids). */
+  a?: string;
+  /** Second agent, for events that move between two (panel.whisper). */
+  to?: string;
   text?: string;
   data?: Record<string, unknown>;
 };
