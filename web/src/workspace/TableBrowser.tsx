@@ -7,7 +7,7 @@ export const ROW_CAP = 50;
 
 type Loaded = { rows: Cell[][]; loading: boolean; error: string };
 
-export function TableBrowser({ sessionId, tables }: { sessionId: string; tables: TableInfo[] }) {
+export function TableBrowser({ sessionId, taskId, tables }: { sessionId: string; taskId?: string; tables: TableInfo[] }) {
   const [active, setActive] = useState(tables[0]?.name ?? "");
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
   const [profiles, setProfiles] = useState<Record<string, TableProfile>>({});
@@ -21,7 +21,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
     const have = loaded[t.name]?.rows ?? [];
     setLoaded((l) => ({ ...l, [t.name]: { rows: have, loading: true, error: "" } }));
     try {
-      const rows = await getRows(sessionId, t.name, have.length, ROW_CAP);
+      const rows = await getRows(sessionId, t.name, have.length, ROW_CAP, taskId);
       setLoaded((l) => ({ ...l, [t.name]: { rows: [...have, ...rows], loading: false, error: "" } }));
     } catch (e) {
       setLoaded((l) => ({ ...l, [t.name]: { rows: have, loading: false, error: (e as Error).message } }));
@@ -35,7 +35,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
     if (profiles[t.name]) return;
     setProfLoading(true);
     try {
-      const p = await getProfile(sessionId, t.name);
+      const p = await getProfile(sessionId, t.name, taskId);
       setProfiles((x) => ({ ...x, [t.name]: p }));
     } catch (e) {
       setProfError((e as Error).message);
@@ -85,7 +85,7 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
             </p>
           )}
           {profiles[table.name]?.columns.find((c) => c.column === picked.column) && (
-            <ProfileCard profile={profiles[table.name].columns.find((c) => c.column === picked.column)!} onClose={() => setPicked(null)} />
+            <ProfileCard about={table.columns.find((c) => c.name === picked.column)?.about} profile={profiles[table.name].columns.find((c) => c.column === picked.column)!} onClose={() => setPicked(null)} />
           )}
         </>
       )}

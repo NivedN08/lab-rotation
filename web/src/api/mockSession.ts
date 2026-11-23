@@ -1,91 +1,130 @@
-// A fake session that plays one full task in about two minutes, served through getEvents like the real server will.
-// Every event kind the floor needs appears at least once, in a sensible order.
+// A fake session that plays one full task, served through getEvents like the real server will.
 // Add ?mockspeed=10 to the URL to play it ten times faster while testing.
 
+import raw from "./mock/mock_session.jsonl?raw";
+import taskJson from "./mock/task.json";
 import type { EventsPage, LabEvent } from "./types";
 
-type Step = Omit<LabEvent, "seq">;
+type Step = LabEvent;
 
-const SQL1 = "SELECT sample_id, COUNT(*) FROM samples GROUP BY sample_id HAVING COUNT(*) > 1";
-const SQL2 = "SELECT * FROM samples WHERE sample_id = 'S012'";
+// The contract's own mock session (contract/mock_session.jsonl, copied into ./mock/), so sample data has the real format.
+// `upgrade` brings it up to the contract's latest announced shape where the copied file is older. Each step does
+// nothing once the file already has the change, so syncing a newer contract file is safe.
+const rawEvents = raw
+  .split("\n")
+  .filter((l) => l.trim())
+  .map((l) => JSON.parse(l) as LabEvent);
 
-const T = "t1";
+function upgrade(events: LabEvent[]): LabEvent[] {
+  const list: (LabEvent & { orig?: number })[] = events.map((e) => ({ ...e, orig: e.seq }));
+  const verdict = list.find((e) => e.k === "verdict");
+  const taskId = (verdict?.data as { taskId?: string } | undefined)?.taskId;
 
-export const SCRIPT: Step[] = [
-  { t: 0, k: "session.start", agent: "learner", task: T, text: "You arrive at the lab.", why: "A rotation begins when the learner walks in; the clock for the session starts here." },
-  { t: 4, k: "task.picked", agent: "vale", to: "learner", task: T, text: "Dr. Vale hands you Task 1.", data: { taskId: T, title: "Task 1", tier: "core", claim: "Treated samples show higher expression than control.", reason: "Duplicated rows is the trap this learner has practised least.", brief: "Does the treated arm really show higher expression? Check the data before you say.", seconds: 600 }, why: "Task 1 is the learner's first untried task, and duplicated rows is a trap they have not been tested on yet." },
-  { t: 6, k: "voice.line", agent: "vale", task: T, text: "Welcome. Check the data before you trust the claim.", data: { file: "vale-welcome.wav" }, why: "A short spoken brief sets the tone without giving away which trap is planted." },
-  { t: 12, k: "search", agent: "telem", task: T, text: "Telem searches for how expression levels are normalised.", data: { query: "TPM vs FPKM comparability", results: 3, trace: "trace://telem/1" }, why: "The task brief mentions expression levels, so Telem looks up how they are normally compared before anyone drew a conclusion." },
-  { t: 12, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "telem", label: "Search", count: 1, trace: "trace://telem/1" }, why: "Counts one Telem search for the sponsor strip." },
-  { t: 18, k: "monitor.hit", agent: "telem", task: T, text: "Telem's monitor caught a new post on mixing TPM and FPKM.", data: { source: "monitor", trace: "trace://telem/2" }, why: "A standing monitor on normalisation topics matched a new post, so Telem raised it with the learner." },
-  { t: 18, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "telem", label: "Monitor hit", count: 1, trace: "trace://telem/2" }, why: "Counts one Telem monitor hit for the sponsor strip." },
-  { t: 24, k: "learner.query", agent: "learner", task: T, text: "You look for repeated samples.", data: { sql: SQL1 }, why: "The learner suspects the same sample was entered twice and groups by sample id to test it." },
-  { t: 30, k: "learner.evidence", agent: "learner", task: T, text: "You cite samples, row 12.", data: { label: "samples, row 12 (S012, lung, control, ...)" }, why: "The first repeated sample the query found is worth keeping as evidence." },
-  { t: 36, k: "agent.say", agent: "sam", to: "learner", task: T, text: "Have you checked whether any sample appears more than once?", data: { hint: true }, why: "The learner has queried for repeats but not opened one; Sam nudges with a question instead of an answer." },
-  { t: 40, k: "voice.line", agent: "sam", task: T, text: "Have you checked whether any sample appears more than once?", data: { file: "sam-hint.wav" }, why: "Sam's hint is voiced so it is not missed while the learner reads tables." },
-  { t: 44, k: "panel.whisper", agent: "vale", to: "ines", task: T, text: "The learner is close. Hold the checks until they answer.", why: "Vale tells the referee not to run checks early, so the learner's answer is judged on what they found themselves." },
-  { t: 44, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "band", label: "Message", count: 1 }, why: "Counts one BAND message for the sponsor strip." },
-  { t: 48, k: "panel.whisper", agent: "ines", to: "sam", task: T, text: "Keep hints to one question.", why: "Ines caps Sam at one hint so the hint stays a nudge and the score stays fair." },
-  { t: 48, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "band", label: "Message", count: 1 }, why: "Counts one BAND message for the sponsor strip." },
-  { t: 56, k: "learner.query", agent: "learner", task: T, text: "You open the repeated sample.", data: { sql: SQL2 }, why: "After the hint the learner looks at every row for sample S012 to confirm it really is a duplicate." },
-  { t: 66, k: "learner.evidence", agent: "learner", task: T, text: "You cite the repeated sample's second row.", data: { label: "samples, row 121 (S012, lung, control, ...)" }, why: "The second copy of S012 is the proof that the same row was entered twice." },
-  { t: 76, k: "learner.answer", agent: "learner", task: T, text: "You answer: the claim fails. Duplicated rows.", data: { verdict: "fails", trap: "duplicate_rows" }, why: "Two identical rows for one sample inflate the treated group, so the learner says the claim fails." },
-  { t: 80, k: "rival.answer", agent: "riley", task: T, text: "Riley answers: the claim fails. Duplicated rows.", data: { verdict: "fails", trap: "duplicate_rows" }, why: "Riley worked the same task independently and reached the same verdict, so the two answers can be compared." },
-  { t: 86, k: "check.result", agent: "ines", task: T, text: "Duplicates check failed.", data: { check: "duplicates", passed: false }, why: "Ines ran the duplicates check on the samples table; it failed, which confirms the learner's evidence." },
-  { t: 86, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "bruin", label: "Check run", count: 1, failed: 1 }, why: "Counts one Bruin check run, and that it failed, for the sponsor strip." },
-  { t: 90, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "glasser", label: "Call", count: 1 }, why: "Counts one Glasser call made while judging the answer." },
-  { t: 94, k: "verdict", agent: "ines", task: T, text: "Verdict: you found the trap. Sealed.", data: { taskId: T, result: "passed", correct: true, key: "fails", trap: "duplicate_rows", sealed: true }, why: "The verdict and the trap both match the key and the failed check backs the cited rows, so the task is passed and sealed." },
-  { t: 100, k: "mastery.update", agent: "learner", task: T, text: "Duplicated rows: 40% to 60%.", data: { trap: "duplicate_rows", from: 0.4, to: 0.6 }, why: "A correct catch on a trap the learner had only half mastered raises that trap's score." },
-  { t: 104, k: "voice.line", agent: "vale", task: T, text: "Good catch. The same sample was entered twice.", data: { file: "vale-verdict.wav" }, why: "Vale confirms the result out loud so the learner hears what the check found." },
-  { t: 104, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "runware", label: "Voice line", count: 1, cost: 0.004 }, why: "Counts one Runware voice line and its cost for the sponsor strip." },
-  { t: 110, k: "appeal.open", agent: "learner", task: T, text: "You appeal: Riley's evidence was the same as mine.", data: { appealId: "mock-appeal" }, why: "The learner thinks matching evidence should not count against them and asks the panel to look again." },
-  { t: 114, k: "appeal.message", agent: "learner", to: "vale", task: T, text: "Both answers cite the same row.", data: { appealId: "mock-appeal" }, why: "The learner adds the specific reason so the panel has something to rule on." },
-  { t: 118, k: "sponsor.call", agent: "system", task: T, data: { sponsor: "band", label: "Message", count: 1 }, why: "Counts one BAND message for the sponsor strip." },
-  { t: 122, k: "appeal.ruling", agent: "ines", task: T, text: "Ruling: your verdict stands.", data: { appealId: "mock-appeal", upheld: false }, why: "Matching evidence is expected when the trap is real, and the verdict was already correct, so the ruling leaves it as it was." },
-];
+  // task.picked carries the data dictionary, the same as GET /task.
+  const picked = list.find((e) => e.k === "task.picked");
+  if (picked?.data && !("dictionary" in picked.data)) picked.data = { ...picked.data, dictionary: (taskJson as { dictionary?: string }).dictionary };
 
-const KEY = "lab-rotation.mock.session-start";
-
-function started(): number {
-  try {
-    const saved = Number(sessionStorage.getItem(KEY));
-    if (saved) return saved;
-    const now = Date.now();
-    sessionStorage.setItem(KEY, String(now));
-    return now;
-  } catch {
-    return startFallback;
+  // Whisper words move out of panel.whisper into a panel.transcript sent right after the verdict.
+  if (verdict && !list.some((e) => e.k === "panel.transcript")) {
+    const whispers = list
+      .filter((e) => e.k === "panel.whisper" && (e.data as { text?: string } | undefined)?.text)
+      .map((e) => ({ seq: e.orig as number, agent: e.agent, to: e.to, text: (e.data as { text: string }).text }));
+    for (const e of list) {
+      if (e.k === "panel.whisper" && e.data) {
+        const { text: _t, ...rest } = e.data as Record<string, unknown>;
+        e.data = rest;
+      }
+    }
+    list.push({
+      seq: 0,
+      t: verdict.t + 0.1,
+      k: "panel.transcript",
+      agent: "system",
+      why: "the verdict is in, so the panel's private messages can be shown",
+      task: taskId,
+      data: { whispers },
+    });
   }
+
+  // Telem's real-world case comes after the verdict. Before the answer he only talks about the topic.
+  if (verdict && !list.some((e) => e.k === "search" && e.t > verdict.t)) {
+    const early = list.find((e) => e.k === "search" && e.t < verdict.t);
+    const earlyCall = list.find((e) => e.k === "sponsor.call" && (e.data as { sponsor?: string; op?: string }).sponsor === "telem" && (e.data as { op?: string }).op === "search");
+    const earlySay = list.find((e) => e.k === "agent.say" && e.agent === "telem" && e.t < verdict.t);
+    if (early && earlySay) {
+      const realCase = { ...(early.data as Record<string, unknown>) };
+      const caseText = earlySay.text;
+      // Before the answer: background on the topic, no case, nothing that points at a trap.
+      early.text = "Telem looked up how spend per visit is usually compared.";
+      early.why = "background on the topic helps the learner frame the task, without pointing at a trap";
+      early.data = {
+        query: "how average spend per visit is compared between customer groups",
+        cached: false,
+        trace: (realCase.trace as string) ?? "https://app.telem.ai/traces/mock-1",
+        results: [{ title: "Background: comparing average spend across customer groups", url: "https://example.com/mock-topic-spend", snippet: "Retail teams usually compare spend per visit as an average for each group..." }],
+      };
+      if (earlyCall) {
+        earlyCall.why = "the librarian looks up background on the topic with Telem AI";
+        earlyCall.data = { ...(earlyCall.data as object), label: "searched for background on the topic" };
+      }
+      earlySay.why = "share some background on the topic, with its source, and nothing about what might be wrong";
+      earlySay.text = "Some background for you: comparisons like this usually average spend per visit for each customer group. The source and trace are on the card.";
+      for (const e of list) if (e.k === "agent.move" && e.agent === "telem" && e.t < verdict.t && /real case/i.test(e.why)) e.why = "look up background on the topic of this claim";
+      const voiceOfEarly = list.find((e) => e.k === "voice.line" && e.agent === "telem" && e.t < verdict.t);
+      if (voiceOfEarly) voiceOfEarly.why = "speak the background in the agent's own voice";
+
+      // After the verdict: a second search finds the real case, and Telem brings it over.
+      const V = verdict.t;
+      const trace2 = "https://app.telem.ai/traces/mock-2";
+      list.push({ seq: 0, t: V + 1.8, k: "agent.move", agent: "telem", to: "learner", task: taskId, why: "the verdict is in, so Telem can bring a real case", data: { from: "shelves", place: "learner_desk" } });
+      list.push({ seq: 0, t: V + 2.5, k: "sponsor.call", agent: "system", why: "the librarian finds real cases with Telem AI", data: { sponsor: "telem", label: "searched for real cases", count: 1, op: "search", by: "telem", ms: 1380, fallback: false, trace: trace2 } });
+      list.push({
+        seq: 0, t: V + 4, k: "search", agent: "telem", task: taskId,
+        why: "now that the learner has an answer, a real case shows what this kind of trap looks like outside the lab",
+        text: "Telem found a real case of a unit mix-up in sales data.",
+        data: { ...realCase, trace: trace2 },
+      });
+      list.push({
+        seq: 0, t: V + 5, k: "agent.say", agent: "telem", to: "learner", task: taskId, orig: -1,
+        why: "share one real case with its source, now that the verdict is in",
+        text: caseText?.replace("A real case for you:", "A real case, now that you have your verdict:") ?? "A real case: a chain once restated a region's sales because its export used cents.",
+      });
+      list.push({ seq: 0, t: V + 5.4, k: "voice.line", agent: "telem", task: taskId, why: "speak the line in the agent's own voice", data: { file: "mock-telem-case.mp3", lineOf: -1, seconds: 8.9, cost: 0.0012, provider: "runware" } });
+      list.push({ seq: 0, t: V + 5.4, k: "sponsor.call", agent: "system", why: "every spoken line is a Runware voice", data: { sponsor: "runware", label: "voice line for telem", count: 1, op: "tts", by: "telem", ms: 820, fallback: false, cost: 0.0012 } });
+      list.push({ seq: 0, t: V + 13, k: "agent.move", agent: "telem", task: taskId, why: "back to the shelves", data: { from: "learner_desk", place: "shelves" } });
+    }
+  }
+
+  // A few more walks, so every place on the floor is used: the learner comes in and leaves, the panel breaks up.
+  const move = (t: number, agent: LabEvent["agent"], from: string, place: string, why: string, to?: LabEvent["agent"]) =>
+    list.push({ seq: 0, t, k: "agent.move", agent, to, task: taskId, why, data: { from, place } });
+  if (!list.some((e) => e.k === "agent.move" && e.agent === "learner")) {
+    move(0.8, "learner", "door", "learner_desk", "the learner walks in and sits down to start the task");
+    move(214, "vale", "panel_table", "vale_office", "the panel is done, so Vale goes back to the office");
+    move(214.2, "sam", "panel_table", "whiteboard", "the panel is done, so Sam goes back to the whiteboard");
+    move(254, "learner", "learner_desk", "door", "the rotation is over, so the learner leaves");
+  }
+
+  // Number the events in time order and keep the references between events pointing at the right ones.
+  const sorted = list.map((e, i) => ({ e, i })).sort((x, y) => x.e.t - y.e.t || x.i - y.i).map((x) => x.e);
+  const seqOf = new Map<number, number>();
+  sorted.forEach((e, i) => {
+    e.seq = i + 1;
+    if (e.orig !== undefined) seqOf.set(e.orig, e.seq);
+  });
+  for (const e of sorted) {
+    const d = e.data as { lineOf?: number; whispers?: { seq: number }[] } | undefined;
+    if (d?.lineOf !== undefined) d.lineOf = seqOf.get(d.lineOf) ?? d.lineOf;
+    if (e.k === "panel.transcript" && d?.whispers) for (const w of d.whispers) w.seq = seqOf.get(w.seq) ?? w.seq;
+    delete e.orig;
+  }
+  return sorted;
 }
-const startFallback = Date.now();
 
-const speed = (): number => {
-  try {
-    return Number(new URLSearchParams(window.location.search).get("mockspeed")) || 1;
-  } catch {
-    return 1;
-  }
-};
+export const SCRIPT: Step[] = upgrade(rawEvents);
 
 /** The whole script as a finished, recorded session: every event, from the beginning. */
 export function recordedEvents(): EventsPage {
-  const events = SCRIPT.map((s, i) => ({ ...s, seq: i + 1 }));
+  const events = SCRIPT;
   return { events, next: events.length };
 }
-
-/** Every scripted event that has happened so far, with its seq. */
-export function eventsSoFar(): (LabEvent & { seq: number })[] {
-  const elapsed = ((Date.now() - started()) / 1000) * speed();
-  return SCRIPT.map((s, i) => ({ ...s, seq: i + 1 })).filter((e) => e.t <= elapsed);
-}
-
-/** Everything that has happened so far with seq > since. Pass the previous page's `next`. */
-export function scriptedEvents(since: number): EventsPage {
-  const elapsed = ((Date.now() - started()) / 1000) * speed();
-  const all: LabEventWithSeq[] = SCRIPT.map((s, i) => ({ ...s, seq: i + 1 }));
-  const due = all.filter((e) => e.t <= elapsed);
-  const events = due.filter((e) => e.seq > since);
-  return { events, next: due.length ? due[due.length - 1].seq : since };
-}
-
-type LabEventWithSeq = LabEvent & { seq: number };

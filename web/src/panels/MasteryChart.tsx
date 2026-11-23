@@ -6,12 +6,13 @@ const level = (s: number) => (s < 0.34 ? "low" : s < 0.67 ? "mid" : "high");
 
 /**
  * One bar per trap type, from the learner's mastery. Fits a Details panel (default) or the results card (`compact`).
- * Refreshes when a mastery.update event arrives. In the demo, a trap shows its "from" score until the recording reaches the update.
+ * Refreshes when a verdict or a mastery.update event arrives. In the demo, a trap shows its "from" score until the recording reaches the update.
  */
 export function MasteryChart({ compact = false }: { compact?: boolean }) {
   const { sessionId, events } = useRotation();
   const demo = useDemo();
-  const updates = events.filter((e) => e.k === "mastery.update").length;
+  // Refresh when the verdict arrives as well as on the mastery update itself.
+  const updates = events.filter((e) => e.k === "mastery.update" || e.k === "verdict").length;
   const [data, setData] = useState<Mastery | null>(null);
   const [error, setError] = useState("");
 

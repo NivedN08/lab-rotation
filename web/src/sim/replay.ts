@@ -3,6 +3,7 @@
 
 import type { LabEvent } from "../api/types";
 import type { AgentRec, Ev, Note, Role, Run, Search, Study } from "../data/types";
+import { trapLabel } from "../api/traps";
 import { headDept } from "../world/palette";
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -71,12 +72,94 @@ const MOMENT_WORDS: Record<string, string> = {
   "appeal.ruling": "Ruling on the appeal",
 };
 
+/**
+ * The panel's whispers stay private until that task's verdict: no words, no reason, anywhere.
+ * `seen` is everything that has happened so far (in a replay, up to the moment being shown).
+ */
+export function whisperHidden(e: LabEvent, seen: LabEvent[]): boolean {
+  return e.k === "panel.whisper" && !seen.some((v) => v.k === "verdict" && (!e.task || !v.task || v.task === e.task));
+}
+
+/** What a hidden whisper says instead. */
+export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Kept private until the verdict." };
+
+/**
+ * Telem's real case of the trap: a search with data.phase "case", sent after the panel transcript.
+ * Older sessions had no phase; for those, what Telem says (or finds) after the verdict.
+ */
+export const isCase = (e: LabEvent) => e.k === "search" && (e.data as { phase?: string } | undefined)?.phase === "case";
+
+export function caseEvent(events: LabEvent[], from = -Infinity, to = Infinity): LabEvent | undefined {
+  const inRange = events.filter((e) => e.agent === "telem" && e.t >= from && e.t < to);
+  const tagged = [...inRange].reverse().find(isCase);
+  if (tagged) return tagged;
+  const verdictAt = events.find((e) => e.k === "verdict")?.t ?? Infinity;
+  const after = inRange.filter((e) => e.t >= verdictAt && e.text);
+  return after.find((e) => e.k === "agent.say") ?? after.find((e) => e.k === "search");
+}
+
 /** A lab log line for a live event: the backend's own words, nothing added. */
-export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
-  if (!e.text || e.k === "sponsor.call") return null;
-  const d = (e.data ?? {}) as { passed?: boolean; correct?: boolean };
-  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.correct === false);
-  return { text: e.text, why: e.why, tone: bad ? "bad" : undefined };
+/** Kinds the log leaves out: counters, the struggle meter, voice lines (the agent.say just before has the
+ * words) and walks (the floor shows them). Every event stays in each person's Details. */
+const LOG_SKIP = new Set(["sponsor.call", "meter.update", "voice.line", "agent.move"]);
+
+/** Whether a why reads like a sentence for people, not a note for the machine. */
+export function readsWell(why: string | undefined): boolean {
+  if (!why) return false;
+  const words = why.trim().split(/\s+/);
+  return words.length >= 4 && !/^(speak|play|log|emit|set|call|run|poll|send)\b/i.test(why.trim());
+}
+
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Scores arrive as 0 to 1; people read them as percentages. */
+// Only bare scores (0.15, 0.6): never money ($0.40), multipliers (0.5x) or numbers already in percent.
+export const plainNumbers = (s: string) =>
+  s.replace(/(?<![$£€\d.,])\b0\.\d+\b(?!\s*(?:x\b|%|times|\d))/g, (m) => `${Math.round(Number(m) * 100)}%`);
+
+/** A reason that leans on scores or internal gauges ("struggle meter 0.62") is not for people. */
+const technical = (why: string) => /\d\.\d|meter|bandit|epsilon|tier \d/i.test(why);
+
+/** The clock ran out and the server answered for the learner. */
+export function isTimeUp(e: LabEvent): boolean {
+  const d = (e.data ?? {}) as { verdict?: string };
+  return e.k === "learner.answer" && d.verdict === "cant_tell" && /time|clock|ran out|expired/i.test(e.why ?? "");
+}
+export const TIME_UP = "Time's up. The panel recorded 'can't tell'.";
+
+/** An event's line for people: our own words where the backend's carry raw scores. */
+export function plainLine(e: LabEvent): string {
+  const d = (e.data ?? {}) as { result?: string; trap?: string; from?: number; to?: number };
+  if (isTimeUp(e)) return TIME_UP;
+  if (e.k === "verdict") return d.result === "passed" ? "You passed this task." : "This task was not passed.";
+  if (e.k === "learner.answer" && e.agent === "learner") {
+    const a = (e.data ?? {}) as { verdict?: string; trap?: string };
+    const said = ({ holds: "the claim holds", fails: "the claim fails", cant_tell: "you can't tell" } as Record<string, string>)[a.verdict ?? ""] ?? a.verdict;
+    return `You answered: ${said}${a.trap && a.trap !== "none" ? `, ${trapLabel(a.trap).toLowerCase()}` : ""}.`;
+  }
+  if (e.k === "learner.query") {
+    const q = (e.data ?? {}) as { ok?: boolean; rowCount?: number };
+    return q.ok === false ? "Your query hit an error." : `You ran a query${typeof q.rowCount === "number" ? ` and got ${q.rowCount} row${q.rowCount === 1 ? "" : "s"}` : ""}.`;
+  }
+  if (e.k === "mastery.update" && typeof d.from === "number" && typeof d.to === "number") {
+    const name = trapLabel(d.trap ?? "").toLowerCase();
+    return `Your ${name} skill went ${d.to >= d.from ? "up" : "down"}, from ${Math.round(d.from * 100)}% to ${Math.round(d.to * 100)}%.`;
+  }
+  return plainNumbers(e.text ?? "");
+}
+
+export function describeLive(e: LabEvent, seen: LabEvent[]): { text: string; why: string; tone?: "bad" } | null {
+  if (LOG_SKIP.has(e.k)) return null;
+  if (whisperHidden(e, seen)) return { ...PRIVATE_NOTE };
+  // The event's own line first. Without one, a system event says nothing; an agent's reason
+  // stands in only when it reads like a sentence.
+  const own = e.text || isTimeUp(e) || e.k === "verdict" ? plainLine(e) : "";
+  const goodWhy = readsWell(e.why) && !technical(e.why);
+  const text = own || (e.agent !== "system" && goodWhy ? sentence(e.why) : "");
+  if (!text) return null;
+  const d = (e.data ?? {}) as { passed?: boolean; result?: string };
+  const bad = (e.k === "check.result" && d.passed === false) || (e.k === "verdict" && d.result === "failed");
+  return { text, why: own && goodWhy ? sentence(e.why) : "", tone: bad ? "bad" : undefined };
 }
 
 /** Everyone outside the cast (older runs have many agents per role) gets a first name from here. */
@@ -197,6 +280,12 @@ export class Replay {
 
   name(id: string) {
     return this.names.get(id) ?? id;
+  }
+
+  /** The line under a person's name: the backend's job title when it sends one, else our role label. */
+  label(id: string): string {
+    const a = this.agents.get(id);
+    return a?.title || (a ? roleLabel(id, a.role) : "");
   }
 
   /** Events of the grading step are pinned to the end of the replay. */

@@ -1,105 +1,91 @@
-# Front end <-> backend contract
+# Front end API layer
 
-This file is the contract. The backend is built to match it exactly. Do not rename anything here without telling the front end.
-All calls live in `client.ts`; nothing else in the front end touches `/api`. Shapes are in `types.ts`, ids in `traps.ts`.
-`mock.ts` answers the same calls with fake data. It is on by default. Add `?mock=0` to the URL to call the real server.
+**The contract is `contract/api.md` (routes and shapes) and `contract/events.md` (events).** Nived owns it. This folder implements it; where the two differ, the contract wins and we change this folder. Things we need from it that it doesn't say yet are listed at the end.
 
-Errors: any non-2xx reply, or a JSON body `{"error": "plain words"}`, is shown to the learner as is (except 404 and 503, which show a generic "not ready yet").
-All timestamps `t` are seconds since the session started. `:id` is the `sessionId`. All bodies and replies are JSON unless noted.
+All backend calls live in `client.ts`. Which backend it talks to: served by the real server (a production build), the real backend on the same origin with no setting; under `npm run dev`, sample data by default (`?mock=0` calls the real `/api`, `?mock=1` forces sample data); in static replay mode, JSON files (below). Nothing else in the front end touches `/api`. Shapes are in `types.ts`, trap ids and labels in `traps.ts`.
 
-## Routes
+## Functions and routes
 
-| Job | Route | Sends | Gets back |
-|---|---|---|---|
-| Start a session | `POST /api/session/start` | optional `{mode?: "rotation" \| "judge", learner?: string}`. Sending nothing means `{mode: "rotation"}`. | `{sessionId, tasks: [{id, title}], task}`. `tasks` is the whole rotation in order. `task` is the current one, `{id, title, brief, seconds}`, or `null`. |
-| Current task | `GET /api/session/:id/task` | nothing | `{task}`, same shape, `null` when all are done. Tasks come one at a time; polled after an answer is sent until the id changes. |
-| List tables | `GET /api/session/:id/tables` | nothing | `[{name, about, columns: [{name, type}], rowCount}]`. `type` is `text`, `int`, `real` or `date`. |
-| Read rows | `GET /api/session/:id/tables/:table/rows?offset=&limit=` | query string | `{rows: [[cell, ...], ...]}`. A cell is a string, number, boolean or `null`. |
-| Column profiles | `GET /api/session/:id/tables/:table/profile` | nothing | `{table, columns: [{column, type, count, nulls, distinct, min?, max?, mean?, top: [{value, count}]}]}`. `min` and `max` for numeric and date columns, `mean` for numeric, `top` up to 5, most common first. |
-| New events | `GET /api/session/:id/events?since=N` | `since` = the last reply's `next` (0 first) | `{events: [LabEvent], next}`. Polled every second. |
-| Run SQL | `POST /api/session/:id/sql` | `{sql}` | `{columns: [name], rows: [[cell]], ms}` or `{error}` |
-| Submit answer | `POST /api/session/:id/answer` | `{taskId, verdict, trap, evidence: [Evidence], note}` | `{accepted}`. The verdict arrives later as an event. |
-| Open appeal | `POST /api/session/:id/appeal` | `{taskId, reason}` | `{appealId}` |
-| Appeal message | `POST /api/session/:id/appeal/:appealId/message` | `{text}` | `{ok}`. Replies and the ruling arrive as events. |
-| Mastery | `GET /api/session/:id/mastery` | nothing | `{traps: [{trap, score, attempts}]}`. One entry per trap id below, including `none`. `score` is 0 to 1. |
-| Ask an agent | `POST /api/session/:id/ask` | `{agent, text}` (`agent` is an agent id) | `{agent, text, sources: [string]}`. The agent answers only from what it could see; `sources` says what it used. |
-| Agents | `GET /api/agents` | nothing | `[{id, name, role, reads, portrait}]`. `role` is the floor role (`director`, `referee`, `library`, `head`, `team-a`, `team-b`). `reads` is what the agent can read, in plain words. `portrait` is an image URL or `null`. |
-| Voice audio | `GET /api/audio/:file` | nothing | The audio file itself (not JSON). `:file` is the `data.file` of a `voice.line` event. |
-| Demo session | `GET /api/demo` | nothing | `{session, start, end, speed}`: the id of the recorded session the backend picked for the demo, the seconds (since that session began) to play from and to, and the playback speed (1 is normal). Only `start` to `end` is played, at `speed`, on a loop. `{session: null}` means there is no demo: the front end falls back to the fake session and shows "Sample data". The front end then reads that session's tables, task and events with the routes above, using `session` as `:id`. |
-| Sponsor totals | `GET /api/session/:id/sponsors` | nothing | `{band: {messages}, telem: {searches, monitorHits, traces: [string]}, bruin: {checksRun, checksFailed}, runware: {lines, cost}, glasser: {calls}}`. `cost` is in dollars. |
-
-## Ids and values
-
-**Verdict** (`verdict` in an answer): `holds`, `fails` or `cant_tell`.
-
-**Trap ids.** The answer form sends the id, never the label; labels are display only. Mastery's `trap` field uses the same ids.
-
-| id | label |
+| Function | Route |
 |---|---|
-| `duplicate_rows` | Duplicated rows |
-| `unit_mismatch` | Unit mix-up |
-| `dictionary_flip` | Misleading data dictionary |
-| `confounder` | Batch confounder |
-| `hidden_variable` | Hidden column in a second table |
-| `none` | No trap (the data is clean) |
+| `startSession(options?)` | `POST /api/session/start` |
+| `getCurrentTask(id)` | `GET /api/session/:id/task` |
+| `getTables(id, taskId?)` | `GET /api/session/:id/tables?task=` |
+| `getRows(id, table, offset, limit, taskId?)` | `GET /api/session/:id/tables/:table/rows?task=` |
+| `getProfile(id, table, taskId?)` | `GET /api/session/:id/tables/:table/profile?task=` |
+| `getEvents(id, since)` | `GET /api/session/:id/events` |
+| `runSql(id, sql)` | `POST /api/session/:id/sql` |
+| `submitAnswer(id, answer)` | `POST /api/session/:id/answer` |
+| `openAppeal(id, taskId, reason)` | `POST /api/session/:id/appeal` |
+| `sendAppealMessage(id, appealId, text)` | `POST /api/session/:id/appeal/:appealId/message` |
+| `getMastery(id)` | `GET /api/session/:id/mastery` |
+| `askAgent(id, {agent, text})` | `POST /api/session/:id/ask` (a Telem reply adds `links: [{title, url}]` and `trace`; `AskReply`, `AskLink`) |
+| `getAgents()` | `GET /api/agents` |
+| `audioUrl(file)` | `GET /api/audio/:file` (a URL for an audio element) |
+| `getSponsors(id)` | `GET /api/session/:id/sponsors` |
+| `getDemo()` | `GET /api/demo` |
+| `getHealth()` | `GET /api/health` |
 
-**Agent ids** (`agent` and `to` on events, `agent` in an ask): `vale`, `ines`, `sam`, `telem`, `riley`, `learner`, and `system` (events only, for things no agent does, such as sponsor counters).
+Errors: a non-2xx reply or `{"error": "plain words"}` is shown as is, except 404 and 503, which show "not ready yet".
 
-## Evidence
+## Mock mode (sample data)
 
-`{kind: "row" | "column" | "cell", source, sql?, row?, column?, value?, label}`
+On by default only under the Vite dev server (`npm run dev`); a production build served by the real server uses the real backend. `?mock=0` calls the real server and `?mock=1` forces sample data. `mock.ts` answers every function with the contract's own sample task and tables: `./mock/` holds copies of `contract/mock_session.jsonl` and `contract/mock_task/`, so sample data has the real shape. Re-copy with `sh web/src/api/mock/sync.sh` from the repo root when the contract changes. The copy in `./mock/` is currently Nived's latest 86-event session from his `n1-session` branch (Telem's `topic` and `case` searches, sealed whispers, `panel.transcript`, the dictionary on `task.picked`); the `contract/` folder on `main` still has the older 68-event one until his branch is merged. The mock's SQL (`mockSql.ts`) is a small stand-in, not a real runner: it reads `SELECT` columns or `COUNT/AVG/SUM/MIN/MAX(col) [AS name]` `FROM` one table with an optional `JOIN other USING (col)`, `WHERE col op value [AND ...]`, `GROUP BY`, `ORDER BY` and `LIMIT`. `?mockspeed=10` runs the sample ten times faster.
 
-- `source` is the table name, or `"query"` for a SQL result.
-- Table evidence: `row` is the **absolute** 1-based row number in the table, counting from its first row, regardless of which page the learner was on.
-- SQL evidence: `row` is the 1-based position **within that result**, and `sql` is also sent so the result can be rebuilt.
-- `column` is a column name (for a SQL result, the result's column name). `value` is the cell's value for `cell` evidence.
-- `label` is a plain-words description for display.
+**The live sample never acts for the learner.** In Your rotation and Judge mode the fake server (`mockLive.ts`) emits `learner.query`, `learner.evidence`, `learner.answer`, `appeal.*` and `ask` events only when the real person does those things (a SQL query, Submit, opening an appeal, asking an agent). Everything else is the lab's own work: Vale's task and brief, Telem's topic-only background, Riley's answer, the panel's whispers, the checks, the verdict, Telem's real case after the verdict, the mastery update. When the person submits, the fake compares their answer with its key and sends a matching verdict: right (verdict and trap both right, `passed`), partly right (one of them right, `failed`, with a score between) or wrong (`failed`, score 0). Whisper words arrive in `panel.transcript` after the verdict. An appeal gets an `appeal.message` from Sam and a ruling that the grade stands. Each agent answers an ask only from what it could see.
 
-## Events
-
-`GET /api/session/:id/events` returns `LabEvent`:
-
-| Field | Type | Notes |
-|---|---|---|
-| `seq` | number | Increasing, unique. `next` in the reply is the last `seq` returned. |
-| `t` | number | Seconds since the session started. |
-| `k` | string | Event kind, below. |
-| `agent` | agent id | **Always set.** Who did it or who it is about. `system` when no agent did. |
-| `why` | string | **Always set, never empty.** Why this happened, in plain words. This is the decision log the judges read. |
-| `to` | agent id | Optional. Second agent, for events that move between two. |
-| `task` | string | Optional. Id of the task the event belongs to. |
-| `text` | string | Optional. Plain-words line for the lab log. |
-| `data` | object | Optional. Details, per kind. |
-
-Kinds: `session.start`, `task.picked`, `search`, `monitor.hit`, `learner.query`, `learner.evidence`, `agent.say`, `panel.whisper`, `learner.answer`, `rival.answer`, `check.result`, `verdict`, `mastery.update`, `appeal.open`, `appeal.message`, `appeal.ruling`, `voice.line`, `sponsor.call`.
-
-Data that the front end reads:
-
-- `verdict`: `{taskId, result: "passed" | "failed", ...}`. The top bar's marks come from `taskId` and `result`.
-- `learner.answer`, `rival.answer`: `{verdict, trap}` (trap id).
-- `mastery.update`: `{trap, from, to}` (trap id, scores 0 to 1).
-- `voice.line`: `{file}`, played from `/api/audio/:file`.
-- `sponsor.call`: `{sponsor: "band" | "telem" | "bruin" | "runware" | "glasser", label, count, failed?, cost?, trace?}`. `agent` is `system`.
-- `search`, `monitor.hit`: `{trace}` is a link to the Telem trace.
-
-`mockSession.ts` plays one full task of all of these in about two minutes, each with a `why`. Add `?mockspeed=10` to the URL to play it ten times faster.
+- **Judge mode** (`startSession({mode: "judge"})`): one task, `t1`, tier 1, 240 seconds. The start reply lists only that task, and the session ends after its verdict (`session.end`, then `GET /task` returns `{task: null}`).
+- **Asking Telem** returns a canned reply with two `links` and a `trace` (and an `ask.answer` event carrying the same in `data`), so the Ask tab's link row shows without a live server. The other agents answer without links.
+- **Your rotation** (no body, or `mode: "rotation"`): three tasks at tiers 1, 2 and 3. Task 1 is the contract's sample task. Tasks 2 and 3 are made up for the sample and reuse the same tables, so their answer keys are arbitrary.
+- **Time runs out:** if the learner has not answered when the task's seconds are up, the fake answers `cant_tell` for them, and that `learner.answer`'s `why` says so.
+- Only the **demo** (`mock-demo`, `mockSession.ts`) plays the contract's recorded session with its scripted learner.
 
 ## One shared state (`session.ts`)
 
-`useRotation()` and `subscribeEvents(cb)` are the only way the rest of the app reads the session. The first reader starts the session and the single one-second poll; nobody else starts a session, polls or keeps time. `RotationState` holds `sessionId`, `tasks`, `current`, `startedAt` (the clock the Timer counts from), `results` (from verdict events), `events` (all so far), plus `error` and `awaitingNext`. `rotation.configure({mode, learner})` sets the start body before the session starts.
+`useRotation()` and `subscribeEvents(cb)` are the only way the rest of the app reads the session. The first reader starts the session and the single one-second poll; nobody else starts a session, polls or keeps time. `RotationState` holds `sessionId`, `tasks`, `current`, `startedAt` (when the task's clock started: `null` until Riley sits down, see below), `results` (from `verdict` events), `events` (all so far), `error` and `awaitingNext`. `getRotation()` reads it outside React. `rotation.configure({mode, learner})` sets the start body before the session starts.
+
+**The task clock.** Per the backend (`requests/n1.md`), a task's clock starts at the `agent.move` of `riley` to `riley_desk` after the brief, and the server's own timer starts there too. `taskClockStart(events, taskId)` (`clock.ts`) reads that event's `t`; `task.picked`'s `t` is used only for an old recording with no such walk that went on past the brief. While the brief is going on `startedAt` is `null`, so the Timer shows the full time with "The clock starts when the brief ends". Live, `startedAt` is the wall-clock time of that event, worked out from the event's `t` and the earliest wall-clock start the poll allows (it can be off by about one poll, and it is kept in sessionStorage so a reload does not move it). In the demo it follows the recording's clock. The clock stops when the learner's answer is sent; an answer sent before the clock started used no time.
 
 ## Demo (`demo.ts`)
 
-The demo replays a **real recorded session** from the backend, never fake data. It is front end only apart from `GET /api/demo`.
+Replays a **real recorded session** through the same state and events as a live one, never fake data, except in mock mode or when `GET /api/demo` returns `{session: null}`: then the fake session plays and the page shows "Sample data" (`SampleBadge`).
 
-1. `getDemo()` calls `GET /api/demo` and gets `{session, start, end, speed}`. With `session: null` it uses the fake session instead (see below).
-2. It loads that session's whole event list from the beginning with the normal events route (`GET /api/session/:session/events?since=...`, repeated until it returns no events), so the recording must be readable from `since=0` after it has finished.
-3. A player moves a clock through `start` to `end`, looping at the end, and feeds the same rotation state and events a live session produces. `useRotation()` and `subscribeEvents()` work unchanged. Nothing starts a live session while the demo runs.
+1. `getDemo()` gets `{session, start, end, speed}`. Only `start` to `end` plays, at `speed`, on a loop.
+2. The whole event list is read from `since=0`, repeating until a page is empty.
+3. A player feeds the shared state. Controls: `startDemo()` (or `?demo=1`), `stopDemo()`, `demo.play()`, `demo.pause()`, `demo.toggle()`, `demo.setSpeed(n)`, `demo.seek(t)`. `useDemo()` gives `{status, error, playing, speed, position, start, end, sample, timeline}`; `timeline` has every recorded event's `seq`, `t`, `k` and `agent`.
+4. `subscribeJump(cb)` fires on every seek and loop with the new time and all events up to it. `subscribeEvents` gets only new events during normal playback.
+5. In a replay the task comes from `task.picked` only. The workspace Timer follows the recording's clock (time since `task.picked`), so speed, pause, seek and loop show correctly.
 
-Controls: `startDemo()` (or `?demo=1`), `stopDemo()`, `demo.play()`, `demo.pause()`, `demo.toggle()`, `demo.setSpeed(n)`, `demo.seek(t)`. `useDemo()` gives `{status, error, playing, speed, position, start, end, sample, timeline}`. `timeline` lists every recorded event's `seq`, `t`, `k` and `agent`, so the bottom timeline can draw marks and rewind. `subscribeJump(cb)` fires on every seek and every loop with the new time and all events up to it, so the floor can reset and redraw; `subscribeEvents` still gets only new events during normal playback.
+## Events we read
 
-For the demo to show the task and the top bar, the `task.picked` event's `data` carries `{taskId, title, tier, claim, reason, brief, seconds}`. In a replay the task is shown from `task.picked` only; nothing else is asked for it. Without `title`, tasks are called "Task 1", "Task 2", and so on.
+We read the fields in bold in `contract/events.md`, and ignore kinds and fields we don't know. The ones the front end acts on: `task.picked` (including `dictionary`, shown in the workspace live and in replays), `verdict` (`taskId`, `result`), `mastery.update`, `panel.whisper`, `panel.transcript`, `appeal.*`, `voice.line` (`file`, or `provider: "browser"` with `lineOf`), `sponsor.call`, `check.result`, `monitor.hit`, `agent.move` (`from`, `place`; Riley's walk to `riley_desk` starts the task clock; places are `door`, `vale_office`, `learner_desk`, `riley_desk`, `shelves`, `terminal`, `panel_table`, `whiteboard`, typed as `Place`).
 
-**Mock mode only:** `getDemo()` returns the fake session (`mockSession.ts`), `sample` is `true`, and the page shows a "Sample data" chip (`SampleBadge`, mounted once in the app) for as long as it plays. Against a real backend `sample` is `false` and nothing says "sample".
+**Whisper words.** Before the verdict, `panel.whisper` has no `data.text` and `data.sealed` is `true`. Right after the verdict a `panel.transcript` event (from Ines) carries `{taskId, whispers: [{seq, agent, to, text}]}`, and the Panel room shows the transcript from that event. A finished session read from `since=0` has the words filled in, so `visibility.ts` strips them (`withholdWhispers`) from anything that plays a recording, until the verdict event has played; the same step hides `learner.query`'s `data.useful` (it names the columns that matter, so the server holds it back too). The demo player, the sample session and the demo's recorded-event reader all use it, so no screen shows either early.
 
-The workspace Timer follows the recording's clock while the demo runs (time since `task.picked`), so speed, pause, seek and loop all show correctly. `startedAt` in the rotation state is still wall-clock; a reader that draws its own countdown during the demo should use `useDemo().position` and the `task.picked` time in `timeline` the same way.
+**Trap labels.** Every screen shows trap labels, never ids. `trapLabel(id)` gives the label for an id, and `labelTraps(text)` replaces ids inside a sentence the backend wrote ("The key says unit_mismatch" becomes "The key says Unit mix-up"). The Panel room uses it for transcript and appeal text.
+
+**Telem's two searches.** Each task has two `search` events, told apart by `data.phase` (`SearchData`): `topic` during the brief (background on the claim only) and `case` right after `panel.transcript`, with Telem walking to the learner's desk (`agent.move` to `learner_desk`). The `case` search holds the real case: `results` (title, `url` as the source, snippet), `trace` and `trap`. `CaseCard` in `web/src/panels/` shows it.
+
+**Sponsor totals.** Live, from `GET /sponsors`. In a replay they are added up from events (`sponsors.ts`) so they follow seek and rewind: BAND messages are `band` calls, Telem searches are `telem` calls with `op: "search"`, monitor hits are `monitor.hit` events, Bruin checks are `check.result` events (each has `passed`; the front end keeps counting these), Runware lines are `runware` calls with `op: "tts"`.
+
+## Still open with the contract
+
+- The sample session has no `glasser` `sponsor.call`, so Glasser shows 0 in sample data.
+
+## Static replay (the hosted link)
+
+Build with `VITE_STATIC=1` and the app reads a recorded session from JSON files instead of calling `/api`. `isStatic()` (exported from `client.ts`, defined in `mode.ts`) tells the screens. The demo always starts, since the hosted link has only the recording. **Every file name lives in one place, `staticFiles.ts` (`STATIC_FILES`), so when Nived sends the exact names only that file changes.** The base folder is `recorded/` next to the page (change it with `VITE_STATIC_BASE`). Current guess:
+
+| File | Holds |
+|---|---|
+| `recorded/demo.json` | `{session, start, end, speed}`, or `{session: null}` (then the fake session plays and the page says "Sample data") |
+| `recorded/agents.json` | the agents list |
+| `recorded/<id>/events.json` | every event from the beginning (an array, or `{events}`) |
+| `recorded/<id>/task.json` | `{task}` |
+| `recorded/<id>/tables.json` | the tables (also tried per task first: `recorded/<id>/<task>/tables.json`) |
+| `recorded/<id>/rows/<table>.json` | all the table's rows (an array, or `{rows}`); offset and limit are applied by the front end (per-task path tried first) |
+| `recorded/<id>/profile/<table>.json` | `{table, columns}` (per-task path tried first) |
+| `recorded/<id>/mastery.json`, `recorded/<id>/sponsors.json` | the same shapes as the routes |
+| `recorded/audio/<file>` | the voice lines |
+
+In this mode the SQL box says "Replay only", the answer form is off with a note, and `runSql`, `submitAnswer`, `openAppeal`, `sendAppealMessage`, `askAgent` and `startSession` all refuse with "Replay only: this is a recorded session, so it can't be changed." (`REPLAY_ONLY`). Main should switch off the Ask tab's input with `isStatic()`.

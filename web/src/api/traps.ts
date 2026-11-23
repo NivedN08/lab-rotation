@@ -13,3 +13,12 @@ export const TRAPS = [
 export type TrapId = (typeof TRAPS)[number]["id"];
 
 export const trapLabel = (id: string): string => TRAPS.find((t) => t.id === id)?.label ?? id;
+
+const ID_WORDS = TRAPS.filter((t) => t.id !== "none").map((t) => t.id).join("|");
+const ID_PATTERN = new RegExp(`\\b(${ID_WORDS})\\b`, "g");
+
+/**
+ * Replaces raw trap ids inside a sentence with their labels ("unit_mismatch" becomes "Unit mix-up"), for text the
+ * backend wrote with ids in it. `none` is left alone, since it is also an ordinary word.
+ */
+export const labelTraps = (text: string): string => text.replace(ID_PATTERN, (id) => trapLabel(id));

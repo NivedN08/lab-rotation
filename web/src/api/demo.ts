@@ -5,8 +5,11 @@
 
 import { useSyncExternalStore } from "react";
 import { getDemo, getEvents, useMock } from "./client";
+import { isStatic } from "./mode";
 import { mock } from "./mock";
 import { drive } from "./session";
+import { taskClockStart } from "./clock";
+import { hideWhispers, withholdWhispers } from "./visibility";
 import type { AgentId, LabEvent, TaskInfo } from "./types";
 
 export type DemoStatus = "off" | "loading" | "ready" | "error";
@@ -56,13 +59,15 @@ const taskOf = (e: LabEvent, n: number): TaskInfo => {
     tier: d.tier,
     claim: d.claim,
     reason: d.reason,
+    dictionary: d.dictionary,
   };
 };
 
 function derive(pos: number) {
   const picks = events.filter((e) => e.k === "task.picked");
   const tasks = picks.map((e, i) => taskOf(e, i + 1));
-  const seen = events.filter((e) => e.t <= pos);
+  // A finished session has whisper words filled in; hide them until the verdict has played.
+  const seen = withholdWhispers(events.filter((e) => e.t <= pos));
   const pickIdx = seen.filter((e) => e.k === "task.picked").length - 1;
   const current = pickIdx >= 0 ? tasks[pickIdx] : null;
   const results: Record<string, "passed" | "failed"> = {};
@@ -70,8 +75,9 @@ function derive(pos: number) {
     const d = e.data as { taskId?: string; result?: "passed" | "failed" } | undefined;
     if (e.k === "verdict" && d?.taskId && d.result) results[d.taskId] = d.result;
   }
-  // The task clock, so the workspace Timer shows how far into the task the recording is (at normal speed).
-  const startedAt = current ? Date.now() - (pos - picks[pickIdx].t) * 1000 : null;
+  // The task clock starts when Riley sits down after the brief; null until the recording gets there (at normal speed).
+  const clockT = current ? taskClockStart(seen, current.id) : undefined;
+  const startedAt = clockT !== undefined ? Date.now() - (pos - clockT) * 1000 : null;
   return { tasks: tasks.map(({ id, title }) => ({ id, title })), seen, patch: { current, startedAt, results, events: seen, awaitingNext: !current } };
 }
 
@@ -81,7 +87,7 @@ function publish(jumped: boolean) {
   if (jumped) {
     drive.jump(d.patch, pos);
   } else {
-    drive.frame(d.patch, events.filter((e) => e.t > prevPos && e.t <= pos));
+    drive.frame(d.patch, d.seen.filter((e) => e.t > prevPos));
   }
   prevPos = pos;
 }
@@ -207,8 +213,8 @@ export function stopDemo() {
   drive.release();
 }
 
-/** Every recorded event, for readers that need what is still to come (for example mastery before and after an update). */
-export const getRecordedEvents = (): LabEvent[] => events;
+/** Every recorded event (whisper words hidden until the verdict, as everywhere), for readers that need what is still to come (for example mastery before and after an update). */
+export const getRecordedEvents = (): LabEvent[] => hideWhispers(events);
 
 /** The demo's current state without subscribing (for code outside React). */
 export const getDemoState = (): DemoState => state;
@@ -223,9 +229,10 @@ export function useDemo(): DemoState {
   );
 }
 
-// ?demo=1 starts it as soon as the app loads, before anything starts a live session.
+// ?demo=1 starts it as soon as the app loads, before anything starts a live session. Static replay mode always starts it:
+// the hosted link has no live session to offer, only the recording.
 try {
-  if (new URLSearchParams(window.location.search).get("demo") === "1") {
+  if (isStatic() || new URLSearchParams(window.location.search).get("demo") === "1") {
     // Take the state now so no live session starts first; fetch once every module has finished loading.
     drive.claim(load);
     set({ status: "loading" });

@@ -1,11 +1,13 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LabEvent } from "../api/types";
 import type { Note, Role } from "../data/types";
-import { fmtElapsed, MODEL_NAME, ROLE_READS, roleLabel, roundWord, statusWord, type Replay } from "../sim/replay";
+import { fmtElapsed, MODEL_NAME, plainLine, PRIVATE_NOTE, ROLE_READS, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
+import { MasteryChart } from "../panels";
 import { Avatar } from "./Avatar";
+import { Safe } from "./Safe";
 
 type Nav = {
   R: Replay;
@@ -90,29 +92,64 @@ export function PersonButton({ id, R, t, select, note }: { id: string; R: Replay
 
 // ---- A person ---------------------------------------------------------------------------------
 
+const PLACE_WORDS: Record<string, string> = {
+  door: "the door",
+  vale_office: "Dr. Vale's office",
+  learner_desk: "your desk",
+  riley_desk: "Riley's desk",
+  shelves: "the library shelves",
+  terminal: "the Bruin terminal",
+  panel_table: "the panel table",
+  whiteboard: "the whiteboard",
+};
+const KIND_WORDS: Record<string, string> = {
+  "voice.line": "Says it out loud",
+  "panel.whisper": "Passes a note to the panel",
+  "learner.evidence": "Cites evidence",
+  "ledger.seal": "Seals the record",
+  "task.end": "The task ends",
+  "session.end": "The session ends",
+  "session.start": "The session starts",
+};
+
+/** Plain words for an event that has no line of its own. */
+function plainKind(e: LabEvent): string {
+  if (e.k === "agent.move") {
+    const place = String((e.data as { place?: string } | undefined)?.place ?? "");
+    return `Walks to ${PLACE_WORDS[place] ?? place.replace(/_/g, " ")}`;
+  }
+  return KIND_WORDS[e.k] ?? e.k.replace(/[._]/g, " ");
+}
+
 /** A person in your rotation: who they are, what they can read, and every decision they made and why. */
 export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
   const { R } = nav;
   const a = R.agents.get(id)!;
-  const mine = (nav.live ?? []).filter((e) => e.agent === id || e.to === id).reverse();
+  // The portrait comes from the backend's agent list (Runware), when it sends one.
+  const seen = (nav.live ?? []).filter((e) => e.t <= nav.t + 0.5);
+  // Whispers keep their words and reason private until the verdict.
+  const mine = seen
+    .filter((e) => e.agent === id || e.to === id)
+    .map((e) => (whisperHidden(e, seen) ? { ...e, ...PRIVATE_NOTE } : e))
+    .reverse();
   const latest = mine.find((e) => e.agent === id && e.text);
   return (
     <div style={band(a.role, id)}>
       <div className="who">
         <div className="portrait">
-          <Avatar id={id} role={a.role} scale={5} />
+          <Avatar id={id} role={a.role} scale={5} portrait={a.portrait} />
         </div>
         <div>
           <h2>{R.name(id)}</h2>
           <p className="role">
             <span className="swatch" style={{ background: colorOf(a.role, id) }} />
-            {roleLabel(id, a.role)}
+            {R.label(id)}
           </p>
         </div>
       </div>
       <p className="now-line">
         <small>{latest ? "Latest" : "Now"}</small>
-        {latest?.text ?? "At their desk."}
+        {latest ? plainLine(latest) : "At their desk."}
       </p>
       {(a.reads ?? ROLE_READS[a.role]) && (
         <p className="reads">
@@ -127,11 +164,18 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
           </button>
         </div>
       )}
+      {id === "learner" && (
+        <Section title="Your mastery">
+          <Safe name="The mastery chart">
+            <MasteryChart />
+          </Safe>
+        </Section>
+      )}
       <Section title="Decisions, and why" count={mine.length || undefined}>
         {!mine.length && <p className="empty">Nothing yet.</p>}
         {mine.map((e) => (
           <div className="item" key={e.seq}>
-            <div className="label">{e.text ?? e.k}</div>
+            <div className="label">{e.text ? plainLine(e) : plainKind(e)}</div>
             <div className="meta">{fmtElapsed(e.t)} into the session</div>
             <span className="why">Why: {e.why}</span>
           </div>
@@ -162,7 +206,7 @@ export function PersonPanel({ id, ...nav }: Nav & { id: string }) {
           <h2>{R.name(id)}</h2>
           <p className="role">
             <span className="swatch" style={{ background: colorOf(a.role, id) }} />
-            {roleLabel(id, a.role)}
+            {R.label(id)}
           </p>
           <p className="sub">
             {MODEL_NAME[a.model ?? ""] ?? a.model ?? "Model unknown"}
@@ -472,7 +516,7 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 
       <Section title="Who is on it">
         <div className="people">
-          {members.length ? members.map((a) => <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={roleLabel(a.id, a.role)} />) : <p className="empty">Nobody yet.</p>}
+          {members.length ? members.map((a) => <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={R.label(a.id)} />) : <p className="empty">Nobody yet.</p>}
         </div>
         {solos.length > 0 && (
           <p className="sub" style={{ marginTop: 10 }}>
@@ -518,7 +562,7 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 
 const ROOM_TEXT: Record<string, { role?: Role; what: string }> = {
   director: { role: "director", what: "Dr. Vale's office. Vale picks your task, walks it to your desk, and sits on the panel that rules on your answer with Ines and Sam." },
-  library: { role: "library", what: "Telem's library. When you need a method, Telem searches papers and the web for how it should be done and what usually goes wrong, then carries what it finds to your desk." },
+  library: { role: "library", what: "Telem's library. Before you answer, Telem looks up the topic and tells you what to watch for; after the verdict, he brings a real case of the same mistake." },
   "team-a": { role: "team-a", what: "Your desk is here. Sam, your mentor, sits at the head desk at the back and can drop by with a hint, never the answer." },
   "team-b": { role: "team-b", what: "Riley works the same task from the same tables, blind. Riley never sees your work and you never see Riley's until the verdict. The wall between the rooms has no door." },
   "team-c": { what: "Closed during a rotation. Nobody works here." },
@@ -551,7 +595,7 @@ export function RoomPanel({ id, ...nav }: Nav & { id: string }) {
         <Section title="People" count={people.length}>
           <div className="people">
             {present.map((a) => (
-              <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={a.role === "head" ? roleLabel(a.id, a.role) : a.study ?? ""} />
+              <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={a.study ?? R.label(a.id)} />
             ))}
             {!present.length && <p className="empty">Nobody has arrived yet.</p>}
           </div>

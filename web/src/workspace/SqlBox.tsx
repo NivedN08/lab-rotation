@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Grid } from "./Grid";
 import { lastQuery } from "./lastQuery";
-import { runSql, useMock, type SqlResult } from "../api/client";
+import { isStatic, runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
-const START = "SELECT * FROM samples WHERE batch = 'C' LIMIT 20";
 
-export function SqlBox({ sessionId }: { sessionId: string }) {
-  const [sql, setSql] = useState(START);
+export function SqlBox({ sessionId, firstTable, tableNames = [] }: { sessionId: string; firstTable: string; tableNames?: string[] }) {
+  const [sql, setSql] = useState(`SELECT * FROM ${firstTable} LIMIT 20`);
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<(SqlResult & { sql: string }) | null>(null);
   const [error, setError] = useState("");
@@ -28,6 +27,18 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
 
   const rows = result?.rows.slice(0, ROW_CAP) ?? [];
 
+  // The hosted link plays a recording: there is nothing to run a query on.
+  if (isStatic() && !useMock()) {
+    return (
+      <section className="ws-sql" aria-label="SQL box">
+        <h2 className="ws-title">SQL</h2>
+        <p className="ws-sent" role="status">
+          Replay only. This is a recorded session, so queries can't be run here.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="ws-sql" aria-label="SQL box">
       <h2 className="ws-title">SQL</h2>
@@ -42,6 +53,16 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
         }}
       />
+      {useMock() && (
+        <p className="empty ws-examples">
+          Sample mode runs only simple queries. Try:{" "}
+          {[`SELECT * FROM ${firstTable} LIMIT 20`, `SELECT COUNT(*), AVG(${"spend"}), MAX(${"spend"}) FROM ${firstTable}`, ...tableNames.slice(1).map((n) => `SELECT * FROM ${n}`)].map((ex) => (
+            <button key={ex} type="button" className="ws-example" onClick={() => setSql(ex)}>
+              {ex}
+            </button>
+          ))}
+        </p>
+      )}
       <div className="ws-foot">
         <span>{state === "running" ? "Running…" : "Cmd or Ctrl + Enter runs it"}</span>
         <button className="btn gold" onClick={run} disabled={state === "running" || !sql.trim()}>
@@ -55,7 +76,7 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
       )}
       {state === "done" && result && (
         <>
-          {useMock() && <p className="empty">Sample mode: the lab server isn't connected yet, so this answer is made up.</p>}
+          {useMock() && <p className="empty">Sample mode: the lab server isn't connected, so this is sample data.</p>}
           {result.rows.length === 0 ? (
             <p className="empty">The query ran and returned no rows. ({result.ms} ms)</p>
           ) : (
@@ -64,6 +85,7 @@ export function SqlBox({ sessionId }: { sessionId: string }) {
               <p className="empty">
                 {result.rows.length} row{result.rows.length === 1 ? "" : "s"} in {result.ms} ms
                 {result.rows.length > ROW_CAP ? `, showing the first ${ROW_CAP}` : ""}
+                {result.truncated ? ". The server stops a result at 500 rows, so there may be more; narrow the query to see them" : ""}
               </p>
             </>
           )}

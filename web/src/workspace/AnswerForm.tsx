@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { submitAnswer, TRAPS, type TaskInfo, type TrapId, type Verdict } from "../api/client";
 import { useDictation } from "./useDictation";
 import { useEvidence } from "./evidence";
@@ -24,6 +24,8 @@ function load(id: string): Draft {
 export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; task: TaskInfo; onSent: () => void }) {
   const [draft, setDraft] = useState<Draft>(() => load(task.id));
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const backRef = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState("");
   const cited = useEvidence();
   const dictation = useDictation((text) => update({ note: [draft.note.trim(), text].filter(Boolean).join(" ") }));
@@ -46,6 +48,13 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
   const missing = [!draft.verdict && "pick a verdict", !draft.trap && "pick the trap", cited.length === 0 && "cite at least one piece of evidence"].filter(Boolean) as string[];
   const locked = draft.sent;
 
+  // Submit asks first, inside the form. Focus lands on Back so a second Enter cannot send by accident.
+  function ask() {
+    if (missing.length || busy) return;
+    setConfirming(true);
+    setTimeout(() => backRef.current?.focus(), 0);
+  }
+
   async function submit() {
     if (missing.length || busy || !draft.verdict) return;
     setBusy(true);
@@ -58,6 +67,7 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
         evidence: cited.map(({ key: _k, ...rest }) => rest),
         note: draft.note.trim(),
       });
+      setConfirming(false);
       update({ sent: true });
       onSent();
     } catch (e) {
@@ -157,11 +167,25 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
         <p className="ws-sent" role="status">
           Answer sent for {task.title}. The verdict shows up when the checks finish.
         </p>
+      ) : confirming ? (
+        <div className="ws-confirm" role="group" aria-label="Send this answer?">
+          <p>
+            <b>Send this answer?</b> You can't change it after.
+          </p>
+          <div className="ws-confirm-actions">
+            <button ref={backRef} className="btn" onClick={() => setConfirming(false)} disabled={busy}>
+              Back
+            </button>
+            <button className="btn gold" onClick={submit} disabled={busy}>
+              {busy ? "Sending…" : "Send"}
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="ws-foot">
           <span>{missing.length ? `To submit: ${missing.join(", ")}.` : "Ready to submit."}</span>
-          <button className="btn gold" onClick={submit} disabled={missing.length > 0 || busy}>
-            {busy ? "Sending…" : "Submit answer"}
+          <button className="btn gold" onClick={ask} disabled={missing.length > 0}>
+            Submit answer
           </button>
         </div>
       )}

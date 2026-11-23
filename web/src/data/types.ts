@@ -22,6 +22,8 @@ export type AgentRec = {
   cost: number;
   /** A rotation agent's name, what it can read and its portrait, as the backend's agent list sends them. */
   name?: string;
+  /** The backend's job title for the agent ("Lab head", "Examiner", ...). */
+  title?: string;
   reads?: string;
   portrait?: string | null;
 };

@@ -1,36 +1,91 @@
 import { useEffect } from "react";
-import { audioUrl, subscribeEvents, subscribeJump } from "../api/client";
+import { audioUrl, getRotation, subscribeEvents, subscribeJump, type LabEvent } from "../api/client";
 import { useMuted, voiceMute } from "./voiceMute";
 import "./panels.css";
 
-// One audio element at a time: lines wait their turn instead of talking over each other.
-let queue: string[] = [];
-let current: HTMLAudioElement | null = null;
+// One line at a time: lines wait their turn instead of talking over each other.
+// A line may have an audio file, the words to speak, or both. If the file is missing or fails, the browser speaks the words.
+type Line = { agent: string; file?: string; say?: string };
+let queue: Line[] = [];
+let current: { stop: () => void } | null = null;
+
+// If the server's audio keeps failing, stop asking it: the browser's own voice does the talking, with no more failed requests.
+let audioFailures = 0;
+const AUDIO_GIVE_UP = 2;
+
+// A different voice for each agent where the browser has several, and a different pitch either way.
+const PITCH: Record<string, number> = { vale: 0.85, ines: 1.15, sam: 1.0, telem: 1.3, riley: 0.75, learner: 1.0 };
+const ORDER = ["vale", "ines", "sam", "telem", "riley", "learner"];
+
+function voiceFor(agent: string): SpeechSynthesisVoice | undefined {
+  const all = window.speechSynthesis?.getVoices?.() ?? [];
+  const lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+  const pool = all.filter((v) => v.lang.toLowerCase().startsWith(lang));
+  const voices = pool.length ? pool : all;
+  if (!voices.length) return undefined;
+  return voices[Math.max(0, ORDER.indexOf(agent)) % voices.length];
+}
+
+/** Speaks the words with the browser's built-in voice. Calls `done` when finished (or at once if it cannot). */
+function speak(line: Line, done: () => void) {
+  const synth = window.speechSynthesis;
+  if (!line.say || !synth || typeof SpeechSynthesisUtterance === "undefined") return done();
+  const u = new SpeechSynthesisUtterance(line.say);
+  const v = voiceFor(line.agent);
+  if (v) u.voice = v;
+  u.pitch = PITCH[line.agent] ?? 1;
+  u.onend = done;
+  u.onerror = done;
+  current = { stop: () => synth.cancel() };
+  synth.speak(u);
+}
 
 function next() {
   current = null;
-  const file = queue.shift();
-  if (!file) return;
-  const a = new Audio(audioUrl(file));
-  current = a;
+  const line = queue.shift();
+  if (!line) return;
+  if (!line.file || audioFailures >= AUDIO_GIVE_UP) return speak(line, next);
+
+  const a = new Audio(audioUrl(line.file));
+  let failed = false;
+  const fallBack = () => {
+    if (failed) return;
+    failed = true;
+    audioFailures += 1;
+    a.onended = null;
+    a.onerror = null;
+    if (!current) return; // the line was cut (muted or sought) while it was loading
+    current = null;
+    speak(line, next);
+  };
+  current = {
+    stop: () => {
+      failed = true; // a cut line must not fall back to speech
+      a.onended = null;
+      a.onerror = null;
+      a.pause();
+    },
+  };
   a.onended = next;
-  a.onerror = next;
-  a.play().catch(next); // a browser may block sound until the first click; skip the line then
+  a.onerror = fallBack;
+  a.play().catch(fallBack);
 }
 
-function enqueue(file: string) {
-  queue.push(file);
+function enqueue(line: Line) {
+  queue.push(line);
   if (!current) next();
 }
 
 function silence() {
   queue = [];
-  if (current) {
-    current.onended = null;
-    current.onerror = null;
-    current.pause();
-    current = null;
-  }
+  current?.stop();
+  current = null;
+}
+
+/** The text of the agent.say event a voice.line speaks (`lineOf` is its seq). */
+function spoken(lineOf: number | undefined, batch: LabEvent[]): string | undefined {
+  if (lineOf === undefined) return undefined;
+  return [...getRotation().events, ...batch].find((e) => e.seq === lineOf)?.text;
 }
 
 /** Plays each voice.line's audio as it arrives. Draws nothing. Mount it once. */
@@ -39,8 +94,10 @@ export function Voice() {
     const offEvents = subscribeEvents((events) => {
       if (voiceMute.get()) return;
       for (const e of events) {
-        const file = (e.data as { file?: string } | undefined)?.file;
-        if (e.k === "voice.line" && file) enqueue(file);
+        if (e.k !== "voice.line") continue;
+        const d = (e.data ?? {}) as { file?: string; lineOf?: number };
+        const say = spoken(d.lineOf, events);
+        if (d.file || say) enqueue({ agent: e.agent, file: d.file || undefined, say });
       }
     });
     // A seek or loop in the demo: whatever was being said no longer applies.

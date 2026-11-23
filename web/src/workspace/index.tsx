@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { getTables, rotation, useDemo, useRotation, type TableInfo } from "../api/client";
+import { getTables, isStatic, rotation, useDemo, useRotation, type TableInfo } from "../api/client";
 import { AnswerForm } from "./AnswerForm";
 import { ChartBuilder } from "./ChartBuilder";
 import { EvidenceTray } from "./EvidenceTray";
@@ -7,6 +7,7 @@ import { evidence } from "./evidence";
 import { lastQuery } from "./lastQuery";
 import { SqlBox } from "./SqlBox";
 import { TableBrowser } from "./TableBrowser";
+import { Markdown } from "./Markdown";
 import { Timer } from "./Timer";
 import "./workspace.css";
 
@@ -21,17 +22,19 @@ export default function Workspace({ onTaskChange }: Props) {
   const [tablesError, setTablesError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
+  // Each task has its own tables, so they are read again when the task changes (and for a replay, for the task being shown).
+  const taskId = task?.id;
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !taskId) return;
     let live = true;
     setTablesError("");
-    getTables(sessionId)
+    getTables(sessionId, taskId)
       .then((t) => live && setTables(t))
       .catch((e) => live && setTablesError((e as Error).message));
     return () => {
       live = false;
     };
-  }, [sessionId, attempt]);
+  }, [sessionId, taskId, attempt]);
 
   // The side panel widens while a task is running.
   useEffect(() => {
@@ -64,7 +67,7 @@ export default function Workspace({ onTaskChange }: Props) {
           <div className="ws-skel tall" />
           <p className="empty">Loading your task and the tables…</p>
         </div>
-      ) : !task || !startedAt ? (
+      ) : !task ? (
         <p className="ws-sent" role="status">
           {awaitingNext ? "Waiting for the first task…" : "That was the last task. Nice work."}
         </p>
@@ -72,16 +75,16 @@ export default function Workspace({ onTaskChange }: Props) {
         <>
           {watching && (
             <p className="ws-sent" role="status">
-              Demo replay{demo.sample ? ". Sample data" : ""}: you're watching a recorded session, so answers are turned off.
+              {isStatic() ? "Replay only" : "Demo replay"}{demo.sample ? ". Sample data" : ""}: you're watching a recorded session, so answers, appeals and questions are turned off.
             </p>
           )}
           <div className="ws-task" key={`brief-${task.id}`}>
             <div className="ws-task-head">
               <h2 className="ws-title">
                 {task.title}
-                {task.tier && <span className="ws-tier">{task.tier}</span>}
+                {task.tier !== undefined && <span className="ws-tier">Tier {task.tier}</span>}
               </h2>
-              <Timer startedAt={startedAt} seconds={task.seconds} />
+              <Timer taskId={task.id} startedAt={startedAt} seconds={task.seconds} />
             </div>
             {task.claim && (
               <p className="ws-claim">
@@ -89,10 +92,16 @@ export default function Workspace({ onTaskChange }: Props) {
               </p>
             )}
             <p className="ws-brief">{task.brief}</p>
+            {task.dictionary && (
+              <details className="ws-dict">
+                <summary>Data dictionary</summary>
+                <Markdown text={task.dictionary} />
+              </details>
+            )}
           </div>
-          <TableBrowser sessionId={sessionId} tables={tables} />
-          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} />
-          <ChartBuilder sessionId={sessionId} tables={tables} />
+          <TableBrowser key={`tables-${task.id}`} sessionId={sessionId} taskId={task.id} tables={tables} />
+          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} firstTable={tables[0]?.name ?? "visits"} tableNames={tables.map((t) => t.name)} />
+          <ChartBuilder key={`chart-${task.id}`} sessionId={sessionId} taskId={task.id} tables={tables} />
           <EvidenceTray />
           {!watching && <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />}
           {awaitingNext && (

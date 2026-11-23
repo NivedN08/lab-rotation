@@ -4,6 +4,7 @@
 
 import { useSyncExternalStore } from "react";
 import { getCurrentTask, getEvents, startSession } from "./client";
+import { taskClockStart } from "./clock";
 import type { LabEvent, StartOptions, TaskInfo } from "./types";
 
 export type TaskResult = "passed" | "failed";
@@ -13,7 +14,10 @@ export type RotationState = {
   /** Every task in the rotation, in order. */
   tasks: { id: string; title: string }[];
   current: TaskInfo | null;
-  /** ms since epoch when the current task's clock started: the value the Timer counts from. */
+  /**
+   * ms since epoch when the current task's clock started: the value the Timer counts from. The clock starts when Riley sits
+   * down at `riley_desk` after the brief (the server's timer starts there too), so this is `null` while the brief is going on.
+   */
   startedAt: number | null;
   /** Filled from verdict events. */
   results: Record<string, TaskResult>;
@@ -26,7 +30,9 @@ export type RotationState = {
 };
 
 const POLL_MS = 1000;
-const startKey = (id: string) => `lab-rotation.workspace.start.${id}`;
+// Keys start with lab-rotation.workspace. so a new sample session clears them with the rest.
+const startGuessKey = (sessionId: string) => `lab-rotation.workspace.sessionstart.${sessionId}`;
+const clockKey = (sessionId: string, taskId: string) => `lab-rotation.workspace.clock.${sessionId}.${taskId}`;
 
 let state: RotationState = { sessionId: null, tasks: [], current: null, startedAt: null, results: {}, events: [], error: null, awaitingNext: false };
 
@@ -48,20 +54,53 @@ function set(patch: Partial<RotationState>) {
   stateSubs.forEach((f) => f());
 }
 
-/** Start time for a task, kept so closing the panel or reloading does not reset the clock. */
-function clockFor(id: string): number {
-  try {
-    const saved = Number(sessionStorage.getItem(startKey(id)));
-    if (saved) return saved;
-    const now = Date.now();
-    sessionStorage.setItem(startKey(id), String(now));
-    return now;
-  } catch {
-    return Date.now();
+/**
+ * The wall-clock time at which the session's `t` was 0, as well as the poll can tell. An event cannot have been received before
+ * it happened, so `received - t` is never earlier than the true start, and the smallest such value over every event seen is
+ * within about one poll of it. Kept in sessionStorage so a reload does not lose it.
+ */
+let startGuess: number | null = null;
+
+function noteArrival(sessionId: string, events: LabEvent[]) {
+  const now = Date.now();
+  if (startGuess === null) {
+    try {
+      const saved = Number(sessionStorage.getItem(startGuessKey(sessionId)));
+      if (saved) startGuess = saved;
+    } catch {
+      /* ignore */
+    }
+  }
+  let best = startGuess;
+  for (const e of events) best = Math.min(best ?? Infinity, now - e.t * 1000);
+  if (best !== startGuess && best !== null) {
+    startGuess = best;
+    try {
+      sessionStorage.setItem(startGuessKey(sessionId), String(best));
+    } catch {
+      /* ignore */
+    }
   }
 }
 
-const taskPatch = (task: TaskInfo | null) => ({ current: task, startedAt: task ? clockFor(task.id) : null });
+/** Starts the current task's clock once Riley has sat down. Once set it does not move, and survives a reload. */
+function refreshClock() {
+  const { sessionId, current, startedAt, events } = state;
+  if (!sessionId || !current || startedAt !== null || startGuess === null) return;
+  const t0 = taskClockStart(events, current.id);
+  if (t0 === undefined) return;
+  let at = Math.round(startGuess + t0 * 1000);
+  try {
+    const saved = Number(sessionStorage.getItem(clockKey(sessionId, current.id)));
+    if (saved) at = saved;
+    else sessionStorage.setItem(clockKey(sessionId, current.id), String(at));
+  } catch {
+    /* ignore */
+  }
+  set({ startedAt: at });
+}
+
+const taskPatch = (task: TaskInfo | null) => ({ current: task, startedAt: null });
 const nobodyReading = () => stateSubs.size === 0 && eventSubs.size === 0;
 
 async function tick(ep: number) {
@@ -79,12 +118,17 @@ async function tick(ep: number) {
         const d = e.data as { taskId?: string; result?: TaskResult } | undefined;
         if (e.k === "verdict" && d?.taskId && d.result) results[d.taskId] = d.result;
       }
+      noteArrival(state.sessionId!, page.events);
       set({ events: [...state.events, ...page.events], results });
+      refreshClock();
       eventSubs.forEach((f) => f(page.events));
     }
     if (state.awaitingNext) {
       const { task } = await getCurrentTask(state.sessionId!);
-      if (task?.id !== state.current?.id) set({ ...taskPatch(task), awaitingNext: false });
+      if (task?.id !== state.current?.id) {
+        set({ ...taskPatch(task), awaitingNext: false });
+        refreshClock();
+      }
     }
   } catch {
     /* a missed poll is not fatal: try again next second */

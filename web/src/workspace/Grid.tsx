@@ -5,7 +5,7 @@ type Props = {
   /** Table name, or "query" for a SQL result. Cited evidence is tagged with it. */
   source: string;
   sql?: string;
-  columns: { name: string; type?: string }[];
+  columns: { name: string; type?: string; about?: string }[];
   rows: Cell[][];
   label: string;
   /**
@@ -56,7 +56,7 @@ export function Grid({ source, sql, columns, rows, label, rowOffset = 0, onProfi
                 <button
                   className="ws-hit"
                   aria-pressed={cited.has(k("column", undefined, c.name))}
-                  title="Cite this column"
+                  title={c.about ? `${c.about}. Click to cite this column.` : "Cite this column"}
                   onClick={() => evidence.toggle(citeColumn(c.name))}
                 >
                   {c.name}

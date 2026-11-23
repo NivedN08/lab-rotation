@@ -895,6 +895,22 @@ a {
   white-space: nowrap;
 }
 
+.msg .src a {
+  background: var(--night-3);
+  color: var(--gold-hi);
+  font-size: 11px;
+  padding: 2px 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg .src a:hover {
+  color: var(--snow);
+  background: var(--night-4);
+}
+
 .msg .src button:hover {
   color: var(--snow);
   background: var(--night-4);
@@ -1276,16 +1292,51 @@ a {
 }
 
 .side.wide {
-  width: min(720px, calc(100vw - 28px));
+  width: min(600px, calc(100vw - 28px));
 }
 
 .side.wide ~ .mapctl {
-  right: 746px;
+  right: 626px;
+}
+
+/* Cards (verdict, results, story, tour) sit over the floor beside the side panel, never on it. */
+.side ~ .tour {
+  left: calc((100vw - 448px) / 2);
+  width: min(560px, calc(100vw - 476px));
+}
+
+.side.wide ~ .tour {
+  left: calc((100vw - 628px) / 2);
+  width: min(560px, calc(100vw - 656px));
+}
+
+/* Collapsed to a slim bar: just the tabs, so the floor shows while you watch. */
+.lab .side.slim {
+  bottom: auto;
+}
+
+.side.slim > :not(.side-head) {
+  display: none;
+}
+
+.side.slim ~ .tour {
+  left: 50%;
+  width: min(560px, calc(100vw - 28px));
+}
+
+.side.slim ~ .mapctl {
+  right: 14px;
 }
 
 @media (max-width: 860px) {
   .side.wide {
     width: auto;
+  }
+
+  .side ~ .tour,
+  .side.wide ~ .tour {
+    left: 50%;
+    width: min(560px, calc(100vw - 28px));
   }
 }
 
@@ -1311,9 +1362,90 @@ a {
 /* ---- Decision log: each event's why, under its line --------------------------------------------- */
 
 .log .why,
-.item .why {
+.item .why,
+.tour .why {
   display: block;
   margin-top: 2px;
   color: var(--fog);
   font-size: 12px;
+}
+
+/* ---- Sponsor strip: a thin bar just above the timeline; the log and map buttons sit above it ----- */
+
+.strip-slot {
+  position: absolute;
+  z-index: 14;
+  left: 14px;
+  right: 14px;
+  bottom: 78px;
+}
+
+.with-strip .log,
+.with-strip .mapctl,
+.with-strip .side,
+.with-strip .tour {
+  bottom: 112px;
+}
+
+@media (max-width: 860px) {
+  .strip-slot {
+    left: 8px;
+    right: 8px;
+    bottom: 70px;
+  }
+
+  .with-strip .side {
+    bottom: 104px;
+  }
+}
+
+/* ---- The demo story: a way out, in the top left corner ------------------------------------------ */
+
+.story-exit {
+  position: absolute;
+  z-index: 16;
+  top: 70px;
+  left: 14px;
+}
+
+/* ---- A backend portrait in the Details frame ------------------------------------------------------ */
+
+.portrait .photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+/* ---- Judge mode while playing: no strip or timeline, so the panel, log and map buttons use the space -- */
+
+.lab.calm .side,
+.lab.calm .log,
+.lab.calm .mapctl {
+  bottom: 14px;
+}
+
+/* ---- The Sample data chip: under the top left, clear of the sponsor strip and the lab log ---------- */
+
+.sample-slot > [role="status"] {
+  top: 116px;
+  bottom: auto !important;
+}
+
+/* A tall card scrolls, but its buttons stay in view at the bottom. */
+.tour.verdict .row {
+  position: sticky;
+  bottom: -14px;
+  margin-bottom: -14px;
+  padding: 10px 0 14px;
+  background: var(--night-2);
+}
+
+/* Judge mode has no strip or timeline below: its cards can use the height. */
+.lab.calm .tour {
+  bottom: 24px;
+}
+
+.lab.calm .tour.verdict {
+  max-height: calc(100vh - 100px);
 }

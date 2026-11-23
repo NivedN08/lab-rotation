@@ -336,6 +336,14 @@ function drawDecor(ctx: Ctx) {
     for (let k = 0; k < 6; k++) rect(ctx, (x0 + 6) * T + 4 + k * 7, 1 * T + 6, 5, 6, ["#ffe08a", "#b7cbfa", "#f6bdd6"][k % 3]);
     shelf(ctx, (x0 + 10) * T, 1 * T + 2, 3 * T, 3);
   }
+  // Team A: Sam's whiteboard on an easel, by the head desk at the back of the room.
+  rect(ctx, 43 * T + 4, 11 * T - 2, 2, T - 2, "#7b83a6");
+  rect(ctx, 45 * T - 6, 11 * T - 2, 2, T - 2, "#7b83a6");
+  rect(ctx, 43 * T + 1, 10 * T - 6, 2 * T - 2, T + 6, "#8c96bd");
+  rect(ctx, 43 * T + 3, 10 * T - 4, 2 * T - 6, T + 2, "#f4f6fb");
+  for (let k = 0; k < 3; k++) rect(ctx, 43 * T + 5, 10 * T - 1 + k * 4, 10 + ((k * 7) % 14), 1, "#4c7cf2");
+  rect(ctx, 44 * T + 6, 10 * T + 6, 6, 1, "#ea5f9d");
+
   // Hatch trays on both sides of the blind wall.
   rect(ctx, 52 * T + 6, 6 * T - 2, 10, 20, "#4d5478");
   rect(ctx, 54 * T, 6 * T - 2, 10, 20, "#4d5478");

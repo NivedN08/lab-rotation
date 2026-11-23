@@ -5,7 +5,7 @@ import type { TrapId } from "./traps";
 
 export type Cell = string | number | boolean | null;
 
-export type Column = { name: string; type: "text" | "int" | "real" | "date" };
+export type Column = { name: string; type: "text" | "int" | "real" | "date"; /** What the column means, in plain words. */ about?: string };
 
 export type TableInfo = {
   name: string;
@@ -20,10 +20,12 @@ export type TaskInfo = {
   brief: string;
   /** Time allowed, in seconds. */
   seconds: number;
-  /** Difficulty tier of the task. */
-  tier?: string;
+  /** Difficulty tier: 1 one trap in one table, 2 a trap plus a decoy, 3 a trap that spans two tables. */
+  tier?: number;
   /** The claim the learner is checking. */
   claim?: string;
+  /** The data dictionary, in Markdown. The only place the dictionary_flip trap shows up. Sent by GET /task, not in task.picked. */
+  dictionary?: string;
   /** Why this task was picked for this learner. */
   reason?: string;
 };
@@ -63,9 +65,41 @@ export type LabEvent = {
   data?: Record<string, unknown>;
 };
 
+/** Where an agent can walk to (agent.move's `data.place`; `from` uses the same ids). */
+export type Place = "door" | "vale_office" | "learner_desk" | "riley_desk" | "shelves" | "terminal" | "panel_table" | "whiteboard";
+
+export type AgentMoveData = { from: Place; place: Place };
+
+/**
+ * `search` (Telem). Each task has two, told apart by `data.phase`:
+ * - `topic`: during the brief. Background on the claim only; nothing about what could be wrong.
+ * - `case`: right after `panel.transcript`, with Telem walking to the learner's desk. A real case of this task's trap
+ *   (or, on a clean task, of trusting a clean result), with its source and trace. `trap` is set only with `case`.
+ */
+export type SearchPhase = "topic" | "case";
+
+export type SearchData = {
+  phase?: SearchPhase;
+  trap?: TrapId;
+  query: string;
+  cached: boolean;
+  /** A Telem AI trace link. */
+  trace: string;
+  results: { title: string; url: string; snippet: string }[];
+};
+
+/** `panel.whisper`'s data. Before the task's `panel.transcript` there is no `text` and `sealed` is true. */
+export type WhisperData = { text?: string; sealed?: boolean; cc?: AgentId[]; bandMessageId?: string; local?: boolean };
+
+/**
+ * `panel.transcript`: sent right after the verdict. Before the verdict, `panel.whisper` has no `data.text`;
+ * this event carries the words of every whisper, keyed by the whisper's `seq`.
+ */
+export type PanelTranscriptData = { taskId?: string; whispers: { seq: number; agent: AgentId; to?: AgentId; text: string }[] };
+
 export type EventsPage = { events: LabEvent[]; next: number };
 
-export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number };
+export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number; /** True when the server's 500-row cap cut the result. */ truncated?: boolean };
 
 export type EvidenceRef = {
   kind: "row" | "column" | "cell";
@@ -117,12 +151,24 @@ export type TableProfile = { table: string; columns: ColumnProfile[] };
 
 export type AskRequest = { agent: AgentId; text: string };
 
-/** An agent's answer. It only knows what that agent could see; `sources` says what it used. */
-export type AskReply = { agent: AgentId; text: string; sources: string[] };
+/** One link in an ask reply: where a Telem search result lives. */
+export type AskLink = { title: string; url: string };
+
+/**
+ * An agent's answer. It only knows what that agent could see; `sources` says what it used (in plain words).
+ * When Telem answers, it runs a live search with the learner's question and the reply adds `links` (the results) and
+ * `trace` (the Telem AI trace link).
+ */
+export type AskReply = { agent: AgentId; text: string; sources: string[]; links?: AskLink[]; trace?: string };
+
+/** `ask.answer`'s `data`: the same extras as the reply. */
+export type AskAnswerData = { sources: string[]; links?: AskLink[]; trace?: string };
 
 export type AgentInfo = {
   id: AgentId;
   name: string;
+  /** A short title, such as "Lab head" or "Examiner". */
+  title?: string;
   /** Floor role: director, referee, library, head, team-a, team-b. */
   role: string;
   /** What this agent can read, in plain words. */
@@ -137,7 +183,11 @@ export type SponsorTotals = {
   bruin: { checksRun: number; checksFailed: number };
   runware: { lines: number; cost: number };
   glasser: { calls: number };
+  /** The front end may ignore this. */
+  teamily?: { posts: number };
 };
 
 /** The recorded session the backend picked for the demo, or `session: null` when there is none. `start` and `end` are seconds since that session began. */
 export type DemoInfo = { session: string | null; start: number; end: number; speed: number };
+
+export type Health = { ok: boolean; mock: boolean; band: "live" | "local" };
