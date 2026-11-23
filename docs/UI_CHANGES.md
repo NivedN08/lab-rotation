@@ -1,6 +1,6 @@
 # Lab Rotation UI: what stays, what changes, what's new
 
-**The rule:** summit-lab's look stays. Same pixel floor, engine, sprites, animations, colors (`styles.css` variables) and fonts (Pixelify Sans, Atkinson Hyperlegible). New panels reuse `.box`, `.side`, `.tabs`, `.tour`, `.btn` and `.chip`. Nothing that exists gets restyled or removed.
+**The rule:** The original's look stays. Same pixel floor, engine, sprites, animations, colors (`styles.css` variables) and fonts (Pixelify Sans, Atkinson Hyperlegible). New panels reuse `.box`, `.side`, `.tabs`, `.tour`, `.btn` and `.chip`. Nothing that exists gets restyled or removed.
 
 **How we track it:** before and after each item, take a playwright screenshot of `localhost:5173` into `docs/shots/<item>-before.png` and `-after.png`, tick the box here, and write one line under "Log" at the bottom.
 
@@ -22,7 +22,7 @@
 
 **Main session** (everything except `web/src/workspace/`)
 
-- [x] 1. Names: "Summit Lab" becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
+- [x] 1. Names: the original name becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
 - [x] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
 - [ ] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
 - [ ] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
@@ -53,7 +53,7 @@
 
 ## Who sits where (same floor, new cast)
 
-| Room | summit-lab | Lab Rotation |
+| Room | the original | Lab Rotation |
 |---|---|---|
 | Lobby | Arrivals | You arrive |
 | Director's office | Director | Dr. Vale |
@@ -67,9 +67,9 @@
 
 ## New events, existing animations
 
-No new animation types are needed. Each new event reuses one that summit-lab already has.
+No new animation types are needed. Each new event reuses one that the original already has.
 
-| New event | What you see | Reuses summit-lab's |
+| New event | What you see | Reuses the original's |
 |---|---|---|
 | `session.start` | You walk in from the lobby to your desk | `agent.start` arrive |
 | `task.picked` | Vale walks to your desk carrying a paper | `relay.briefing` (director visit) |
@@ -93,5 +93,5 @@ No new animation types are needed. Each new event reuses one that summit-lab alr
 <!-- One line per finished item: number, what changed, screenshot names. -->
 
 - 6: side panel tabs are now Workspace, Details, Ask, Panel room; Workspace mounts `web/src/workspace/index.tsx` (default or `Workspace` export, props in `ui/WorkspaceTab.tsx`), stays mounted across tab switches, widens to 720px while `onTaskChange(true)`; Workspace button in the top bar opens it. Shots: `06-before.png`, `06-after.png`.
-- 1: "Summit Lab" is "Lab Rotation" on the landing wordmark, top bar, error screen and browser tab title. Shots: `01-before.png`, `01-after.png`, `01-before-topbar.png`, `01-after-topbar.png`.
+- 1: the original name is "Lab Rotation" on the landing wordmark, top bar, error screen and browser tab title. Shots: `01-before.png`, `01-after.png`, `01-before-topbar.png`, `01-after-topbar.png`.
 - 2: cast names by role (first agent per role): director Dr. Vale, head of Team A Sam, librarian Telem, referee Ines, Team A You, Team B Riley; others keep random names. New role labels and "what it can read" lines. No shots (screenshots dropped from the process).
