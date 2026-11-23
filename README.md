@@ -22,6 +22,8 @@ You need Python with [uv](https://docs.astral.sh/uv/) and Node.
 
 3. Open **http://localhost:5173/?mock=0** to play against the server. Plain **http://localhost:5173** runs on the front end's built-in sample data instead (a "Sample data" chip says so), with no server at all.
 
+**Live play at the venue.** Nived's server serves the built page and the real backend together at his address: open that address and play, no `?mock=0` needed.
+
 `npm run build` type-checks and builds the front end into `web/dist`.
 
 ## What you can do
