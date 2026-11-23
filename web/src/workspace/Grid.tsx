@@ -13,10 +13,13 @@ type Props = {
    * (1-based, absolute); a SQL result is numbered within itself, so leave this at 0 there.
    */
   rowOffset?: number;
+  /** When given, each column header gets a button that opens that column's profile. */
+  onProfile?: (column: string) => void;
+  profiled?: string;
 };
 
 /** A table whose rows, columns and cells can be clicked to cite them as evidence. */
-export function Grid({ source, sql, columns, rows, label, rowOffset = 0 }: Props) {
+export function Grid({ source, sql, columns, rows, label, rowOffset = 0, onProfile, profiled }: Props) {
   const rowNo = (i: number) => i + 1 + rowOffset;
   const cited = new Set(useEvidence().filter((e) => e.source === source && e.sql === sql).map((e) => e.key));
   const base = { source, sql };
@@ -59,6 +62,19 @@ export function Grid({ source, sql, columns, rows, label, rowOffset = 0 }: Props
                   {c.name}
                 </button>
                 {c.type && <span className="ws-type">{c.type}</span>}
+                {onProfile && (
+                  <button
+                    className="ws-prof"
+                    aria-pressed={profiled === c.name}
+                    aria-label={`Profile of ${c.name}`}
+                    title="Profile this column"
+                    onClick={() => onProfile(c.name)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 6 6" shapeRendering="crispEdges" aria-hidden="true">
+                      <path d="M0 3h1v3H0zM2 1h1v5H2zM4 2h1v4H4z" fill="currentColor" />
+                    </svg>
+                  </button>
+                )}
               </th>
             ))}
           </tr>

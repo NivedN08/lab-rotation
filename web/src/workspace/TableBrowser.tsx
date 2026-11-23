@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getRows, type Cell, type TableInfo } from "../api/client";
+import { getProfile, getRows, type Cell, type TableInfo, type TableProfile } from "../api/client";
 import { Grid } from "./Grid";
+import { ProfileCard } from "./ProfileCard";
 
 export const ROW_CAP = 50;
 
@@ -9,6 +10,10 @@ type Loaded = { rows: Cell[][]; loading: boolean; error: string };
 export function TableBrowser({ sessionId, tables }: { sessionId: string; tables: TableInfo[] }) {
   const [active, setActive] = useState(tables[0]?.name ?? "");
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
+  const [profiles, setProfiles] = useState<Record<string, TableProfile>>({});
+  const [picked, setPicked] = useState<{ table: string; column: string } | null>(null);
+  const [profLoading, setProfLoading] = useState(false);
+  const [profError, setProfError] = useState("");
   const table = tables.find((t) => t.name === active) ?? tables[0];
   const cur = table ? loaded[table.name] : undefined;
 
@@ -20,6 +25,22 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
       setLoaded((l) => ({ ...l, [t.name]: { rows: [...have, ...rows], loading: false, error: "" } }));
     } catch (e) {
       setLoaded((l) => ({ ...l, [t.name]: { rows: have, loading: false, error: (e as Error).message } }));
+    }
+  }
+
+  async function profile(t: TableInfo, column: string) {
+    if (picked?.table === t.name && picked.column === column) return setPicked(null);
+    setPicked({ table: t.name, column });
+    setProfError("");
+    if (profiles[t.name]) return;
+    setProfLoading(true);
+    try {
+      const p = await getProfile(sessionId, t.name);
+      setProfiles((x) => ({ ...x, [t.name]: p }));
+    } catch (e) {
+      setProfError((e as Error).message);
+    } finally {
+      setProfLoading(false);
     }
   }
 
@@ -43,7 +64,31 @@ export function TableBrowser({ sessionId, tables }: { sessionId: string; tables:
       </div>
       <p className="empty ws-about">{table.about}</p>
       {table.rowCount === 0 && <p className="empty">This table has no rows.</p>}
-      {rows.length > 0 && <Grid source={table.name} columns={table.columns} rows={rows} label={`${table.name} rows`} />}
+      {rows.length > 0 && <Grid
+          source={table.name}
+          columns={table.columns}
+          rows={rows}
+          label={`${table.name} rows`}
+          onProfile={(c) => profile(table, c)}
+          profiled={picked?.table === table.name ? picked.column : undefined}
+        />}
+      {picked?.table === table.name && (
+        <>
+          {profLoading && !profiles[table.name] && (
+            <p className="empty" role="status">
+              Profiling {picked.column}…
+            </p>
+          )}
+          {profError && (
+            <p className="ws-error" role="alert">
+              {profError} <button className="btn quiet" onClick={() => { setPicked(null); profile(table, picked.column); }}>Try again</button>
+            </p>
+          )}
+          {profiles[table.name]?.columns.find((c) => c.column === picked.column) && (
+            <ProfileCard profile={profiles[table.name].columns.find((c) => c.column === picked.column)!} onClose={() => setPicked(null)} />
+          )}
+        </>
+      )}
       {cur?.error && (
         <p className="ws-error" role="alert">
           {cur.error}
