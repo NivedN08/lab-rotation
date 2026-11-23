@@ -191,3 +191,30 @@ export type SponsorTotals = {
 export type DemoInfo = { session: string | null; start: number; end: number; speed: number };
 
 export type Health = { ok: boolean; mock: boolean; band: "live" | "local" };
+
+/** `GET /api/bench`: the examiner panel's score on the BEA 2025 shared task (MRBench). */
+export type BenchSplit = "dev-A" | "dev-B" | "test";
+
+export type BenchDimension = "Mistake_Identification" | "Mistake_Location" | "Providing_Guidance" | "Actionability";
+
+export type BenchRow = {
+  /** As recorded. A dev number is never a test number: dev-A is the tuning set, dev-B the held-out check, test is scored on CodaBench. */
+  split: BenchSplit;
+  dimension: BenchDimension;
+  /** The system scored, for example `single-opus-tuned` or `panel-opus-start`. */
+  system: string;
+  /** 3-class macro-F1 as a percent; null for `test` until CodaBench has scored it. */
+  macro_f1: number | null;
+  /** Replies scored (or predicted, for `test`). */
+  n: number;
+  /** The best BEA 2025 test-set score for this dimension. */
+  record: number;
+};
+
+export type Bench = {
+  /** Where the rows came from: Bruin's learn.bench_results, a results file, or nowhere yet. */
+  source: "bruin" | "csv" | "none";
+  rows: BenchRow[];
+  /** The three on-screen demo lines, each naming its split. */
+  lines: string[];
+};

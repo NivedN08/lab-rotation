@@ -11,7 +11,7 @@ import { isDevServer, isStatic } from "./mode";
 import { DEMO_SESSION, mock } from "./mock";
 import { staticReplay } from "./staticReplay";
 import { STATIC_FILES } from "./staticFiles";
-import type { Health, DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
+import type { Bench, Health, DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, CurrentTask, SponsorTotals, StartOptions, TableProfile, EventsPage, LabEvent, Mastery, SessionInfo, SqlResult, TableInfo } from "./types";
 
 export * from "./types";
 export * from "./traps";
@@ -158,3 +158,6 @@ export const getDemo = (): Promise<DemoInfo> => (replaying() ? staticReplay.getD
 
 /** Is the server up, is it in mock mode, and is BAND live or local. */
 export const getHealth = (): Promise<Health> => (replaying() ? Promise.resolve({ ok: true, mock: false, band: "local" as const }) : useMock() ? Promise.resolve({ ok: true, mock: true, band: "local" as const }) : call("GET", "/api/health"));
+
+/** The examiner panel's benchmark result on the BEA 2025 shared task. Sample data in mock mode; `recorded/bench.json` in static replay. */
+export const getBench = (): Promise<Bench> => (replaying() ? staticReplay.getBench() : useMock() ? mock.getBench() : call("GET", "/api/bench"));

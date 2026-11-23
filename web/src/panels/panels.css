@@ -327,3 +327,125 @@
 .pn-case .pn-why {
   margin: 0;
 }
+
+/* ---- Benchmark card ---- */
+
+.pn-bench {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pn-bench .pn-title {
+  font-size: 20px;
+}
+
+.pn-bench-what {
+  margin: 0;
+  color: var(--mist);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pn-bench-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pn-bench-lines .lead {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.pn-bench-scroll {
+  overflow-x: auto;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.pn-bench-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 460px;
+  font-size: 13px;
+}
+
+.pn-bench-table th,
+.pn-bench-table td {
+  padding: 5px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--night-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pn-bench-table thead th {
+  background: var(--night-3);
+  font-weight: 700;
+  vertical-align: bottom;
+}
+
+.pn-bench-table th[scope="row"],
+.pn-bench-table thead th:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.pn-bench-short {
+  display: block;
+  color: var(--fog);
+  font-family: var(--pixel);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pn-bench-split th {
+  text-align: left !important;
+  background: var(--night-2);
+  color: var(--gold-hi);
+  font-family: var(--pixel);
+  font-size: 13px;
+}
+
+.pn-bench-split th span {
+  display: block;
+  color: var(--mist);
+  font-family: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.pn-bench-pending {
+  color: var(--fog);
+  font-style: italic;
+}
+
+.pn-bench-record th,
+.pn-bench-record td {
+  background: var(--night-2);
+  color: var(--good);
+  font-weight: 700;
+}
+
+.pn-bench-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pn-bench-foot .pn-why {
+  margin: 0;
+  font-weight: 400;
+}
