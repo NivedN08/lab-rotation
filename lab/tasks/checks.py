@@ -11,8 +11,6 @@ public tables and the public data dictionary: what a careful analyst could run.
 from __future__ import annotations
 
 import json
-import math
-from pathlib import Path
 from typing import Any
 
 from lab import workspace_sql as ws
@@ -198,18 +196,31 @@ def _dictionary(task: Any) -> str:
     return json.loads((d / "task.json").read_text()).get("dictionary", "")
 
 
-def run_checks(task: Any, fresh: bool = False) -> list[dict]:
-    """Run every trap's check over the task's public tables. One check.result `data` per trap."""
+def run_checks(task: Any, fresh: bool = False, bruin: bool = False) -> list[dict]:
+    """Run every trap's check over the task's public tables. One check.result `data` per trap.
+
+    bruin=True also runs the same checks through `bruin run` (about 2 s) and adds `bruinRun`
+    (the run id) and `bruinPassed` to each result; if Bruin fails to run, `bruinError` instead."""
     tt = ws.TaskTables(ws._task_dir(task).resolve()) if fresh else ws.load(task)
     con = tt.cursor()
     names = tt.order
     dictionary = _dictionary(task)
     try:
-        return [RUNNERS[t](con, names, dictionary) for t in CHECK_IDS]
+        results = [RUNNERS[t](con, names, dictionary) for t in CHECK_IDS]
     finally:
         con.close()
         if fresh:
             tt.con.close()
+    if bruin:
+        from lab.tasks import bruin_run
+        run = bruin_run.run(task)
+        for r in results:
+            if r["check"] in run["checks"]:
+                r["bruinRun"] = run["runId"]
+                r["bruinPassed"] = run["checks"][r["check"]]
+            else:
+                r["bruinError"] = run.get("error", "check missing from the Bruin run")
+    return results
 
 
 def failing(task: Any, fresh: bool = False) -> list[str]:

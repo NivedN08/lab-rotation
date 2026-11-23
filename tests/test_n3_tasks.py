@@ -126,3 +126,13 @@ def test_careless_misses_each_trap(tmp_path):
         k = bank.generate_one(trap, 1, truth, 5, 0, tmp_path / trap)
         assert k["careless"]["verdict"] != truth
         assert k["careful"]["verdict"] == truth
+
+
+@pytest.mark.skipif(__import__("shutil").which("bruin") is None, reason="bruin not installed")
+def test_bruin_agrees_with_python_checks(small_bank):
+    for skill in R.SKILLS:
+        t = bank.pick(skill, 3, rng=random.Random(0))
+        res = run_checks(t, bruin=True)
+        for r in res:
+            assert "bruinError" not in r, r
+            assert r["bruinPassed"] == r["passed"], (skill, r["check"])
