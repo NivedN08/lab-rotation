@@ -141,9 +141,13 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
 
 ## Additions (N1, after the freeze; all optional)
 
-- `task` query on `tables`, `rows` and `profile`: the slot id (`t1`, `t2`, `t3`) whose
-  tables to read, so a replay can show any task of a finished session. Without it the
-  routes use the current task, or the last one when the session is over.
+- `task` query on `tables`, `rows` and `profile` (`?task=t2`): the slot id (`t1`, `t2`,
+  `t3`) whose tables to read, so the front end can re-read the tables when the task
+  changes. Without it the routes use the current task (the last one when the session is
+  over). Only the current task or one already finished in this session is served; a
+  future or unknown task returns `409 {error}`, so task 3's tables wait their turn. In a
+  finished session (a replay) every task works. A malformed id is `400`. `POST /sql`
+  always runs on the current task.
 - `GET /api/agents` items also carry `title` ("Lab head", "Examiner", ...).
   `portrait` is `/api/portraits/<agent>.png` when that file exists.
 - Roles in `GET /api/agents`: `vale` director, `ines` referee, `sam` head, `telem`

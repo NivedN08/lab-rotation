@@ -113,4 +113,7 @@ def test_checks_agree_with_the_bruin_call():
     assert sum(not c["data"]["passed"] for c in checks) == 1
     for e in events:
         if e["k"] == "sponsor.call":
-            assert e["data"]["count"] == 1 and not e["data"].get("failed")
+            d = e["data"]
+            assert not d.get("failed")
+            # A Glasser lookup already bought this session is free: count 0, cost 0.
+            assert d["count"] == 1 or (d["count"] == 0 and d["sponsor"] == "glasser" and d.get("cost") == 0)
