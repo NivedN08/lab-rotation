@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { submitAnswer, TRAPS, type TaskInfo, type TrapId, type Verdict } from "../api/client";
+import { useDictation } from "./useDictation";
 import { useEvidence } from "./evidence";
 
 const VERDICTS: { id: Verdict; label: string; hint: string }[] = [
@@ -25,6 +26,7 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const cited = useEvidence();
+  const dictation = useDictation((text) => update({ note: [draft.note.trim(), text].filter(Boolean).join(" ") }));
 
   useEffect(() => {
     if (draft.sent) onSent();
@@ -113,21 +115,41 @@ export function AnswerForm({ sessionId, task, onSent }: { sessionId: string; tas
         )}
       </div>
 
-      <label className="ws-field">
-        <span className="ws-legend">In your own words (optional)</span>
+      <div className="ws-field">
+        <span className="ws-legend ws-legend-row" id="ws-note-label">
+          In your own words (optional)
+          {dictation.supported && !locked && (
+            <button
+              type="button"
+              className="btn quiet ws-mic"
+              aria-pressed={dictation.listening}
+              onClick={dictation.listening ? dictation.stop : dictation.start}
+            >
+              <span className={`ws-rec${dictation.listening ? " on" : ""}`} aria-hidden="true" />
+              {dictation.listening ? "Stop dictating" : "Dictate"}
+            </button>
+          )}
+        </span>
         <textarea
           className="ws-editor ws-note"
+          aria-labelledby="ws-note-label"
           rows={3}
           value={draft.note}
           disabled={locked}
           placeholder="Say what you saw and why it matters."
           onChange={(e) => update({ note: e.target.value })}
         />
-      </label>
+      </div>
 
-      {error && (
+      {dictation.listening && (
+        <p className="empty" role="status">
+          Listening. Speak, and your words are added to the note.
+        </p>
+      )}
+      {!dictation.supported && !locked && <p className="empty">Voice input isn't available in this browser; type your note instead.</p>}
+      {(error || dictation.error) && (
         <p className="ws-error" role="alert">
-          {error}
+          {error || dictation.error}
         </p>
       )}
 
