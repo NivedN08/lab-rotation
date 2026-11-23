@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { getDemo, getEvents, useMock } from "./client";
 import { mock } from "./mock";
 import { drive } from "./session";
+import { hideWhispers, withholdWhispers } from "./visibility";
 import type { AgentId, LabEvent, TaskInfo } from "./types";
 
 export type DemoStatus = "off" | "loading" | "ready" | "error";
@@ -56,13 +57,15 @@ const taskOf = (e: LabEvent, n: number): TaskInfo => {
     tier: d.tier,
     claim: d.claim,
     reason: d.reason,
+    dictionary: d.dictionary,
   };
 };
 
 function derive(pos: number) {
   const picks = events.filter((e) => e.k === "task.picked");
   const tasks = picks.map((e, i) => taskOf(e, i + 1));
-  const seen = events.filter((e) => e.t <= pos);
+  // A finished session has whisper words filled in; hide them until the verdict has played.
+  const seen = withholdWhispers(events.filter((e) => e.t <= pos));
   const pickIdx = seen.filter((e) => e.k === "task.picked").length - 1;
   const current = pickIdx >= 0 ? tasks[pickIdx] : null;
   const results: Record<string, "passed" | "failed"> = {};
@@ -81,7 +84,7 @@ function publish(jumped: boolean) {
   if (jumped) {
     drive.jump(d.patch, pos);
   } else {
-    drive.frame(d.patch, events.filter((e) => e.t > prevPos && e.t <= pos));
+    drive.frame(d.patch, d.seen.filter((e) => e.t > prevPos));
   }
   prevPos = pos;
 }
@@ -207,8 +210,8 @@ export function stopDemo() {
   drive.release();
 }
 
-/** Every recorded event, for readers that need what is still to come (for example mastery before and after an update). */
-export const getRecordedEvents = (): LabEvent[] => events;
+/** Every recorded event (whisper words hidden until the verdict, as everywhere), for readers that need what is still to come (for example mastery before and after an update). */
+export const getRecordedEvents = (): LabEvent[] => hideWhispers(events);
 
 /** The demo's current state without subscribing (for code outside React). */
 export const getDemoState = (): DemoState => state;

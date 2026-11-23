@@ -65,6 +65,17 @@ export type LabEvent = {
   data?: Record<string, unknown>;
 };
 
+/** Where an agent can walk to (agent.move's `data.place`; `from` uses the same ids). */
+export type Place = "door" | "vale_office" | "learner_desk" | "riley_desk" | "shelves" | "terminal" | "panel_table" | "whiteboard";
+
+export type AgentMoveData = { from: Place; place: Place };
+
+/**
+ * `panel.transcript`: sent right after the verdict. Before the verdict, `panel.whisper` has no `data.text`;
+ * this event carries the words of every whisper, keyed by the whisper's `seq`.
+ */
+export type PanelTranscriptData = { whispers: { seq: number; agent: AgentId; to?: AgentId; text: string }[] };
+
 export type EventsPage = { events: LabEvent[]; next: number };
 
 export type SqlResult = { columns: string[]; rows: Cell[][]; ms: number; /** True when the server's 500-row cap cut the result. */ truncated?: boolean };

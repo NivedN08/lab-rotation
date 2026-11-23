@@ -98,7 +98,7 @@ export default function Workspace({ onTaskChange }: Props) {
             )}
           </div>
           <TableBrowser sessionId={sessionId} tables={tables} />
-          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} firstTable={tables[0]?.name ?? "visits"} />
+          <SqlBox key={`sql-${task.id}`} sessionId={sessionId} firstTable={tables[0]?.name ?? "visits"} tableNames={tables.map((t) => t.name)} />
           <ChartBuilder sessionId={sessionId} tables={tables} />
           <EvidenceTray />
           {!watching && <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />}

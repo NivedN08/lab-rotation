@@ -5,7 +5,7 @@ import { runSql, useMock, type SqlResult } from "../api/client";
 import { ROW_CAP } from "./TableBrowser";
 
 
-export function SqlBox({ sessionId, firstTable }: { sessionId: string; firstTable: string }) {
+export function SqlBox({ sessionId, firstTable, tableNames = [] }: { sessionId: string; firstTable: string; tableNames?: string[] }) {
   const [sql, setSql] = useState(`SELECT * FROM ${firstTable} LIMIT 20`);
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<(SqlResult & { sql: string }) | null>(null);
@@ -41,6 +41,16 @@ export function SqlBox({ sessionId, firstTable }: { sessionId: string; firstTabl
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
         }}
       />
+      {useMock() && (
+        <p className="empty ws-examples">
+          Sample mode runs only simple queries. Try:{" "}
+          {[`SELECT * FROM ${firstTable} LIMIT 20`, `SELECT COUNT(*), AVG(${"spend"}), MAX(${"spend"}) FROM ${firstTable}`, ...tableNames.slice(1).map((n) => `SELECT * FROM ${n}`)].map((ex) => (
+            <button key={ex} type="button" className="ws-example" onClick={() => setSql(ex)}>
+              {ex}
+            </button>
+          ))}
+        </p>
+      )}
       <div className="ws-foot">
         <span>{state === "running" ? "Running…" : "Cmd or Ctrl + Enter runs it"}</span>
         <button className="btn gold" onClick={run} disabled={state === "running" || !sql.trim()}>
@@ -54,7 +64,7 @@ export function SqlBox({ sessionId, firstTable }: { sessionId: string; firstTabl
       )}
       {state === "done" && result && (
         <>
-          {useMock() && <p className="empty">Sample mode: the lab server isn't connected yet, so this answer is made up.</p>}
+          {useMock() && <p className="empty">Sample mode: the lab server isn't connected, so this is sample data.</p>}
           {result.rows.length === 0 ? (
             <p className="empty">The query ran and returned no rows. ({result.ms} ms)</p>
           ) : (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent } from "../api/client";
+import { openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent, type PanelTranscriptData } from "../api/client";
 import "./panels.css";
 
 const NAME: Record<AgentId, string> = { vale: "Dr. Vale", ines: "Ines", sam: "Sam", telem: "Telem", riley: "Riley", learner: "You", system: "System" };
@@ -29,7 +29,10 @@ export function PanelRoom() {
   const [error, setError] = useState("");
 
   const task = verdictTask(events);
-  const whispers = events.filter((e) => e.k === "panel.whisper");
+  // The words come from the panel.transcript event that follows the verdict. Whispers carry only who talked to whom.
+  const transcript = [...events].reverse().find((e) => e.k === "panel.transcript");
+  const said = ((transcript?.data as PanelTranscriptData | undefined)?.whispers ?? []).slice().sort((a, b) => a.seq - b.seq);
+  const whyOf = new Map(events.filter((e) => e.k === "panel.whisper").map((e) => [e.seq, e.why]));
   const thread = events.filter((e) => e.k === "appeal.open" || e.k === "appeal.message" || e.k === "appeal.ruling");
   const opened = thread.find((e) => e.k === "appeal.open");
   const ruling = thread.find((e) => e.k === "appeal.ruling");
@@ -80,21 +83,22 @@ export function PanelRoom() {
     <div className="pn-room">
       <section aria-label="Panel transcript">
         <h3 className="pn-title">Panel transcript</h3>
-        {whispers.length === 0 ? (
-          <p className="empty">The panel has not said anything yet.</p>
+        {!transcript ? (
+          <p className="empty" role="status">
+            The verdict is in. The panel's messages are on their way.
+          </p>
+        ) : said.length === 0 ? (
+          <p className="empty">The panel did not say anything.</p>
         ) : (
           <ol className="pn-log">
-            {whispers.map((e) => (
-              <li key={e.seq}>
+            {said.map((w) => (
+              <li key={w.seq}>
                 <span className="pn-who">
-                  {NAME[e.agent]}
-                  {e.to ? ` to ${NAME[e.to]}` : ""}
+                  {NAME[w.agent] ?? w.agent}
+                  {w.to ? ` to ${NAME[w.to] ?? w.to}` : ""}
                 </span>
-                <span>{wordsOf(e)}</span>
-                {((e.data as { cc?: string[] } | undefined)?.cc?.length ?? 0) > 0 && (
-                  <span className="pn-why">Also to {(e.data as { cc: AgentId[] }).cc.map((c) => NAME[c] ?? c).join(", ")}</span>
-                )}
-                <span className="pn-why">Why: {e.why}</span>
+                <span>{w.text}</span>
+                {whyOf.get(w.seq) && <span className="pn-why">Why: {whyOf.get(w.seq)}</span>}
               </li>
             ))}
           </ol>

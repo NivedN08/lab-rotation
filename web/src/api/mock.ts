@@ -6,7 +6,7 @@ import storesCsv from "./mock/stores.csv?raw";
 import tablesJson from "./mock/tables.json";
 import taskJson from "./mock/task.json";
 import visitsCsv from "./mock/visits.csv?raw";
-import { eventsSoFar, recordedEvents, scriptedEvents, SCRIPT } from "./mockSession";
+import { elapsedNow, eventsSoFar, hurry, recordedEvents, scriptedEvents, SCRIPT, taskEndTime } from "./mockSession";
 import { sponsorTotals } from "./sponsors";
 import type { DemoInfo, AgentInfo, AnswerSubmission, AskReply, AskRequest, Cell, ColumnProfile, SponsorTotals, TableProfile, CurrentTask, TaskInfo, EventsPage, EvidenceRef, Mastery, SessionInfo, SqlResult, StartOptions, TableInfo } from "./types";
 
@@ -36,23 +36,21 @@ const FAKE_TABLES: FakeTable[] = (tablesJson as (TableInfo & { key?: string })[]
 // Slot t1 is the contract's sample task. Slots t2 and t3 reuse it so the one-task-at-a-time flow can be tried.
 const TASKS: TaskInfo[] = [taskJson as TaskInfo, { ...(taskJson as TaskInfo), id: "t2", title: "Loyalty spend check, again" }, { ...(taskJson as TaskInfo), id: "t3", title: "Loyalty spend check, once more" }];
 
-// Which task the fake server is on. Kept in sessionStorage so a page reload does not restart it.
-const TASK_KEY = "lab-rotation.mock.task";
-function taskIndex(): number {
+// How many answers the learner has sent. Kept in sessionStorage so a page reload does not restart the rotation.
+const TASK_KEY = "lab-rotation.mock.answered";
+function answered(): number {
   try {
     return Number(sessionStorage.getItem(TASK_KEY) ?? 0);
   } catch {
     return 0;
   }
 }
-function advanceTask(afterMs: number) {
-  setTimeout(() => {
-    try {
-      sessionStorage.setItem(TASK_KEY, String(taskIndex() + 1));
-    } catch {
-      /* ignore */
-    }
-  }, afterMs);
+
+/** The task now: after an answer, the next one is handed out once the sample session reaches the verdict. */
+function currentTask(): TaskInfo | null {
+  const n = answered();
+  if (n === 0) return TASKS[0];
+  return elapsedNow() >= taskEndTime() ? TASKS[n] ?? null : TASKS[n - 1];
 }
 
 export const DEMO_SESSION = "mock-demo";
@@ -61,9 +59,9 @@ const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => re
 
 export const mock = {
   startSession: (_o?: StartOptions) =>
-    wait<SessionInfo>({ sessionId: "mock-session", tasks: TASKS.map(({ id, title }) => ({ id, title })), task: TASKS[taskIndex()] ?? null }),
+    wait<SessionInfo>({ sessionId: "mock-session", tasks: TASKS.map(({ id, title }) => ({ id, title })), task: currentTask() }),
 
-  getCurrentTask: () => wait<CurrentTask>({ task: TASKS[taskIndex()] ?? null }, 50),
+  getCurrentTask: () => wait<CurrentTask>({ task: currentTask() }, 50),
 
   getTables: () => wait<TableInfo[]>(FAKE_TABLES.map(({ rows, ...info }) => ({ ...info, rowCount: rows.length }))),
 
@@ -89,11 +87,12 @@ export const mock = {
       .trim()
       .replace(/;\s*$/, "")
       .match(/^select\s+(.+?)\s+from\s+(\w+)(?:\s+where\s+(\w+)\s*(=|!=|>|<)\s*('?[^']*'?))?(?:\s+limit\s+(\d+))?$/is);
-    if (!m) return Promise.reject(new Error("Sample mode understands only: SELECT <columns or *> FROM <table> [WHERE col = value] [LIMIT n]."));
+    if (!m) return Promise.reject(new Error("Sample mode can't run that one. It understands SELECT columns (or COUNT, AVG, SUM, MIN, MAX of a column) FROM one table, with an optional WHERE col = value and LIMIT n. The real server runs full SQL."));
     const [, sel, tname, wcol, op, wval, lim] = m;
     const table = FAKE_TABLES.find((t) => t.name.toLowerCase() === tname.toLowerCase());
     if (!table) return Promise.reject(new Error(`No such table: ${tname}. Tables are ${FAKE_TABLES.map((t) => t.name).join(", ")}.`));
     const names = table.columns.map((c) => c.name);
+    const names0 = names;
     let rows = table.rows;
     if (wcol) {
       const i = names.indexOf(wcol);
@@ -107,7 +106,30 @@ export const mock = {
         return op === ">" ? Number(c) > Number(v) : Number(c) < Number(v);
       });
     }
-    if (/^count\(\*\)$/i.test(sel.trim())) return wait({ columns: ["count"], rows: [[rows.length]], ms: 3 });
+    const aggs = sel.split(",").map((s) => s.trim().match(/^(count|avg|sum|min|max)\((\*|\w+)\)$/i));
+    if (aggs.every(Boolean)) {
+      const out: Cell[] = [];
+      const names: string[] = [];
+      for (const a of aggs as RegExpMatchArray[]) {
+        const fn = a[1].toLowerCase();
+        names.push(`${fn}(${a[2]})`);
+        if (a[2] === "*") {
+          if (fn !== "count") return Promise.reject(new Error(`${fn}(*) is not valid. Use a column name.`));
+          out.push(rows.length);
+          continue;
+        }
+        const i = names0.indexOf(a[2]);
+        if (i < 0) return Promise.reject(new Error(`No such column: ${a[2]} in ${table.name}.`));
+        const vals = rows.map((r) => r[i]).filter((v): v is string | number | boolean => v !== null);
+        const nums = vals.filter((v): v is number => typeof v === "number");
+        if (fn === "count") out.push(vals.length);
+        else if (!nums.length) out.push(null);
+        else if (fn === "sum") out.push(Math.round(nums.reduce((x, y) => x + y, 0) * 100) / 100);
+        else if (fn === "avg") out.push(Math.round((nums.reduce((x, y) => x + y, 0) / nums.length) * 100) / 100);
+        else out.push(fn === "min" ? Math.min(...nums) : Math.max(...nums));
+      }
+      return wait({ columns: names, rows: [out], ms: 3 });
+    }
     const cols = sel.trim() === "*" ? names : sel.split(",").map((s) => s.trim());
     const idx: number[] = [];
     for (const c of cols) {
@@ -119,7 +141,12 @@ export const mock = {
   },
 
   submitAnswer: (_a: AnswerSubmission) => {
-    advanceTask(2000); // the next task is handed out a moment after the answer
+    try {
+      sessionStorage.setItem(TASK_KEY, String(answered() + 1));
+    } catch {
+      /* ignore */
+    }
+    hurry(); // the sample session plays on faster toward the verdict
     return wait({ accepted: true });
   },
   openAppeal: (_taskId: string, _reason: string) => wait({ appealId: "mock-appeal" }),

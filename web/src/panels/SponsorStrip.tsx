@@ -43,7 +43,7 @@ export function SponsorStrip() {
   }, [sessionId, calls, watching]);
 
   const t = watching || !served ? sponsorTotals(events) : served;
-  const plural = (n: number, w: string) => `${w}${n === 1 ? "" : "s"}`;
+  const plural = (n: number, w: string) => (n === 1 ? w : w.endsWith("ch") ? `${w}es` : `${w}s`);
 
   return (
     <div className="pn-strip" role="region" aria-label="Sponsor totals">

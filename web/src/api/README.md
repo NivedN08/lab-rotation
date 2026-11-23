@@ -30,7 +30,7 @@ Errors: a non-2xx reply or `{"error": "plain words"}` is shown as is, except 404
 
 ## Mock mode (sample data)
 
-On by default. `?mock=0` calls the real server. `mock.ts` answers every function with the contract's own sample task and session: `./mock/` holds copies of `contract/mock_session.jsonl` and `contract/mock_task/`, so sample data has exactly the real format. Re-copy with `sh web/src/api/mock/sync.sh` from the repo root when the contract changes. Tasks `t2` and `t3` in the mock reuse the sample task so the one-task-at-a-time flow can be tried. The mock's SQL is a stand-in that understands only simple `SELECT ... FROM table [WHERE col = value] [LIMIT n]`. `?mockspeed=10` plays the sample session ten times faster.
+On by default. `?mock=0` calls the real server. `mock.ts` answers every function with the contract's own sample task and session: `./mock/` holds copies of `contract/mock_session.jsonl` and `contract/mock_task/`, so sample data has exactly the real format. Re-copy with `sh web/src/api/mock/sync.sh` from the repo root when the contract changes. Where the copied file is older than what Nived has announced, `mockSession.ts` brings it up to date when it loads (`upgrade`): the data dictionary on `task.picked`, whisper words moved into a `panel.transcript` event after the verdict, and extra `agent.move`s so every place on the floor is used. Each step does nothing once the copied file already has the change. Tasks `t2` and `t3` in the mock reuse the sample task so the one-task-at-a-time flow can be tried. The mock's SQL is a stand-in that understands only simple `SELECT ... FROM table [WHERE col = value] [LIMIT n]`. `?mockspeed=10` plays the sample session ten times faster.
 
 ## One shared state (`session.ts`)
 
@@ -48,13 +48,12 @@ Replays a **real recorded session** through the same state and events as a live 
 
 ## Events we read
 
-We read the fields in bold in `contract/events.md`, and ignore kinds and fields we don't know. The ones the front end acts on: `task.picked`, `verdict` (`taskId`, `result`), `mastery.update`, `panel.whisper` (text in `data.text`), `appeal.*`, `voice.line` (`file`, or `provider: "browser"` with `lineOf`), `sponsor.call`, `check.result`, `monitor.hit`.
+We read the fields in bold in `contract/events.md`, and ignore kinds and fields we don't know. The ones the front end acts on: `task.picked` (including `dictionary`, shown in the workspace live and in replays), `verdict` (`taskId`, `result`), `mastery.update`, `panel.whisper`, `panel.transcript`, `appeal.*`, `voice.line` (`file`, or `provider: "browser"` with `lineOf`), `sponsor.call`, `check.result`, `monitor.hit`, `agent.move` (`from`, `place`; places are `door`, `vale_office`, `learner_desk`, `riley_desk`, `shelves`, `terminal`, `panel_table`, `whiteboard`, typed as `Place`).
 
-Sponsor totals: live, from `GET /sponsors`. In a replay they are added up from events (`sponsors.ts`) so they follow seek and rewind: BAND messages are `band` calls, Telem searches are `telem` calls with `op: "search"`, monitor hits are `monitor.hit` events, Bruin checks are `check.result` events (each has `passed`), Runware lines are `runware` calls with `op: "tts"`.
+**Whisper words.** Before the verdict, `panel.whisper` has no `data.text`. Right after the verdict a `panel.transcript` event carries `{whispers: [{seq, agent, to, text}]}`, and the Panel room shows the transcript from that event. A finished session read from `since=0` has the words filled in, so `visibility.ts` strips them (`withholdWhispers`) from anything that plays a recording, until the verdict event has played: the demo player, the sample session, and the demo's recorded-event reader. No screen can show whisper words early.
 
-## Not yet in the contract (asked of Nived)
+**Sponsor totals.** Live, from `GET /sponsors`. In a replay they are added up from events (`sponsors.ts`) so they follow seek and rewind: BAND messages are `band` calls, Telem searches are `telem` calls with `op: "search"`, monitor hits are `monitor.hit` events, Bruin checks are `check.result` events (each has `passed`; the front end keeps counting these), Runware lines are `runware` calls with `op: "tts"`.
 
-- `task.picked` has no `dictionary`, so a replay cannot show the data dictionary (only `GET /task` has it, and that is null in a replay).
-- `sponsor.call` for Bruin checks says "ran 5 quality checks" with `count: 1`, so the number of checks cannot be added up from `sponsor.call`; we count `check.result` events instead.
-- `events.md` says `panel.whisper`'s `data.text` is "hidden by the browser until the verdict", but `api.md` says the server never sends it before the verdict. Only one can be true.
+## Still open with the contract
+
 - The sample session has no `glasser` `sponsor.call`, so Glasser shows 0 in sample data.
