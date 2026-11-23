@@ -21,7 +21,8 @@ web/dist/
 
 .DS_Store
 
-.bruin.yml
 logs/runs
 logs/*.log
 *.py[cod]
+
+.bruin.yml
