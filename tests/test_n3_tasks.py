@@ -171,3 +171,37 @@ def test_schema_is_no_tell_within_a_tier(small_bank):
                 shapes.setdefault(json.dumps([(x["name"], [c["name"] for c in x["columns"]])
                                               for x in ws.tables(t)]), []).append(t.skill)
         assert len(shapes) == 1, (tier, shapes)
+
+
+def test_naive_number_for_every_numeric_careless_answer(small_bank):
+    for t in all_tasks():
+        k = t.key
+        numeric = k["careless"]["verdict"] in (R.HOLDS, R.FAILS)
+        assert ("naive" in k) == numeric, (t.id, t.skill)
+        if not numeric:
+            continue
+        n = k["naive"]
+        assert isinstance(n["value"], float) and n["unit"] == "USD per visit"
+        assert n["label"].endswith("average spend per visit, before the fix")
+        assert n["value"] == k["careless"]["means"][n["group"]]
+        if t.skill == "unit_mismatch":
+            assert n["value"] > 5 * n["fixed"], n      # the inflated average that should look wrong
+        # key only: the number never sits in the public files
+        public = (t.public_dir / "task.json").read_text() + (t.public_dir / "tables.json").read_text()
+        assert f"{n['value']:.2f}" not in public
+
+
+def test_stale_bank_rebuilds_itself(small_bank):
+    gen = bank.SEALED / "generation.json"
+    meta = json.loads(gen.read_text())
+    assert meta["version"] == bank.VERSION
+    gen.write_text(json.dumps({**meta, "version": bank.VERSION - 1}))
+    bank._INDEX = None
+    old = (bank.SEED, bank.PER)
+    try:
+        bank.SEED, bank.PER = 7, 2          # rebuild in place with the fixture's settings
+        idx = bank.index()
+    finally:
+        bank.SEED, bank.PER = old
+    assert json.loads(gen.read_text())["version"] == bank.VERSION
+    assert len(idx) == 36
