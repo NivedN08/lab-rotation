@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { demo as demoPlayer, getAgents, startDemo, stopDemo, subscribeEvents, subscribeJump, useDemo, useRotation, type LabEvent } from "./api/client";
+import { SampleBadge } from "./api/SampleBadge";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
+import { rotationRun } from "./sim/rotation";
 import { Chat, type Msg } from "./ui/Chat";
 import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
-import { FixturePanel, PersonPanel, RoomPanel, StudyPanel } from "./ui/Panels";
+import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
+import { TaskChips } from "./ui/TaskChips";
+import { VerdictCard, verdictFromEvents } from "./ui/Verdict";
 import { Timeline } from "./ui/Timeline";
+import { WorkspaceTab } from "./ui/WorkspaceTab";
 import { buildTour } from "./ui/tour";
 import { LabEngine, type Target } from "./world/engine";
 
 type View = "landing" | "leaving" | "lab";
+
+/** The run picker's values: your own rotation, and the demo (a recorded rotation). */
+const ROTATION = "rotation";
+const DEMO = "demo";
 
 export function App() {
   const [source, setSource] = useState<Source | null>(null);
@@ -18,16 +28,43 @@ export function App() {
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("landing");
-  const replay = useMemo(() => (run ? new Replay(run) : null), [run]);
+  // The demo replays a recorded session through the same rotation state; it gets its own floor.
+  const demoState = useDemo();
+  const demoOn = demoState.status !== "off";
+  const demoRef = useRef(demoState);
+  demoRef.current = demoState;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const replay = useMemo(() => (run ? new Replay(run) : null), [run, demoOn]);
+  const rotation = useRotation(); // the one shared session, clock and event poll
+  const rotationEvents = useRef<LabEvent[]>([]);
+  rotationEvents.current = rotation.events;
+  const isRotation = run?.run === ROTATION;
+  const [demoEnded, setDemoEnded] = useState(false); // the demo reached its end and holds there
+  const [demoHeld, setDemoHeld] = useState(false); // the visitor left the end card: stop looping
+  // The verdict card opens when a task's verdict arrives, until you close it.
+  const [closedVerdicts, setClosedVerdicts] = useState<string[]>([]);
+  const verdictTask = [...rotation.events].reverse().find((e) => e.k === "verdict" && e.task)?.task ?? null;
+  // In the demo it waits for the end of the recording, the way the old clip ended on its results.
+  const verdictShown = demoOn ? demoEnded && !demoHeld : !!verdictTask && !closedVerdicts.includes(verdictTask);
+  const verdictCard = isRotation && verdictTask && verdictShown ? verdictFromEvents(rotation.events, verdictTask) : null;
+  const verdictTitle = (() => {
+    const i = rotation.tasks.findIndex((x) => x.id === verdictTask);
+    return i >= 0 ? `Task ${i + 1}` : rotation.tasks.find((x) => x.id === verdictTask)?.title ?? "Your task";
+  })();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<LabEngine | null>(null);
   const tRef = useRef(0);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [liveOn, setLiveOn] = useState(false);
+  const [followOn, setFollowOn] = useState(true); // the camera glides to where things happen
+  const followRef = useRef(followOn);
+  followRef.current = followOn;
   const [speed, setSpeed] = useState(12);
   const [selected, setSelected] = useState<Target | null>(null);
-  const [panel, setPanel] = useState<"details" | "chat" | null>(null);
+  const [panel, setPanel] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
+  const [taskRunning, setTaskRunning] = useState(false); // the workspace has a task open: widen the panel
   const [filter, setFilter] = useState<string | null>(null);
   const [chatAgent, setChatAgent] = useState("guide");
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
@@ -47,18 +84,28 @@ export function App() {
     Promise.all([listRuns(), loadDemo()])
       .then(([s, d]) => {
         setSource(s);
-        // The demo opens on its recorded 5 minutes when its run is available.
-        if (d && s.runs.some((r) => r.run === d.run)) {
-          setDemo(d);
-          setClipOn(true);
-          setRunName(d.run);
-        } else setRunName(s.runs[0]?.run ?? null);
+        // The floor opens on your rotation; the recorded runs stay in the run picker, and the
+        // demo button plays the recorded 5 minutes.
+        if (d && s.runs.some((r) => r.run === d.run)) setDemo(d);
       })
-      .catch(() => setError("Could not find any runs. Run python3 build_data.py in web/ first."));
+      .catch(() => setSource({ server: false, runs: [] }));
+    setRunName(ROTATION);
   }, []);
 
+  // A rotation floor holds the people the backend lists, matched by their ids.
   useEffect(() => {
-    if (!source || !runName) return;
+    if (runName !== ROTATION) return;
+    let stop = false;
+    getAgents()
+      .then((agents) => !stop && setRun(rotationRun(agents)))
+      .catch((e) => !stop && setError(`Could not load the lab's people: ${(e as Error).message}`));
+    return () => {
+      stop = true;
+    };
+  }, [runName]);
+
+  useEffect(() => {
+    if (!source || !runName || runName === ROTATION) return;
     let stop = false;
     loadRun(runName, source.server)
       .then((r) => !stop && setRun(r))
@@ -86,6 +133,7 @@ export function App() {
         tRef.current = time;
         setT(time);
         setPlaying(p);
+        setLiveOn(!!engineRef.current?.live);
       },
       onSelect: (target) => {
         if (!target) {
@@ -100,14 +148,67 @@ export function App() {
     });
     engine.setSpeed(speed);
     engineRef.current = engine;
+    engine.followAction = followRef.current;
+    if (replay.run.run === ROTATION) {
+      // Frame the rooms in use; the closed ones stay out of view until you zoom out.
+      engine.setFrame(["director", "library", "team-a", "team-b", "referee", "vault"]);
+      engine.fit(false);
+      // Your rotation: take in everything so far and follow it live. The demo follows its own clock.
+      const d = demoRef.current;
+      if (d.status === "ready") replay.setRecording(d.timeline, d.end);
+      engine.addLive(rotationEvents.current);
+      if (d.status !== "off") {
+        engine.seek(d.position);
+        engine.followClock(d.position, d.speed, d.playing);
+      } else engine.goLive();
+    }
     if (import.meta.env.DEV) (window as unknown as { __lab: LabEngine }).__lab = engine;
     const live = source?.runs.find((r) => r.run === replay.run.run)?.live;
-    if (tRef.current > 0) engine.seek(Math.min(tRef.current, replay.end));
+    if (replay.run.run === ROTATION) {
+      /* already following the session */
+    } else if (tRef.current > 0) engine.seek(Math.min(tRef.current, replay.end));
     else if (live) engine.seek(replay.end);
     engine.interactive = view === "lab";
     return () => engine.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replay]);
+
+  // The rotation's events reach the floor as they arrive; each plays, with the animations the
+  // floor already has, when the floor's clock reaches it.
+  useEffect(() => subscribeEvents((events) => engineRef.current?.addLive(events)), []);
+  // A demo seek or loop: the floor starts over from everything up to that moment.
+  useEffect(() => subscribeJump((time, events) => engineRef.current?.jumpTo(time, events)), []);
+
+  // The demo's whole recording marks the timeline, and the floor follows the demo's clock.
+  useEffect(() => {
+    if (demoState.status === "ready" && replay) replay.setRecording(demoState.timeline, demoState.end);
+  }, [replay, demoState.status, demoState.timeline, demoState.end]);
+  useEffect(() => {
+    if (demoState.status === "ready") engineRef.current?.followClock(demoState.position, demoState.speed, demoState.playing);
+  }, [replay, demoState.status, demoState.position, demoState.speed, demoState.playing]);
+
+  // At the end of the demo, hold on the verdict card, then play it again, the way the old clip did.
+  useEffect(() => {
+    if (demoState.status !== "ready") return setDemoEnded(false);
+    // Stop one player tick (0.2 s of real time) before the end, before the player loops by itself.
+    const near = demoState.end - Math.max(1, demoState.speed * 0.3);
+    if (demoState.playing && demoState.position >= near) {
+      demoPlayer.pause();
+      setDemoEnded(true);
+    } else if (demoState.position < near) setDemoEnded(false);
+  }, [demoState.status, demoState.playing, demoState.position, demoState.end]);
+  const watchAgain = () => {
+    setDemoHeld(false);
+    setDemoEnded(false);
+    demoPlayer.seek(demoRef.current.start);
+    demoPlayer.play();
+  };
+  useEffect(() => {
+    if (!demoEnded || demoHeld || panel || view !== "lab") return;
+    const timer = window.setTimeout(watchAgain, 12000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoEnded, demoHeld, panel, view]);
 
   // Play only the clip while demo mode is on.
   useEffect(() => {
@@ -224,6 +325,16 @@ export function App() {
   const nextMoment = (dir: 1 | -1) => {
     const e = engine();
     if (!e || !replay) return;
+    if (demoOn) {
+      const cur = e.t;
+      const list = replay.moments;
+      const m = dir === 1 ? list.find((x) => x.t > cur + 1) : [...list].reverse().find((x) => x.t < cur - 3);
+      if (!m) return;
+      setDemoEnded(false);
+      demoPlayer.seek(Math.max(demoState.start, m.t - 4));
+      demoPlayer.play();
+      return;
+    }
     const list = replay.moments.filter((m) => (!filter || !m.study || m.study === filter) && m.t >= lo && m.t <= hi);
     const cur = e.t;
     const m = dir === 1 ? list.find((x) => x.t > cur + 1) : [...list].reverse().find((x) => x.t < cur - 3);
@@ -265,7 +376,8 @@ export function App() {
       if (!e) return;
       if (ev.key === " ") {
         ev.preventDefault();
-        e.setPlaying(!e.playing);
+        if (demoOn) demoPlayer.toggle();
+        else e.setPlaying(!e.playing);
       } else if (ev.key === "ArrowRight") nextMoment(1);
       else if (ev.key === "ArrowLeft") nextMoment(-1);
       else if (ev.key === "Escape") {
@@ -276,7 +388,7 @@ export function App() {
         }
       } else if (ev.key === "+" || ev.key === "=") e.zoomBy(1.25);
       else if (ev.key === "-") e.zoomBy(0.8);
-      else if (ev.key === "0") e.fit(true);
+      else if (ev.key === "0") e.showWhole();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -286,7 +398,7 @@ export function App() {
     return (
       <div style={{ padding: 40 }}>
         <h1 className="wordmark" style={{ fontSize: 48 }}>
-          Summit Lab
+          Lab Rotation
         </h1>
         <p>{error}</p>
       </div>
@@ -301,7 +413,11 @@ export function App() {
   const hhmm = (time: number) => (run ? fmtClock(run.started, time).replace(/:\d\d (?=[AP]M)/, " ") : "");
   const status = !run
     ? "Loading the lab…"
-    : clip
+    : isRotation
+      ? rotation.current
+        ? `Your rotation: ${rotation.current.title} is waiting`
+        : "Your rotation is ready"
+      : clip
       ? `Replaying ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of ${runShort}: ${hhmm(clip.start).replace(/ [AP]M$/, "")} to ${hhmm(Math.min(clip.end, R?.end ?? clip.end))} Pacific, ${labAgents} lab agents`
       : runInfo?.live
         ? `Live now: ${run.label}, ${labAgents} agents at work`
@@ -321,7 +437,7 @@ export function App() {
       )
     : [];
 
-  const nav = R ? { R, t, select, talk, filter: chooseStudy } : null;
+  const nav = R ? { R, t, select, talk, filter: chooseStudy, live: rotation.events } : null;
 
   return (
     <>
@@ -330,10 +446,10 @@ export function App() {
         {R && view !== "landing" && (
           <>
             <header className="topbar">
-              <button className="brand" onClick={() => location.reload()} title="Back to the summit">
-                <b>Summit Lab</b>
+              <button className="brand" onClick={() => location.reload()} title="Back to the start">
+                <b>Lab Rotation</b>
               </button>
-              {source && source.runs.length > 1 && (
+              {source && source.runs.length > 0 && (
                 <>
                   <label className="sr-only" htmlFor="run">
                     Run
@@ -341,17 +457,22 @@ export function App() {
                   <select
                     id="run"
                     className="run-pick"
-                    value={runName ?? ""}
+                    value={demoOn ? DEMO : runName ?? ""}
                     onChange={(e) => {
+                      const v = e.target.value;
                       tRef.current = 0;
                       setClipOn(false);
                       setFilter(null);
                       setSelected(null);
                       setPanel(null);
                       setTour(null);
-                      setRunName(e.target.value);
+                      if (v === DEMO) startDemo();
+                      else stopDemo();
+                      setRunName(v === DEMO ? ROTATION : v);
                     }}
                   >
+                    <option value={ROTATION}>Your rotation</option>
+                    <option value={DEMO}>Demo</option>
                     {source.runs.map((r) => (
                       <option key={r.run} value={r.run}>
                         {r.live ? "Live: " : ""}
@@ -361,30 +482,49 @@ export function App() {
                   </select>
                 </>
               )}
-              <nav className="chips" aria-label="Studies">
-                <button className="chip" aria-pressed={filter === null} onClick={() => chooseStudy(null)}>
-                  All studies
-                </button>
-                {R.run.studies.map((s) => {
-                  const fin = R.finalEvent(s.id, t);
-                  const working = R.run.agents.some((a) => a.study === s.id && a.role !== "solo" && R.status(a.id, t).working);
-                  const graded = R.graded(t) && s.grade;
-                  return (
-                    <button key={s.id} className="chip" aria-pressed={filter === s.id} onClick={() => chooseStudy(filter === s.id ? null : s.id)} title={s.title}>
-                      <span className={`dot ${working ? "working" : fin ? "done" : ""}`} title={working ? "Agents working" : fin ? "Finished" : "Waiting"} />
-                      {s.id}
-                      {graded && <span className={`mark ${s.grade!.lab ? "pass" : "fail"}`}>{s.grade!.lab ? "passed" : "failed"}</span>}
-                    </button>
-                  );
-                })}
-              </nav>
-              {demo && (
+              {isRotation ? (
+                <TaskChips rotation={rotation} onOpen={() => setPanel("workspace")} />
+              ) : (
+                <nav className="chips" aria-label="Studies">
+                  <button className="chip" aria-pressed={filter === null} onClick={() => chooseStudy(null)}>
+                    All studies
+                  </button>
+                  {R.run.studies.map((s) => {
+                    const fin = R.finalEvent(s.id, t);
+                    const working = R.run.agents.some((a) => a.study === s.id && a.role !== "solo" && R.status(a.id, t).working);
+                    const graded = R.graded(t) && s.grade;
+                    return (
+                      <button key={s.id} className="chip" aria-pressed={filter === s.id} onClick={() => chooseStudy(filter === s.id ? null : s.id)} title={s.title}>
+                        <span className={`dot ${working ? "working" : fin ? "done" : ""}`} title={working ? "Agents working" : fin ? "Finished" : "Waiting"} />
+                        {s.id}
+                        {graded && <span className={`mark ${s.grade!.lab ? "pass" : "fail"}`}>{s.grade!.lab ? "passed" : "failed"}</span>}
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
+              {demo && !isRotation && (
                 <button className="btn quiet hide-sm" onClick={toggleClip} title={clip ? "Play the whole run instead of the demo's 5 minutes" : "Play the demo's 5 minutes"}>
                   {clip ? "Whole run" : "Demo"}
                 </button>
               )}
-              <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
-                Tour
+              {isRotation && (
+                <button
+                  className="btn quiet hide-sm"
+                  aria-pressed={demoOn}
+                  onClick={() => (demoOn ? stopDemo() : startDemo())}
+                  title={demoOn ? "Leave the demo and go back to your rotation" : "Watch a recorded rotation from start to verdict"}
+                >
+                  {demoOn ? "Your rotation" : "Demo"}
+                </button>
+              )}
+              {!isRotation && (
+                <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
+                  Tour
+                </button>
+              )}
+              <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
+                Workspace
               </button>
               <button className="btn gold" onClick={() => talk(chatAgent)}>
                 Ask the lab
@@ -392,9 +532,15 @@ export function App() {
             </header>
 
             {panel && nav && (
-              <aside className="side box" aria-label={panel === "chat" ? "Ask the lab" : "Details"}>
+              <aside
+                className={`side box${taskRunning && panel === "workspace" ? " wide" : ""}`}
+                aria-label={{ workspace: "Workspace", details: "Details", chat: "Ask the lab", room: "Panel room" }[panel]}
+              >
                 <div className="side-head">
                   <div className="tabs" role="tablist">
+                    <button className="tab" role="tab" aria-selected={panel === "workspace"} onClick={() => setPanel("workspace")}>
+                      Workspace
+                    </button>
                     {selected && (
                       <button className="tab" role="tab" aria-selected={panel === "details"} onClick={() => setPanel("details")}>
                         Details
@@ -403,6 +549,9 @@ export function App() {
                     <button className="tab" role="tab" aria-selected={panel === "chat"} onClick={() => setPanel("chat")}>
                       Ask
                     </button>
+                    <button className="tab" role="tab" aria-selected={panel === "room"} onClick={() => setPanel("room")}>
+                      Panel room
+                    </button>
                   </div>
                   <button className="btn quiet icon" onClick={() => setPanel(null)} aria-label="Close panel" title="Close (Esc)">
                     <svg width="12" height="12" viewBox="0 0 6 6" shapeRendering="crispEdges" aria-hidden="true">
@@ -410,11 +559,19 @@ export function App() {
                     </svg>
                   </button>
                 </div>
-                {panel === "chat" ? (
+                {/* Stays mounted while the panel is open, so switching tabs never loses a task in progress. */}
+                <div className="ws-slot" hidden={panel !== "workspace"}>
+                  <WorkspaceTab onTaskChange={setTaskRunning} />
+                </div>
+                {panel === "workspace" ? null : panel === "room" ? (
+                  <div className="side-body">
+                    <p className="empty">The panel room opens after the verdict. Vale, Ines and Sam talk it over here.</p>
+                  </div>
+                ) : panel === "chat" ? (
                   <Chat R={R} t={t} server={!!source?.server} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
                 ) : (
                   <div className="side-body">
-                    {selected?.type === "agent" && <PersonPanel id={selected.id} {...nav} />}
+                    {selected?.type === "agent" && (isRotation ? <RotationPersonPanel id={selected.id} {...nav} /> : <PersonPanel id={selected.id} {...nav} />)}
                     {selected?.type === "study" && <StudyPanel id={selected.id} {...nav} />}
                     {selected?.type === "room" && <RoomPanel id={selected.id} {...nav} />}
                     {selected?.type === "fixture" && <FixturePanel id={selected.id} {...nav} />}
@@ -424,36 +581,68 @@ export function App() {
             )}
 
             <div className="mapctl">
+              {isRotation && (
+                <button
+                  className="btn"
+                  aria-pressed={followOn}
+                  onClick={() => {
+                    const on = !followOn;
+                    setFollowOn(on);
+                    if (engine()) engine()!.followAction = on;
+                  }}
+                  title={followOn ? "The camera follows the action. Click to keep it still." : "The camera stays where you put it. Click to follow the action."}
+                >
+                  <span className={`dot ${followOn ? "working" : ""}`} aria-hidden="true" />
+                  Follow
+                </button>
+              )}
               <button className="btn icon" onClick={() => engine()?.zoomBy(1.3)} aria-label="Zoom in" title="Zoom in (+)">
                 +
               </button>
               <button className="btn icon" onClick={() => engine()?.zoomBy(1 / 1.3)} aria-label="Zoom out" title="Zoom out (-)">
                 −
               </button>
-              <button className="btn icon" onClick={() => engine()?.fit(true)} aria-label="Show the whole lab" title="Whole lab (0)">
+              <button className="btn icon" onClick={() => engine()?.showWhole()} aria-label="Show the whole lab" title="Whole lab (0)">
                 <svg width="14" height="14" viewBox="0 0 7 7" shapeRendering="crispEdges" aria-hidden="true">
                   <path d="M0 0h3v1H1v2H0zM4 0h3v3H6V1H4zM0 4h1v2h2v1H0zM6 4h1v3H4V6h2z" fill="currentColor" />
                 </svg>
               </button>
             </div>
 
-            {tour === null && !welcome && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} />}
+            {tour === null && !welcome && <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} />}
 
             {welcome && tour === null && (
               <div className="tour box" role="dialog" aria-label="Welcome">
                 <h2>Welcome to the lab floor</h2>
                 <p>
-                  {clip
-                    ? `You're watching ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of a real run, recorded event by event${clip.ends_with_results ? ", ending on its results" : ""}. Everyone here is an AI agent. People walk when information moves between departments. Click anyone to see what they're working on, or ask them.`
-                    : "Everyone here is an AI agent replaying a real run. People walk when information moves between departments. Click anyone to see what they're working on, or ask them."}
+                  {demoOn
+                    ? "You're watching a recorded rotation, from the first task to the verdict. Everyone here is an AI agent; you are the student in Team A. Click anyone to see what they did and why."
+                    : isRotation
+                      ? "This is your rotation. Dr. Vale will bring you a task; open the Workspace to dig into the data. Telem, Sam, Riley and Ines are all at work around you. Click anyone to see what they're doing and why."
+                    : clip
+                      ? `You're watching ${clip.mode === "last" ? "the last" : "the busiest"} ${clip.minutes} minutes of a real run, recorded event by event${clip.ends_with_results ? ", ending on its results" : ""}. Everyone here is an AI agent. People walk when information moves between departments. Click anyone to see what they're working on, or ask them.`
+                      : "Everyone here is an AI agent replaying a real run. People walk when information moves between departments. Click anyone to see what they're working on, or ask them."}
                 </p>
                 <div className="row">
                   <button className="btn" onClick={() => setWelcome(false)}>
                     Explore on my own
                   </button>
-                  <button className="btn gold" onClick={() => goTour(0)} autoFocus>
-                    Take the 1-minute tour
-                  </button>
+                  {isRotation ? (
+                    <button
+                      className="btn gold"
+                      onClick={() => {
+                        setWelcome(false);
+                        setPanel("workspace");
+                      }}
+                      autoFocus
+                    >
+                      Open the Workspace
+                    </button>
+                  ) : (
+                    <button className="btn gold" onClick={() => goTour(0)} autoFocus>
+                      Take the 1-minute tour
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -485,6 +674,20 @@ export function App() {
                   )}
                 </div>
               </div>
+            )}
+
+            {verdictCard && verdictTask && tour === null && (
+              <VerdictCard
+                taskTitle={verdictTitle}
+                {...verdictCard}
+                onClose={() => (demoOn ? setDemoHeld(true) : setClosedVerdicts((c) => [...c, verdictTask]))}
+                onPanelRoom={() => {
+                  if (demoOn) setDemoHeld(true);
+                  else setClosedVerdicts((c) => [...c, verdictTask]);
+                  setPanel("room");
+                }}
+                onAgain={demoOn ? watchAgain : undefined}
+              />
             )}
 
             {atClipEnd && clip?.ends_with_results && R.graded(t) && R.run.totals && !hold && tour === null && (
@@ -525,26 +728,50 @@ export function App() {
             <Timeline
               R={R}
               t={t}
-              playing={playing}
-              speed={speed}
+              playing={demoOn ? demoState.playing : playing}
+              speed={demoOn ? demoState.speed : speed}
               filter={filter}
-              lo={lo}
-              hi={hi}
+              lo={demoOn ? demoState.start : lo}
+              hi={demoOn ? demoState.end : hi}
               onPlay={() => {
                 setHold(false);
-                engine()?.setPlaying(!engine()!.playing);
+                if (demoOn) {
+                  if (demoEnded) watchAgain();
+                  else demoPlayer.toggle();
+                } else engine()?.setPlaying(!engine()!.playing);
               }}
-              onSeek={(x) => engine()?.seek(x)}
+              onSeek={(x) => {
+                if (demoOn) {
+                  setDemoEnded(false);
+                  demoPlayer.seek(x);
+                } else engine()?.seek(x);
+              }}
               onSpeed={(s) => {
+                if (demoOn) return demoPlayer.setSpeed(s);
                 setSpeed(s);
                 engine()?.setSpeed(s);
               }}
               onNext={nextMoment}
+              live={isRotation && !demoOn ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
+              session={isRotation}
             />
           </>
         )}
       </div>
-      {view !== "lab" && <Landing onEnter={enter} ready={!!replay} status={status} live={!!runInfo?.live} leaving={view === "leaving"} />}
+      <SampleBadge />
+      {view !== "lab" && (
+        <Landing
+          onEnter={enter}
+          onDemo={() => {
+            startDemo();
+            enter();
+          }}
+          ready={!!replay}
+          status={status}
+          live={!!runInfo?.live}
+          leaving={view === "leaving"}
+        />
+      )}
     </>
   );
 }

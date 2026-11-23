@@ -150,7 +150,7 @@ export function answerOffline(R: Replay, agent: string, t: number, question: str
     const study = a.study ? R.studies.get(a.study) : null;
     const lastNote = docs.filter((d) => d.kind === "note").sort((x, y) => y.t - x.t)[0];
     const parts = [];
-    const phrase: Record<string, string> = { director: "the lab director", head: roleLabel(agent, "head").replace("Head", "the head"), library: "the research librarian", "team-a": "a scientist on Team A", "team-b": "a scientist on Team B", "team-c": "a scientist on Team C", referee: "the referee", solo: "a solo scientist" };
+    const phrase: Record<string, string> = { director: "the lab director", head: roleLabel(agent, "head").replace("Head", "the head"), library: "the research librarian", "team-a": "a rotation student on Team A", "team-b": "the rival student on Team B", "team-c": "a scientist on Team C", referee: "the referee", solo: "a solo scientist" };
     parts.push(`I'm ${R.name(agent)}, ${phrase[a.role] ?? ROLE_LABEL[a.role]}${study ? ` for ${study.id} (${study.title.toLowerCase()})` : ""}, running on ${MODEL_NAME[a.model ?? ""] ?? a.model}.`);
     if (!st.present) parts.push("I haven't started yet.");
     else if (st.working) parts.push(`Right now: ${lowerFirst(a.role === "solo" ? "working alone on this attempt" : PHASE_TEXT[st.phase ?? ""] ?? "working")}.`);

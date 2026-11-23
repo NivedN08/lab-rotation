@@ -1,9 +1,20 @@
 import { useMemo } from "react";
-import { fmtElapsed, type Replay } from "../sim/replay";
+import type { LabEvent } from "../api/types";
+import { describeLive, fmtElapsed, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 
 /** The last few things that happened, in plain words. Click one to go to whoever did it. */
-export function LabLog({ R, t, filter, select }: { R: Replay; t: number; filter: string | null; select: (t: Target) => void }) {
+export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: number; filter: string | null; select: (t: Target) => void; live?: LabEvent[] }) {
+  // During a rotation the log shows the session's events, in the backend's own words.
+  const liveLines = useMemo(() => {
+    const out: { e: LabEvent; text: string; why: string; tone?: string }[] = [];
+    for (const e of live) {
+      if (e.t > t + 0.5) break; // scrubbed back: only what had happened by then
+      const d = describeLive(e);
+      if (d && out[out.length - 1]?.text !== d.text) out.push({ e, ...d });
+    }
+    return out.slice(-3);
+  }, [live, t]);
   const described = useMemo(
     () =>
       R.run.events
@@ -11,6 +22,24 @@ export function LabLog({ R, t, filter, select }: { R: Replay; t: number; filter:
         .filter((x) => x.d && !["memory.write"].includes(x.e.k)),
     [R],
   );
+  if (liveLines.length) {
+    return (
+      <div className="log" aria-label="Lab log">
+        {liveLines.map(({ e, text, why, tone }) => {
+          const who = R.liveAgent(e.agent);
+          return (
+            <button key={e.seq} className={tone ?? ""} onClick={() => who && select({ type: "agent", id: who })}>
+              <time>{fmtElapsed(e.t)}</time>
+              <span>
+                {text}
+                {why && <small className="why">Why: {why}</small>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
   const recent = [];
   for (let i = described.length - 1; i >= 0 && recent.length < 3; i--) {
     const x = described[i];
