@@ -33,3 +33,14 @@ web/dist/
 
 # The web front end's TypeScript data types, not run data
 !web/src/data/
+
+# Lab Rotation: Bruin's DuckDB warehouse and run logs (data/ above covers data/warehouse.duckdb)
+*.duckdb
+*.duckdb.wal
+logs/
+.pytest_cache/
+
+.bruin.yml
+logs/runs
+logs/*.log
+*.py[cod]

@@ -1,0 +1,35 @@
+[project]
+name = "lab-rotation"
+version = "0.1.0"
+description = "A panel of AI agents trains analysts to catch bad data"
+requires-python = ">=3.12"
+dependencies = [
+    "band-sdk==9.1.0",
+    "duckdb==2.0.1",
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "numpy>=2.5.5",
+    "python-dotenv>=1.2.4",
+    "runware>=0.5.24",
+    "scipy>=1.18.1",
+    "telem-sdk>=0.4.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["live: calls a real sponsor service (skip with -k 'not live')"]
+# Two summit-lab tests need staged genebench data or a Modal image; not part of Lab Rotation.
+addopts = [
+    "--deselect=tests/test_modal_units.py::test_lab_with_modal_backend_refuses_local_memory",
+    "--deselect=tests/test_scbench_wiring.py::test_each_package_set_gets_its_own_image_name",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

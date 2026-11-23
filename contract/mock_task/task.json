@@ -1,0 +1,9 @@
+{
+  "id": "t1",
+  "title": "Loyalty spend check",
+  "seconds": 240,
+  "tier": 1,
+  "claim": "Loyalty members spend more than twice as much per visit as other customers.",
+  "brief": "Marketing wants this on a board slide on Friday: members spend 2.4x per visit. Check it first.",
+  "dictionary": "# Data dictionary\n\n- **visits.spend**: basket total in US dollars, tax included.\n- **customers.loyalty_member**: 1 if the customer is in the loyalty program.\n- **stores.pos_version**: point-of-sale software that exported the visit.\n"
+}
