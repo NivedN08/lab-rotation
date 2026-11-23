@@ -288,7 +288,7 @@ export function App() {
     return (
       <div style={{ padding: 40 }}>
         <h1 className="wordmark" style={{ fontSize: 48 }}>
-          Summit Lab
+          Lab Rotation
         </h1>
         <p>{error}</p>
       </div>
@@ -332,8 +332,8 @@ export function App() {
         {R && view !== "landing" && (
           <>
             <header className="topbar">
-              <button className="brand" onClick={() => location.reload()} title="Back to the summit">
-                <b>Summit Lab</b>
+              <button className="brand" onClick={() => location.reload()} title="Back to the start">
+                <b>Lab Rotation</b>
               </button>
               {source && source.runs.length > 1 && (
                 <>

@@ -22,7 +22,7 @@
 
 **Main session** (everything except `web/src/workspace/`)
 
-- [ ] 1. Names: "Summit Lab" becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
+- [x] 1. Names: "Summit Lab" becomes "Lab Rotation" on the landing page and top bar (`ui/Landing.tsx`, `App.tsx`)
 - [ ] 2. Cast: Dr. Vale, Ines, Sam, Telem, Riley and You replace the random names; role labels and "what it can read" lines (`sim/replay.ts`: `NAMES`, `ROLE_LABEL`, `ROLE_READS`)
 - [ ] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
 - [ ] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
@@ -93,3 +93,4 @@ No new animation types are needed. Each new event reuses one that summit-lab alr
 <!-- One line per finished item: number, what changed, screenshot names. -->
 
 - 6: side panel tabs are now Workspace, Details, Ask, Panel room; Workspace mounts `web/src/workspace/index.tsx` (default or `Workspace` export, props in `ui/WorkspaceTab.tsx`), stays mounted across tab switches, widens to 720px while `onTaskChange(true)`; Workspace button in the top bar opens it. Shots: `06-before.png`, `06-after.png`.
+- 1: "Summit Lab" is "Lab Rotation" on the landing wordmark, top bar, error screen and browser tab title. Shots: `01-before.png`, `01-after.png`, `01-before-topbar.png`, `01-after-topbar.png`.

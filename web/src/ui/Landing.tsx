@@ -19,9 +19,9 @@ export function Landing({ onEnter, ready, status, live, leaving }: Props) {
       <canvas ref={ref} aria-hidden="true" />
       <div className="hero">
         <h1 className="wordmark">
-          Summit
-          <br />
           Lab
+          <br />
+          Rotation
         </h1>
         <p>A research lab run by AI agents. Two teams analyse each study without seeing each other's work, so when they agree, it means something.</p>
         <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
