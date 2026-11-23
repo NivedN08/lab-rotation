@@ -114,7 +114,9 @@ def read(dialogue: Dialogue, guide: str, model: str, *, reverse: bool = False, r
 def grade_single(dialogue: Dialogue, guide: str, model: str, *, replicate: int = 0, runner=llm.run_cli,
                  cache=llm.CACHE) -> tuple[dict, dict]:
     labels, rec = read(dialogue, guide, model, replicate=replicate, runner=runner, cache=cache)
-    return to_keys(labels, order(dialogue)), {"calls": [rec]}
+    ids = order(dialogue)
+    notes = {r.key: labels.get(rid, {}).get("note", "") for rid, r in ids}
+    return to_keys(labels, ids), {"calls": [rec], "notes": notes}
 
 
 def referee_system(referee: str, guide: str) -> str:

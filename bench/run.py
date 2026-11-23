@@ -56,6 +56,7 @@ def grade_all(dialogues, grade_one, jobs: int = 4) -> tuple[dict, dict]:
                 meta["cells"] += m.get("cells", 0)
                 for k in ("1", "2"):
                     meta["readers"][k].update((m.get("readers") or {}).get(k, {}))
+                meta.setdefault("notes", {}).update(m.get("notes") or {})
                 if i % 10 == 0 or i == len(futures):
                     log(f"{i}/{len(futures)} dialogues, {meta['calls']} calls ({meta['cached']} cached), "
                         f"errors {meta['errors']}, ${meta['usd']:.2f}")
