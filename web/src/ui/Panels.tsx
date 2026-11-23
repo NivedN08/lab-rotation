@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LabEvent } from "../api/types";
 import type { Note, Role } from "../data/types";
-import { fmtElapsed, MODEL_NAME, ROLE_READS, roleLabel, roundWord, statusWord, type Replay } from "../sim/replay";
+import { fmtElapsed, MODEL_NAME, PRIVATE_NOTE, ROLE_READS, roleLabel, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
@@ -96,7 +96,12 @@ export function PersonButton({ id, R, t, select, note }: { id: string; R: Replay
 export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
   const { R } = nav;
   const a = R.agents.get(id)!;
-  const mine = (nav.live ?? []).filter((e) => e.agent === id || e.to === id).reverse();
+  const seen = (nav.live ?? []).filter((e) => e.t <= nav.t + 0.5);
+  // Whispers keep their words and reason private until the verdict.
+  const mine = seen
+    .filter((e) => e.agent === id || e.to === id)
+    .map((e) => (whisperHidden(e, seen) ? { ...e, ...PRIVATE_NOTE } : e))
+    .reverse();
   const latest = mine.find((e) => e.agent === id && e.text);
   return (
     <div style={band(a.role, id)}>

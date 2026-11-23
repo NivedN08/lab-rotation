@@ -8,9 +8,9 @@ export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: numb
   // During a rotation the log shows the session's events, in the backend's own words.
   const liveLines = useMemo(() => {
     const out: { e: LabEvent; text: string; why: string; tone?: string }[] = [];
-    for (const e of live) {
-      if (e.t > t + 0.5) break; // scrubbed back: only what had happened by then
-      const d = describeLive(e);
+    const seen = live.filter((e) => e.t <= t + 0.5); // scrubbed back: only what had happened by then
+    for (const e of seen) {
+      const d = describeLive(e, seen);
       if (d && out[out.length - 1]?.text !== d.text) out.push({ e, ...d });
     }
     return out.slice(-3);

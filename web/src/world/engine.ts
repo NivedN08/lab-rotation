@@ -9,7 +9,7 @@ import type { Ev, Role } from "../data/types";
 import type { Replay } from "../sim/replay";
 import { bubble, type Icon } from "./icons";
 import {
-  CABINETS, DESKS, ELEVATOR, ELEVATOR_QUEUE, FIX, H, HEAD_DESKS, HEAD_SEATS, MARGIN, ROLE_ROOM, ROOMS, SEATS, TILE,
+  CABINETS, DESKS, ELEVATOR, PANEL_SLOTS, walk, ELEVATOR_QUEUE, FIX, H, HEAD_DESKS, HEAD_SEATS, MARGIN, ROLE_ROOM, ROOMS, SEATS, TILE,
   VISITOR_SPOTS, W, findPath, roomAt, roomById, type Desk, type RoomId, type Spot,
 } from "./layout";
 import { C, DEPT, colorOf, headDept, shade } from "./palette";
@@ -371,7 +371,8 @@ export class LabEngine {
       case "team-c":
         return SEATS[role][i % 8];
       case "referee":
-        return SEATS.referee[i % 8];
+        // In a rotation Ines sits at the Bruin terminal, under the sign; a recorded run seats one referee per study.
+        return id === "ines" ? FIX.terminal : SEATS.referee[i % 8];
       case "solo": {
         const attempt = Number(id.split("-").pop()) || 1;
         return SEATS.solo[i % 8][(attempt - 1) % 4];
@@ -733,9 +734,17 @@ export class LabEngine {
         if (who && !who.bubble) this.say(who, "question", color, 2);
         break;
       case "agent.move": {
-        // Walk to wherever the event says, and stay there until the next move.
+        // Walk from `from` to `place`, and stay there until the next move. If the person isn't
+        // at `from` (say they come in through the door), they start from there.
         if (!who) break;
         const dest = this.placeSpot(String(d.place ?? e.to ?? d.to ?? "desk"), who);
+        const from = d.from ? this.placeSpot(String(d.from), who) : null;
+        const idle = !who.steps.length && !who.path.length;
+        if (from && idle && Math.hypot(who.x - from.px, who.y - from.py) > 2 * TILE) {
+          who.x = from.px;
+          who.y = from.py;
+          who.atHome = from === who.home;
+        }
         if (dest) this.plan(who, [{ go: dest, face: dest === who.home ? 0 : 1 }], null);
         break;
       }
@@ -876,6 +885,27 @@ export class LabEngine {
 
   /** When each person next shows a small working bubble at their desk (rotation floors only). */
   private nextIdle = new Map<string, number>();
+  /** When each person next gets up for a short wander near their desk. */
+  private nextWander = new Map<string, number>();
+
+  /** Now and then someone at their desk stands up, takes a step or two nearby, and sits back down. */
+  private wander(a: Actor) {
+    const due = this.nextWander.get(a.id);
+    if (due === undefined) return void this.nextWander.set(a.id, this.real + 10 + (hashOf(a.id) % 120) / 10);
+    if (this.real < due || !a.atHome) return;
+    this.nextWander.set(a.id, this.real + 16 + ((hashOf(a.id) + Math.floor(this.real * 3)) % 100) / 10);
+    const offsets: [number, number][] = [[0, 2], [1, 2], [-1, 2], [2, 1], [-2, 1], [1, 1], [-1, 1]];
+    const start = (hashOf(a.id) + Math.floor(this.real)) % offsets.length;
+    for (let k = 0; k < offsets.length; k++) {
+      const [dx, dy] = offsets[(start + k) % offsets.length];
+      const tx = a.home.tx + dx;
+      const ty = a.home.ty + dy;
+      if (tx < 0 || ty < 0 || tx >= W || ty >= H || walk[ty * W + tx] !== 1) continue;
+      const spot = { tx, ty, px: tx * TILE + TILE / 2, py: ty * TILE + TILE - 1 };
+      this.plan(a, [{ go: spot, face: 0 }, { wait: 1.4, face: 0 }, { go: a.home, face: 0 }], null);
+      return;
+    }
+  }
 
   /** Between events, people at their desks look busy: a reading, writing or searching bubble now and then. */
   private idleWork() {
@@ -883,7 +913,9 @@ export class LabEngine {
     if (!this.replay.cast.size || !moving) return;
     if (this.oneAtATime && (this.queue.length || this.real < this.shownUntil)) return; // the story's own bubbles come first
     for (const a of this.actors.values()) {
-      if (!a.visible || a.bubble || a.steps.length || a.path.length) continue;
+      if (!a.visible || a.steps.length || a.path.length) continue;
+      this.wander(a);
+      if (a.bubble || a.steps.length) continue;
       const due = this.nextIdle.get(a.id);
       if (due === undefined) {
         this.nextIdle.set(a.id, this.real + 2 + (hashOf(a.id) % 50) / 10);
@@ -911,7 +943,7 @@ export class LabEngine {
     switch (to) {
       // The places in contract/events.md.
       case "door":
-        return ELEVATOR;
+        return FIX.door;
       case "vale_office":
         return VISITOR_SPOTS[1];
       case "learner_desk":
@@ -919,17 +951,19 @@ export class LabEngine {
       case "riley_desk":
         return deskOf("riley");
       case "shelves":
-        return { tx: 30, ty: 3, px: 30 * TILE + TILE / 2, py: 3 * TILE + TILE - 1 };
+        return FIX.shelves;
       case "panel_table":
-        return FIX.refTable;
+        return PANEL_SLOTS[who.id] ?? FIX.refTable;
       case "whiteboard":
-        return { tx: 42, ty: 3, px: 42 * TILE + TILE / 2, py: 3 * TILE + TILE - 1 };
+        return FIX.whiteboard;
       case "desk":
       case "home":
         return who.home;
       case "hatch":
         return who.role === "team-b" ? FIX.hatchB : FIX.hatchA;
       case "terminal":
+        // The Bruin terminal: Ines's seat; anyone else stands beside it.
+        return { tx: 15, ty: 22, px: 15 * TILE + TILE / 2, py: 22 * TILE + TILE - 1 };
       case "search":
         return { tx: 34, ty: 4, px: 34 * TILE + TILE / 2, py: 4 * TILE + TILE - 1 };
       case "table":

@@ -71,10 +71,22 @@ const MOMENT_WORDS: Record<string, string> = {
   "appeal.ruling": "Ruling on the appeal",
 };
 
+/**
+ * The panel's whispers stay private until that task's verdict: no words, no reason, anywhere.
+ * `seen` is everything that has happened so far (in a replay, up to the moment being shown).
+ */
+export function whisperHidden(e: LabEvent, seen: LabEvent[]): boolean {
+  return e.k === "panel.whisper" && !seen.some((v) => v.k === "verdict" && (!e.task || !v.task || v.task === e.task));
+}
+
+/** What a hidden whisper says instead. */
+export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Kept private until the verdict." };
+
 /** A lab log line for a live event: the backend's own words, nothing added. */
-export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
+export function describeLive(e: LabEvent, seen: LabEvent[]): { text: string; why: string; tone?: "bad" } | null {
   // Counters and the struggle meter tick constantly; everything else shows its text (or its why).
   if (e.k === "sponsor.call" || e.k === "meter.update") return null;
+  if (whisperHidden(e, seen)) return { ...PRIVATE_NOTE };
   const text = e.text || e.why;
   if (!text) return null;
   const d = (e.data ?? {}) as { passed?: boolean; result?: string };

@@ -44,7 +44,8 @@ export function sceneAt(scenes: Scene[], t: number): number {
 
 /** The scene's key moment: its first event with words, for the caption's second line and its why. */
 function keyEvent(events: LabEvent[], from: number, to: number): LabEvent | undefined {
-  const inScene = events.filter((e) => e.t >= from && e.t < to && e.k !== "sponsor.call" && e.k !== "meter.update");
+  // Whispers never speak in a caption: before the verdict they are private, and after it the panel room has them.
+  const inScene = events.filter((e) => e.t >= from && e.t < to && e.k !== "sponsor.call" && e.k !== "meter.update" && e.k !== "panel.whisper");
   return inScene.find((e) => e.text && e.k !== "learner.query") ?? inScene.find((e) => e.why);
 }
 

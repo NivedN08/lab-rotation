@@ -135,6 +135,23 @@ export const FIX = {
   vaultDoor: seat(41, 19, TILE / 2),
   directorDoor: seat(14, 12, TILE / 2),
   coffee: seat(2, 21),
+  // The places a rotation's agent.move names (contract/events.md).
+  door: seat(7, 15),
+  shelves: seat(30, 3),
+  /** Ines's seat at the referee bench, under the Bruin sign. */
+  terminal: seat(14, 22),
+  /** In front of Sam's whiteboard, by the head desk at the back of Team A. */
+  whiteboard: seat(43, 12, TILE / 2),
+};
+
+/** Where each person stands at the referee table when the panel meets, so nobody stacks up. */
+export const PANEL_SLOTS: Record<string, Spot> = {
+  vale: seat(12, 27),
+  sam: seat(17, 27),
+  ines: seat(14, 28, TILE / 2),
+  learner: seat(13, 28),
+  riley: seat(16, 28),
+  telem: seat(15, 28),
 };
 
 /** The vault's eight cabinets, one per study, each with a drawer per department. */
@@ -148,6 +165,7 @@ export const BLOCKS: Block[] = [
   { x: 10, y: 9, w: 2, h: 2 }, // sofa
   { x: 13, y: 26, w: 4, h: 2 }, // evidence table
   { x: 35, y: 3, w: 2, h: 3 }, // search terminal
+  { x: 43, y: 10, w: 2, h: 2 }, // Sam's whiteboard
   ...CABINETS.map((c) => ({ x: c.x, y: c.y, w: 2, h: 2 })),
 ];
 
