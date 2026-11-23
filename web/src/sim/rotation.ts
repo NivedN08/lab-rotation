@@ -31,7 +31,7 @@ export function rotationRun(listed: AgentInfo[]): Run {
       sessions: a.id === "learner" ? [] : [{ phase: "rotation", study: null, start: 0, end: null }],
       cost: 0,
       name: a.name,
-      title: (a as AgentInfo & { title?: string }).title,
+      title: a.title,
       reads: a.reads,
       portrait: a.portrait,
     })),

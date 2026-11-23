@@ -9,9 +9,6 @@ import { Avatar } from "./Avatar";
 
 export type Msg = { role: "user" | "bot"; text: string; sources?: string[]; links?: { title: string; url: string }[]; trace?: string; error?: boolean; pending?: boolean };
 
-/** The reply as the contract sends it; `links` and `trace` come with Telem's live search. */
-type Reply = AskReply & { links?: { title: string; url: string }[]; trace?: string };
-
 const SUGGEST: Record<string, string[]> = {
   vale: ["Why did I get this task?", "What happens after I answer?"],
   sam: ["Where should I look first?", "Can I have a hint?"],
@@ -54,7 +51,7 @@ export function AskTab({ R, sessionId, agent, setAgent, people, chats, setChats 
     setChats((c) => ({ ...c, [agent]: [...(c[agent] ?? []), { role: "user", text: question }, { role: "bot", text: "", pending: true }] }));
     let answer: Msg;
     try {
-      const r = (await askAgent(sessionId, { agent: agent as AgentId, text: question })) as Reply;
+      const r: AskReply = await askAgent(sessionId, { agent: agent as AgentId, text: question });
       answer = { role: "bot", text: r.text, sources: r.sources, links: r.links, trace: r.trace };
     } catch (e) {
       answer = { role: "bot", text: (e as Error).message || "No answer came back. Try again in a moment.", error: true };
