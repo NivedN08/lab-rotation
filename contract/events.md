@@ -58,13 +58,15 @@ are there for the lab log, the verdict card and the people reading them.
   from this event.
 - `task.end` (system): `taskId`, `score` (0 to 1), `beatRival`, `trap`, `pickReason`
   (the full reason for the pick, now that it can name the trap), `bandit?`
-  (`{trap: {mean, sample}}`).
+  (`{trap: {mean, sample, boost?}}`), `news?` (first task only: `{title, url, trace, trap,
+  steered}`, the case of the day and whether it steered the pick).
 - `session.end` (system): `tasks`, `totalScore`.
 
 ### Floor
 - `agent.move`: `from`, `place`. The floor animates the walk.
 - `agent.say`: `text` is the line and `to` the listener. `data`: `hintLevel?` (0 to 3,
-  Sam only), `quotes?` (`[{text, source}]`, where `source` is `"note"` or a query's
+  Sam only), `bought?` (Sam's level-2 hint buys a fact: `{sponsor: "glasser", kind, label,
+  cost, source, trace}`; the line is built in code from Glasser's numbers), `quotes?` (`[{text, source}]`, where `source` is `"note"` or a query's
   SQL. Code has checked every quote word for word against its source.)
 - `voice.line`: **`file`** (played from `/api/audio/:file`), `lineOf` (the `seq` of the
   `agent.say` it voices), `seconds`, `cost?`, `provider` (`runware`, or `browser`,
@@ -80,7 +82,11 @@ are there for the lab log, the verdict card and the people reading them.
   - `case`, after the task's `panel.transcript`: a real case of this task's trap ("this
     happens in real life"), or on a clean task (`trap: none`) a case of trusting a clean
     result. The search runs only after the verdict, since its query names the trap.
-- `monitor.hit`: `title`, `url`, **`trace`**, `summary` (the case of the day).
+- `monitor.hit`: `title`, `url`, **`trace`**, `summary` (the case of the day), `trap?`
+  (the trap the headline is about), `steered?` (true when it steered the first pick).
+  Telem's monitor is read before the first pick, which it may nudge toward that trap, so
+  the headline points at the trap: `monitor.hit` goes out right after the first task's
+  `panel.transcript`, followed by Vale saying whether it decided the pick.
 
 ### Learner
 - `learner.query`: `queryId` (`q1`, `q2` ...), `sql`, `ok`, `rowCount`, `ms`, `error?`,
@@ -124,7 +130,9 @@ are there for the lab log, the verdict card and the people reading them.
   totals count checks from these events.
 - `verdict` (ines): **`taskId`**, **`result`** (`passed` or `failed`), `score` (0 to 1),
   `parts` (`{verdict, trap, evidence, hints}`), `correctVerdict`, `correctTrap`, `text`
-  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`).
+  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`),
+  `benchmark?` (`{kind, label, value?, low, high, unit, source, cost, trace, cached}`, the
+  Glasser number behind the reality-check sentence that ends `text`; built in code).
 - `ledger.seal` (system): `index`, `hash`, `prev`, `record` (`{taskId, score, verdict, trap}`).
 
 ### Appeal
@@ -148,7 +156,9 @@ are there for the lab log, the verdict card and the people reading them.
 ### Ask any agent
 - `ask` (learner): `to` is the agent asked, `text` the question.
 - `ask.answer`: `agent` is the one asked, `text` the answer, `data.sources` (in plain
-  words) what it used.
+  words) what it used, `data.links?` (`[{title, url}]`) and `data.trace?` when Telem
+  answered with a live search. Telem gets only the question, and its reply is built from
+  the results.
 
 ## Before the verdict
 
@@ -160,7 +170,12 @@ clean twin (the same task with no trap). The engine enforces it:
 - Pre-answer lines from agents (Vale's brief, Telem's background, answers to `ask`) are
   replaced by a fixed line if they name *any* trap, so a replacement says nothing either.
 - Telem's pre-answer search uses only the claim; the real case of the trap comes after the
-  verdict (see `search`).
+  verdict (see `search`). Telem's answers to `ask` may use a trap word only if the
+  learner's question did; Telem never sees the tables or the key.
+- The case of the day waits for the first verdict (see `monitor.hit`). When it was read,
+  Vale's first brief ends with the same line, steered or not, trap or clean: "Telem's
+  monitor read the news this morning; I'll tell you after the verdict whether it shaped
+  this pick."
 - Whisper text and `learner.query.useful` wait for `panel.transcript` (the session's
   jsonl on disk keeps both); whisper and meter `why`s are fixed templates.
 - Sam's hints are the exception: they point the way on purpose, as questions.

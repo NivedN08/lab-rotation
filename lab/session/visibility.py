@@ -48,7 +48,8 @@ def learner_profile(s) -> tuple[str, str]:
               f"{s.slot.tier} because it is task {s.slot.id[1:]} of {len(s.slots)}"
         if s.slot.grade:   # the draws name the trap, so they wait for the verdict
             draws = ", ".join(f"{t} {v.get('sample')}" for t, v in (pick.get("bandit") or {}).items())
-            why += f". Full reason: {pick.get('reason', '')}" + (f" (draws: {draws})" if draws else "")
+            why += f". Full reason: {pick.get('pickReason') or pick.get('reason', '')}" + (
+                f" (draws: {draws})" if draws else "")
     return ("learner profile", "Mastery (0 to 1): " + ", ".join(f"{r['trap']} {r['score']:.2f}" for r in rows) + why
             + (f"\nThis session so far: {'; '.join(past)}" if past else "\nThis session so far: no graded tasks")
             + f"\nWrong answers this session: {s.wrong_guesses}")

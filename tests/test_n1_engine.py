@@ -7,8 +7,8 @@ import pytest
 
 from lab import ledger
 from lab.session import api, grade, meter, quotes
-from lab.session import fallback
-from lab.session.engine import WHISPER_WHY, Engine
+from lab.session import fallback, sources
+from lab.session.engine import NEWS_BRIEF, WHISPER_WHY, Engine
 from lab.session.log import SessionLog, read_events
 from tests.test_n1_contract import AGENTS, TRAPS, VERDICTS, kinds
 from tests.test_n1_mock import names_a_trap, shared_words
@@ -18,6 +18,7 @@ from tests.test_n1_mock import names_a_trap, shared_words
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LAB_AGENTS", "canned")
     monkeypatch.setenv("LAB_SPONSORS", "off")
+    monkeypatch.setenv("LAB_N3", "off")   # the stub task and the local learner model
     monkeypatch.delenv("LAB_MOCK", raising=False)
     monkeypatch.setenv("LAB_SESSIONS_DIR", str(tmp_path / "sessions"))
     monkeypatch.setenv("LAB_LEARNERS_DIR", str(tmp_path / "learners"))
@@ -348,3 +349,96 @@ def test_useful_is_held_back_until_the_verdict(env):
     meters = [e for e in evs if e["k"] == "meter.update"]
     assert len(meters) >= 3 and {e["why"] for e in meters} <= set(meter.WHY.values())
     assert [e["why"] for e in meters[:3]] == ["the learner ran a query"] * 2 + ["a query failed"]
+
+
+NEWS = {"title": "A grocer restates sales after an export used cents", "url": "https://example.com/news",
+        "trace": "https://app.telem.ai/traces/t1", "summary": "One region's export switched units.",
+        "cached": False}
+BENCH = {"kind": "basket", "label": "Average grocery basket", "value": 38, "low": 30, "high": 45,
+         "unit": "USD per visit", "source": "https://app.glasser.ai/runs/b1", "cost": 0.002,
+         "trace": "https://app.glasser.ai/runs/b1", "cached": False}
+
+
+def run_with_news(monkeypatch, trap, learner, clean=False):
+    monkeypatch.setattr(sources, "case_of_day", lambda sp: {**NEWS, **({"trap": trap} if trap else {})})
+    key = {**fallback.STUB_KEY, "trap": "none", "verdict": "holds"} if clean else fallback.STUB_KEY
+    monkeypatch.setattr(fallback, "STUB_KEY", key)
+    sid = call("POST", "/api/session/start", {"mode": "judge", "learner": learner})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    return wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+
+
+def test_news_nudges_the_pick_but_waits_for_the_verdict(env, monkeypatch):
+    steered = run_with_news(monkeypatch, "unit_mismatch", "news-a")
+    plain = run_with_news(monkeypatch, None, "news-b")
+    clean = run_with_news(monkeypatch, "unit_mismatch", "news-c", clean=True)
+    assert pre_answer(steered) == pre_answer(plain) == pre_answer(clean)
+    for evs in (steered, plain, clean):
+        kinds_ = [e["k"] for e in evs]
+        before = evs[:kinds_.index("panel.transcript")]
+        assert "monitor.hit" not in kinds_[:kinds_.index("panel.transcript")]
+        assert NEWS["title"] not in json.dumps(before) and not names_a_trap(json.dumps(evs[:kinds_.index("learner.answer")]))
+        brief = next(e for e in evs if e["k"] == "agent.say" and e["agent"] == "vale")
+        assert brief["text"].endswith(NEWS_BRIEF)
+        hit = next(e for e in evs if e["k"] == "monitor.hit")
+        assert hit["data"]["title"] == NEWS["title"] and hit["data"]["trace"] == NEWS["trace"]
+        reveal = next(e for e in evs if e["k"] == "agent.say" and e["agent"] == "vale" and e["seq"] > hit["seq"])
+        end = next(e for e in evs if e["k"] == "task.end")["data"]
+        assert end["news"]["steered"] == hit["data"]["steered"]
+        assert ("I picked this task because" in reveal["text"]) == hit["data"]["steered"]
+    assert next(e for e in plain if e["k"] == "monitor.hit")["data"]["steered"] is False
+    assert "Telem's case of the day" in next(e for e in steered if e["k"] == "task.end")["data"]["pickReason"]
+
+
+def test_local_picker_boost_tilts_the_draw(env):
+    import random
+    nudged = 0
+    for seed in range(40):
+        got = sources.pick_next("nobody-" + str(seed), [], [], 1, random.Random(seed),
+                                nudge={"trap": "confounder", "headline": "Store mix fooled a chain", "url": "",
+                                       "trace": ""})
+        assert got["nudged"] == (got["skill"] == "confounder")
+        assert "Store mix fooled a chain" in got["pickReason"] and "Store mix" not in got["reason"]
+        nudged += got["nudged"]
+    assert 10 <= nudged < 40   # a tilt, not an override
+
+
+def test_telem_answers_from_a_search(env, monkeypatch):
+    found = {"query": "q", "trace": "https://app.telem.ai/traces/a", "cached": False,
+             "results": [{"title": "How POS exports store money", "url": "https://example.com/pos",
+                          "snippet": "Some systems store amounts in cents."},
+                         {"title": "Minor units in payments", "url": "https://example.com/minor", "snippet": "x"}]}
+    monkeypatch.setattr(sources, "telem_answer", lambda sp, q: found)
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    status, reply = call("POST", f"/api/session/{sid}/ask", {"agent": "telem",
+                                                            "text": "Do POS exports ever store money in cents?"})
+    assert status == 200 and "How POS exports store money" in reply["text"] and "cents" in reply["text"]
+    assert reply["links"][0]["url"] == "https://example.com/pos" and reply["trace"] == found["trace"]
+    status, reply = call("POST", f"/api/session/{sid}/ask", {"agent": "telem", "text": "How are POS exports stored?"})
+    assert reply["text"] == "I can't say that before the verdict." and "links" not in reply   # cents is new here
+    answer = [e for e in events(sid) if e["k"] == "ask.answer"][0]
+    assert answer["data"]["links"] and answer["data"]["sources"] == ["Telem's web search"]
+
+
+def test_glasser_fact_in_the_level_2_hint_and_the_verdict(env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sources, "glasser_benchmark", lambda on_call, kind, by: calls.append((kind, by)) or BENCH)
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    s = env.get(sid)
+    with s.lock:
+        s.give_hint(1, s.meter_now())
+        s.give_hint(2, s.meter_now())
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+    hint2 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 2)
+    assert hint2["text"].startswith("I spent $0.002 to check: average grocery basket is typically $30 to $45 per visit.")
+    assert hint2["data"]["bought"]["cost"] == 0.002 and hint2["data"]["bought"]["trace"] == BENCH["trace"]
+    hint1 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 1)
+    assert "bought" not in hint1["data"]
+    verdict = next(e for e in evs if e["k"] == "verdict")["data"]
+    assert verdict["benchmark"]["low"] == 30 and verdict["text"].endswith(
+        "Reality check: average grocery basket is typically $30 to $45 per visit (Glasser, $0.002).")
+    assert calls == [("basket", "sam"), ("basket", "ines")]

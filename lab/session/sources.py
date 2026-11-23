@@ -38,6 +38,11 @@ def _get(obj, name, default=None):
 
 # ------------------------------------------------------------------------------ task bank
 
+def n3_on() -> bool:
+    """False with LAB_N3=off (tests): the stub task, local checks and the local learner model."""
+    return os.environ.get("LAB_N3", "").strip().lower() not in ("off", "0", "no", "false")
+
+
 @dataclass
 class BankTask:
     bank_id: str
@@ -45,6 +50,24 @@ class BankTask:
     dir: str
     key: dict
     stub: bool = False
+    n3: object = field(default=None, repr=False)   # N3's own BankTask, for its checks
+
+
+def _n3_task(raw) -> BankTask | None:
+    """N3's BankTask (or a dict with the same fields) as the engine's BankTask."""
+    bank_id = _get(raw, "id") or _get(raw, "bank_id") or _get(raw, "bankId")
+    key = _get(raw, "key")
+    folder = _get(raw, "public_dir") or _get(raw, "dir")
+    pub = _get(raw, "public")
+    if callable(pub):
+        pub = pub("t1")   # the engine replaces the slot id
+    elif pub is None:
+        pub = _get(raw, "task")
+    if isinstance(pub, (str, pathlib.Path)):
+        pub = json.loads(pathlib.Path(pub).read_text())
+    if not (bank_id and key is not None and folder and isinstance(pub, dict)):
+        return None
+    return BankTask(str(bank_id), dict(pub), str(folder), normalize_key(key), n3=raw)
 
 
 def normalize_key(raw) -> dict:
@@ -58,19 +81,27 @@ def normalize_key(raw) -> dict:
                                        "trap": "none" if trap != "none" else "duplicate_rows",
                                        "note": "I compared the averages and stopped there."}
     cols = raw.get("columns") or raw.get("key_columns") or raw.get("keyColumns") or []
-    return {"trap": trap, "verdict": verdict, "careful": careful, "careless": careless,
-            "columns": [str(c) for c in cols], "hints": raw.get("hints") or fallback.HINTS.get(trap, []),
-            "checks": raw.get("checks") or []}
+    if not cols and raw.get("matters"):   # N3: ["table.column", ...]
+        cols = sorted({str(c).split(".")[-1] for c in raw["matters"]})
+    out = {"trap": trap, "verdict": verdict, "careful": careful, "careless": careless,
+           "columns": [str(c) for c in cols], "hints": raw.get("hints") or fallback.HINTS.get(trap, []),
+           "checks": raw.get("checks") or []}
+    for k in ("failingCheck", "benchmark", "naive"):
+        if raw.get(k) is not None:
+            out[k] = raw[k]
+    return out
 
 
 def bank_pick(skill: str, tier: int, seen: list[str]) -> str | None:
+    if not n3_on():
+        return None
     try:
         from lab.tasks import bank   # N3
         got = bank.pick(skill, tier, seen)
         if isinstance(got, (list, tuple)):
             got = got[0] if got else None
-        if isinstance(got, dict):
-            got = got.get("id") or got.get("bank_id")
+        if got is not None and not isinstance(got, str):
+            got = _get(got, "id") or _get(got, "bank_id")
         return str(got) if got else None
     except Exception as e:   # missing module or a bad pick: the stub task answers
         _log(f"bank.pick unavailable ({type(e).__name__}); using the stub task")
@@ -78,17 +109,12 @@ def bank_pick(skill: str, tier: int, seen: list[str]) -> str | None:
 
 
 def bank_load(bank_id: str | None) -> BankTask:
-    if bank_id and bank_id != fallback.STUB_ID:
+    if bank_id and bank_id != fallback.STUB_ID and n3_on():
         try:
             from lab.tasks import bank   # N3
-            raw = bank.load(bank_id)
-            public = _get(raw, "public") or _get(raw, "task")
-            folder = _get(raw, "dir") or _get(raw, "public_dir")
-            key = _get(raw, "key")
-            if public and folder and key is not None:
-                if isinstance(public, (str, pathlib.Path)):
-                    public = json.loads(pathlib.Path(public).read_text())
-                return BankTask(bank_id, dict(public), str(folder), normalize_key(key))
+            got = _n3_task(bank.load(bank_id))
+            if got:
+                return got
             _log(f"bank.load({bank_id}) lacked public/dir/key; using the stub task")
         except Exception as e:
             _log(f"bank.load unavailable ({type(e).__name__}); using the stub task")
@@ -110,6 +136,8 @@ def _box(folder: str) -> TaskTables:
 
 
 def _ws():
+    if not n3_on():
+        return None
     try:
         from lab import workspace_sql   # N3
         return workspace_sql
@@ -145,18 +173,20 @@ def ws_query(folder: str, sql: str) -> dict:
 def run_checks(task: BankTask) -> tuple[list[dict], dict]:
     """(check.result data list, sponsor.call data for the Bruin run)."""
     start = time.monotonic()
-    if not task.stub:
+    if not task.stub and n3_on():
         try:
             from lab.tasks import checks   # N3
-            got = checks.run(task.bank_id)
+            got = checks.run_checks(task.n3 or task.dir, bruin=True)
             out = [dict(c) for c in got]
             if out:
                 ms = int((time.monotonic() - start) * 1000)
-                failed = sum(1 for c in out if not c.get("passed", True))
-                return out, {"sponsor": "bruin", "label": f"ran {len(out)} quality checks, {failed} failed",
-                             "count": 1, "op": "check", "by": "ines", "ms": ms, "fallback": False}
+                ran = not any("bruinError" in c for c in out)
+                label = (f"ran {len(out)} quality checks in Bruin" if ran
+                         else f"ran {len(out)} quality checks; the Bruin run failed, so DuckDB answered")
+                return out, {"sponsor": "bruin", "label": label, "count": 1, "op": "check", "by": "ines",
+                             "ms": ms, "fallback": not ran, **({} if ran else {"failed": True})}
         except Exception as e:
-            _log(f"checks.run unavailable ({type(e).__name__}); running the key's checks locally")
+            _log(f"checks.run_checks unavailable ({type(e).__name__}); running the key's checks locally")
     out = []
     run_id = "local-" + uuid.uuid4().hex[:6]
     for c in task.key.get("checks") or []:
@@ -200,6 +230,8 @@ def _fallback_state(learner: str) -> dict:
 
 def mastery(learner: str) -> dict:
     try:
+        if not n3_on():
+            raise ImportError("LAB_N3=off")
         from lab import learner as lm   # N3
         got = lm.mastery(learner)
         if got and got.get("traps"):
@@ -211,15 +243,16 @@ def mastery(learner: str) -> dict:
                        "attempts": st.get(t, {}).get("attempts", 0)} for t in TRAPS]}
 
 
-def learner_update(learner: str, trap: str, correct: bool) -> dict:
-    """{trap, from, to, attempts, bruinRun?, fallback}."""
-    try:
-        from lab import learner as lm   # N3
-        got = lm.update(learner, trap, correct)
-        if got and "to" in got:
-            return {"fallback": False, **got}
-    except Exception:
-        pass
+def learner_update(learner: str, trap: str, correct: bool, **info) -> list[dict]:
+    """[mastery.update data], one per skill whose score changed: {trap, from, to, correct,
+    attempts, fallback}. `info` (score, tier, session, task) goes to N3's history."""
+    if n3_on():
+        try:
+            from lab import learner as lm   # N3
+            got = lm.record(learner, trap, correct, **info)
+            return [{"fallback": False, **dict(u)} for u in (got or [])]
+        except Exception as e:
+            _log(f"learner.record unavailable ({type(e).__name__}); using the local model")
     with _learn_lock:
         st = _fallback_state(learner)
         cur = st.get(trap, {"score": PRIOR, "attempts": 0})
@@ -233,19 +266,51 @@ def learner_update(learner: str, trap: str, correct: bool) -> dict:
         f = _learner_file(learner)
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(st))
-    return {"trap": trap, "from": round(p, 2), "to": round(new, 2), "correct": correct,
-            "attempts": st[trap]["attempts"], "fallback": True}
+    return [{"trap": trap, "from": round(p, 2), "to": round(new, 2), "correct": correct,
+             "attempts": st[trap]["attempts"], "fallback": True}]
 
 
-def pick_next(learner: str, seen_traps: list[str], tier: int, rng: random.Random) -> dict:
-    """{skill, tier, reason, fallback, bandit?}. N3's bandit, else Thompson draws over mastery."""
+def learner_refresh(on_call) -> None:
+    """N3's Bruin refresh of the learner tables (5 to 15 s), logged as one sponsor.call."""
+    if not n3_on():
+        return
+    start = time.monotonic()
     try:
-        from lab import learner as lm   # N3
-        got = lm.pick_next(learner, seen_traps, tier)
-        if got and got.get("skill") in TRAPS:
-            return {"tier": tier, "fallback": False, **got}
-    except Exception:
-        pass
+        from lab.learner import refresh   # N3
+        got = refresh.refresh() or {}
+    except Exception as e:
+        _log(f"learner refresh unavailable ({type(e).__name__})")
+        return
+    b = got.get("bruin") or {}
+    ok = bool(b.get("ok"))
+    if on_call:
+        on_call({"sponsor": "bruin", "label": "refreshed the learner model (learn.bkt_mastery)" if ok
+                 else "the learner model refresh failed", "count": 1, "op": "run", "by": "system",
+                 "ms": int((time.monotonic() - start) * 1000), "fallback": False,
+                 **({"runId": b["runId"]} if b.get("runId") else {}), **({} if ok else {"failed": True})})
+
+
+NUDGE_BOOST = 0.15   # the same tilt as N3's bandit
+
+
+def pick_next(learner: str, seen_traps: list[str], seen_ids: list[str], tier: int, rng: random.Random,
+              nudge: dict | None = None) -> dict:
+    """{skill, tier, bankId?, reason, pickReason, fallback, bandit?, nudged, nudgeDecided, nudge}.
+
+    N3's bandit, else Thompson draws over mastery. `nudge` ({trap, headline, url, trace}, from
+    Telem's case of the day) adds NUDGE_BOOST to that skill's draw. Only `pickReason` (sent
+    with task.end, after the verdict) mentions it."""
+    if n3_on():
+        try:
+            from lab import learner as lm   # N3
+            got = lm.pick_next(learner, tier=tier, seen=list(seen_ids), avoid=list(seen_traps), rng=rng,
+                               nudge=nudge)
+            if got and got.get("skill") in TRAPS:
+                out = {k: v for k, v in dict(got).items() if k != "task"}
+                out.setdefault("pickReason", out.get("reason", ""))
+                return {"tier": tier, "fallback": False, "nudged": False, "nudgeDecided": False, **out}
+        except Exception as e:
+            _log(f"learner.pick_next unavailable ({type(e).__name__}); using local draws")
     st = mastery(learner)["traps"]
     bandit = {}
     for row in st:
@@ -253,12 +318,26 @@ def pick_next(learner: str, seen_traps: list[str], tier: int, rng: random.Random
         a, b = 1 + (1 - m) * 4, 1 + m * 4   # weight towards low mastery
         bandit[row["trap"]] = {"mean": round(m, 2), "sample": round(rng.betavariate(a, b), 2)}
     choices = {t: v for t, v in bandit.items() if t not in seen_traps} or bandit
-    skill = max(choices, key=lambda t: choices[t]["sample"])
+    boosted = nudge.get("trap") if nudge and nudge.get("trap") in choices else None
+    if boosted:
+        bandit[boosted]["boost"] = NUDGE_BOOST
+    skill = max(choices, key=lambda t: choices[t]["sample"] + choices[t].get("boost", 0.0))
+    plain = max(choices, key=lambda t: choices[t]["sample"])
     lowest = min(r["score"] for r in st)
     reason = (f"every skill sits near {lowest:.2f}, so the draw decides: this one came out highest"
               if all(abs(r["score"] - lowest) < 0.01 for r in st)
               else "the draw favours the skills you have shown least")
-    return {"skill": skill, "tier": tier, "reason": reason, "fallback": True, "bandit": bandit}
+    full = f"{reason} ({skill.replace('_', ' ')}, draw {bandit[skill]['sample']:.2f})"
+    nudged, decided = bool(boosted) and skill == boosted, bool(boosted) and skill == boosted and plain != boosted
+    if nudge and nudge.get("trap") in bandit:
+        news = (f"Telem's case of the day (\"{nudge.get('headline') or 'untitled'}\") pointed at "
+                f"{nudge['trap'].replace('_', ' ')}")
+        full += (f". {news}, so its draw got +{NUDGE_BOOST:.2f}" + ("; that boost decided the pick" if decided
+                 else "; it was ahead without the boost") if nudged else
+                 f". {news}; its draw got +{NUDGE_BOOST:.2f} but mastery still favoured another skill"
+                 if boosted else f". {news}, a skill already used this session, so no boost")
+    return {"skill": skill, "tier": tier, "reason": reason, "pickReason": full, "fallback": True,
+            "bandit": bandit, "nudged": nudged, "nudgeDecided": decided, "nudge": nudge}
 
 
 # -------------------------------------------------------------------------------- sponsors
@@ -373,8 +452,23 @@ def telem_case(sp: Sponsors, trap: str) -> dict:
     return fallback.case_for(trap)
 
 
+def telem_answer(sp: Sponsors, question: str) -> dict | None:
+    """{query, results, trace, cached} for a learner's question (N2's Librarian.answer, else a
+    plain search), or None. Only the question goes out; results are untrusted text."""
+    if not sp.lib:
+        return None
+    try:
+        fn = getattr(sp.lib, "answer", None)
+        got = fn(question, by="telem") if fn else sp.lib.search(question, by="telem",
+                                                                 goal="answer a learner's question about retail data")
+        return _telem_result(got, question)
+    except Exception as e:
+        _log(f"Telem answer unavailable ({type(e).__name__})")
+        return None
+
+
 def case_of_day(sp: Sponsors) -> dict | None:
-    """{title, url, trace, summary, cached} from Telem's monitor, or None."""
+    """{title, url, trace, summary, cached, trap?} from Telem's monitor, or None."""
     try:
         got = sp.lib.case_of_day() if sp.lib else None
         if got and got.get("title"):
@@ -448,3 +542,65 @@ def glasser_params(on_call) -> dict | None:
         on_call({"sponsor": "glasser", "label": "read today's retail numbers (cached)", "count": 1, "op": "run",
                  "by": "system", "ms": int((time.monotonic() - start) * 1000), "fallback": True})
     return got if isinstance(got, dict) else None
+
+
+def glasser_benchmark(on_call, kind: str, by: str) -> dict | None:
+    """{kind, label, value?, low, high, unit, source, cost, trace, cached} from N2's
+    Glasser.benchmark, or None (then no reality check is shown: numbers are never made up)."""
+    if not sponsors_on():
+        return None
+    reported = []
+
+    def relay(call):
+        reported.append(call)
+        if on_call:
+            on_call(call)
+    try:
+        from lab.sponsors.glasser import Glasser   # N2
+        g = Glasser(on_call=relay)
+        fn = getattr(g, "benchmark", None)
+        if fn is None:
+            return None
+        start = time.monotonic()
+        got = dict(fn(kind, by=by) or {})
+    except Exception as e:
+        _log(f"Glasser benchmark unavailable ({type(e).__name__})")
+        return None
+    if got.get("low") is None or got.get("high") is None:
+        return None
+    out = {"kind": kind, **{k: got.get(k) for k in ("label", "value", "low", "high", "unit", "source", "cost",
+                                                     "trace", "cached")}}
+    if not reported and on_call:
+        on_call({"sponsor": "glasser", "label": f"read the {kind} benchmark (cached)", "count": 1, "op": "run",
+                 "by": by, "ms": int((time.monotonic() - start) * 1000), "fallback": True})
+    return out
+
+
+def from_glasser(b: dict) -> bool:
+    """True when a benchmark came from a Glasser run (not a fixed planning value)."""
+    src = str(b.get("source") or "") + " " + str(b.get("trace") or "")
+    return "glasser.ai" in src or bool(b.get("cost"))
+
+
+def _amount(x: float, money: bool) -> str:
+    if money:
+        return f"${x:,.0f}" if abs(x) >= 10 else f"${x:,.2f}"
+    return f"{x:,.4g}"
+
+
+def benchmark_range(b: dict) -> str:
+    """'$30 to $45 per visit' from a benchmark; built in code so the numbers are exact."""
+    unit = str(b.get("unit") or "").strip()
+    money = unit.upper().startswith("USD") or unit.startswith("$")
+    rest = unit[3:].strip() if unit.upper().startswith("USD") else unit[1:].strip() if money else unit
+    lo, hi = _amount(float(b["low"]), money), _amount(float(b["high"]), money)
+    return f"{lo} to {hi}" + (f" {rest}" if rest else "")
+
+
+def benchmark_source(b: dict) -> str:
+    """'Glasser, $0.002' or 'a recorded planning value'."""
+    if not from_glasser(b):
+        return "a recorded planning value, not a live lookup"
+    cost = b.get("cost")
+    return "Glasser" + (f", ${float(cost):.3f}" if cost else ", cached")
+

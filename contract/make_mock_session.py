@@ -98,13 +98,21 @@ call(0.6, "system", "glasser", "run", "looked up a typical basket size", 640, "r
      cost=0.002)
 call(0.7, "system", "glasser", "run", "looked up store counts for the chain", 710, "real retail numbers come from Glasser",
      cost=0.002)
+# Telem's case of the day is read before the pick (it nudges it); its monitor.hit waits for
+# the verdict, because the headline names the trap.
+call(0.8, "system", "telem", "monitor", "Read the case of the day", 380, "the librarian finds real cases with Telem AI",
+     trace="https://app.telem.ai/traces/mock-0")
+NEWS = {"title": "Mock news: a grocer restated a region's sales after its export used cents",
+        "url": "https://example.com/mock-news-units", "trace": "https://app.telem.ai/traces/mock-0",
+        "summary": "One region's point-of-sale export switched to minor units..."}
+NEWS_BRIEF = "Telem's monitor read the news this morning; I'll tell you after the verdict whether it shaped this pick."
 ev(1, "task.picked", "vale", "new learner with no history: start at tier 1",
    task=T, text="Vale picked the first task.",
    data={"taskId": T, "title": task["title"], "brief": task["brief"], "seconds": task["seconds"],
          "dictionary": task["dictionary"], "tier": 1, "claim": claim, "fallback": False,
          "reason": "new learner with no history: start at tier 1"})
 move(1.5, "vale", "vale_office", "learner_desk", "brief the learner in person", to="learner")
-say(5, "vale", "learner", "Marketing says loyalty members spend 2.4 times as much per visit. It goes to the board on Friday. Check it before it does.",
+say(5, "vale", "learner", "Marketing says loyalty members spend 2.4 times as much per visit. It goes to the board on Friday. Check it before it does. " + NEWS_BRIEF,
     "deliver the brief and the claim")
 # Before the answer Telem searches on the public claim only (a clean twin gets the same search).
 move(6, "telem", "door", "shelves", "look up background on the claim")
@@ -127,6 +135,18 @@ query(30, "q1", "select * from visits limit 20", 20, 4)
 meter(30.5, 0.05, 16, 0, 0, 0, "the learner ran a query")
 query(55, "q2", "select loyalty_member, avg(spend) from visits join customers using (customer_id) group by 1", 2, 6)
 meter(56, 0.1, 1, 0, 0, 0, "the learner ran a query")
+# Ask the librarian: a live search with the question only, reply built from the results.
+ev(62, "ask", "learner", "the learner asked an agent", to="telem", task=T,
+   text="How do loyalty programs usually measure spend per visit?")
+call(62.5, "telem", "telem", "search", "Searched for How do loyalty programs usually measure spend per vi", 1180,
+     "the librarian finds real cases with Telem AI", trace="https://app.telem.ai/traces/mock-3")
+ask_links = [{"title": "Mock source: measuring loyalty members' basket per visit", "url": "https://example.com/mock-loyalty-measure"},
+             {"title": "Mock source: average transaction value in retail", "url": "https://example.com/mock-atv"}]
+ev(64, "ask.answer", "telem", "answered only from what telem can see", to="learner", task=T,
+   text="I looked that up. \"Mock source: measuring loyalty members' basket per visit\": Programs compare the average "
+        "basket per visit for members and for everyone else over the same period. Also: \"Mock source: average "
+        "transaction value in retail\". The sources are on the card.",
+   data={"sources": ["Telem's web search"], "links": ask_links, "trace": "https://app.telem.ai/traces/mock-3"})
 query(80, "q3", "select loyalty_member, median(spend) from visits group by 1", 0, 2,
       ok=False, error='Binder Error: Referenced column "loyalty_member" not found in FROM clause')
 meter(80.5, 0.3, 25, 1, 0, 0, "a query failed")
@@ -141,6 +161,18 @@ whisper(133, "vale", ["sam"], "Go ahead, keep it a question.", "hint_ok")
 move(134, "sam", "whiteboard", "learner_desk", "the struggle meter crossed 0.6", to="learner")
 say(137, "sam", "learner", "Is every row of spend in the same unit? What does spend look like store by store?",
     "struggle meter 0.62; first hint, as a question", hintLevel=1)
+meter(143, 0.66, 88, 2, 0, 2, "the meter moved")
+whisper(144, "sam", ["vale", "ines"], "Still no region or unit query after the first hint. I'd like to give a level 2 hint and check a real basket size first.",
+        "hint_ask")
+whisper(145, "ines", ["sam"], "Steer them here, as a question: Compare the range of spend across regions.", "hint_steer")
+whisper(146, "vale", ["sam"], "Go ahead, keep it a question.", "hint_ok")
+BENCH = {"kind": "basket", "label": "Average grocery basket", "cost": 0.002, "source": "https://app.glasser.ai/runs/mock-b1",
+         "trace": "https://app.glasser.ai/runs/mock-b1"}
+call(146.5, "sam", "glasser", "run", "Benchmark: average grocery basket", 690, "real retail numbers come from Glasser",
+     cost=0.002, trace=BENCH["trace"])
+say(147, "sam", "learner", "I spent $0.002 to check: average grocery basket is typically $30 to $45 per visit. Compare the range of spend across regions.",
+    "struggle meter 0.66; hint level 2, as a question; Sam bought a fact from Glasser", hintLevel=2,
+    bought={"sponsor": "glasser", **BENCH})
 query(150, "q5", "select region, min(spend), max(spend) from visits join stores using (store_id) group by 1 order by 1", 4, 7)
 meter(151, 0.18, 0, 2, 0, 0, "the learner ran a query")
 move(152, "sam", "learner_desk", "whiteboard", "the learner is moving again")
@@ -171,8 +203,10 @@ for a, frm in [("vale", "vale_office"), ("ines", "terminal"), ("sam", "whiteboar
     move(204, a, frm, "panel_table", "the panel confers before the verdict")
 whisper(206, "ines", ["vale", "sam"], "The key says unit_mismatch, verdict fails. The learner got both and cited the West max and the fixed means.",
         "grade_basis")
-whisper(208, "sam", ["ines", "vale"], "They needed one hint (level 1). Credit the recovery.", "coaching")
-whisper(210, "vale", ["ines", "sam"], "Full marks on verdict and trap. Ines, deliver it with the failing check.", "decide")
+whisper(208, "sam", ["ines", "vale"], "They needed two hints (levels 1 and 2). Credit the recovery.", "coaching")
+whisper(210, "vale", ["ines", "sam"], "Full marks on verdict and trap, less two hints. Ines, deliver it with the failing check.", "decide")
+call(211, "ines", "glasser", "run", "Benchmark: average grocery basket", 640, "real retail numbers come from Glasser",
+     cost=0.002, trace=BENCH["trace"])
 move(212, "ines", "panel_table", "terminal", "run the Bruin checks at the terminal")
 call(213, "ines", "bruin", "check", "ran 5 quality checks", 2600, "Bruin's checks prove the planted trap")
 ev(215.5, "check.result", "ines", "no duplicate visits, so this check passes", task=T, text="Check passed: visit ids are unique.",
@@ -197,17 +231,21 @@ ev(216.5, "check.result", "ines", "the planted trap: West's spend is out of rang
          "rows": [["v0083", "st04", 5600.0], ["v0165", "st04", 5272.0], ["v0150", "st04", 5108.0]]})
 ev(218, "ledger.seal", "system", "seal the grade in the hash chain", task=T,
    data={"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000",
-         "record": {"taskId": T, "score": 0.9, "verdict": "fails", "trap": "unit_mismatch"}})
+         "record": {"taskId": T, "score": 0.8, "verdict": "fails", "trap": "unit_mismatch"}})
 quotes = [{"text": "its max is 5600 while other regions top out near 74", "source": "note"},
           {"text": "spend / 100", "source": q6}]
+# The reality check is built in code from Glasser's numbers, after the quote check.
+reality = "Reality check: average grocery basket is typically $30 to $45 per visit (Glasser, $0.002)."
 verdict_text = ("Right verdict, right trap. You wrote \"its max is 5600 while other regions top out near 74\", which is exactly "
-                "what the failing check shows. Your fix, spend / 100, is the right one. You lose a little for needing a hint.")
+                "what the failing check shows. Your fix, spend / 100, is the right one. You lose a little for needing two hints. "
+                + reality)
 ev(220, "verdict", "ines", "graded against the answer key, with the failing Bruin check as evidence", task=T,
-   text="Passed: 0.9.",
-   data={"taskId": T, "result": "passed", "score": 0.9, "parts": {"verdict": 1, "trap": 1, "evidence": 1, "hints": -0.1},
+   text="Passed: 0.8.",
+   data={"taskId": T, "result": "passed", "score": 0.8, "parts": {"verdict": 1, "trap": 1, "evidence": 1, "hints": -0.2},
          "correctVerdict": "fails", "correctTrap": "unit_mismatch", "text": verdict_text, "quotes": quotes,
          "failingCheck": "unit_mismatch.spend_range_by_region",
-         "ledger": {"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000"}})
+         "ledger": {"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000"},
+         "benchmark": {**BENCH, "value": 38, "low": 30, "high": 45, "unit": "USD per visit", "cached": False}})
 ev(220.2, "panel.transcript", "ines", "the verdict is in, so the panel's whispers are open", task=T,
    data={"taskId": T, "whispers": whispers})
 say(221, "ines", "learner", verdict_text, "deliver the verdict out loud", quotes=quotes)
@@ -227,34 +265,51 @@ ev(223, "search", "telem", "this happens in real life: a real case of a unit mix
 say(224, "telem", "learner", "This happens in real life: a chain once restated a region's sales because its export used cents. The source and the trace are on the card.",
     "this happens in real life: a real case with its source")
 move(225.5, "telem", "learner_desk", "shelves", "back to the shelves")
-ev(226, "task.end", "system", "the verdict is in", task=T,
-   data={"taskId": T, "score": 0.9, "beatRival": True, "trap": "unit_mismatch",
-         "pickReason": "no history, so every trap sat at 0.15; the bandit's draw was highest for unit mix-ups",
-         "bandit": {"unit_mismatch": {"mean": 0.15, "sample": 0.71}, "duplicate_rows": {"mean": 0.15, "sample": 0.52},
+# The case of the day, held until the first verdict, and whether it steered the pick.
+ev(226, "monitor.hit", "telem", "Telem's monitor found today's case; held until the first verdict because it can steer the pick",
+   task=T, text="Case of the day: " + NEWS["title"], data={**NEWS, "trap": "unit_mismatch", "steered": True})
+move(226.2, "vale", "panel_table", "learner_desk", "explain what shaped the pick", to="learner")
+say(227, "vale", "learner", "I picked this task because Telem's monitor caught a story this morning: " + NEWS["title"]
+    + ". The source and the trace are on the card.", "the news behind the pick, now that the verdict is in")
+ev(229, "task.end", "system", "the verdict is in", task=T,
+   data={"taskId": T, "score": 0.8, "beatRival": True, "trap": "unit_mismatch",
+         "pickReason": "no history, so every trap sat at 0.15; the bandit's draw was highest for unit mix-ups (0.71). "
+                       "Telem's case of the day (\"" + NEWS["title"] + "\") pointed at unit mix-ups, so its draw got "
+                       "+0.15; it was ahead without the boost; it was a unit mix-up task at tier 1",
+         "bandit": {"unit_mismatch": {"mean": 0.15, "sample": 0.71, "boost": 0.15},
+                    "duplicate_rows": {"mean": 0.15, "sample": 0.52},
                     "dictionary_flip": {"mean": 0.15, "sample": 0.33}, "confounder": {"mean": 0.15, "sample": 0.48},
-                    "hidden_variable": {"mean": 0.15, "sample": 0.29}, "none": {"mean": 0.15, "sample": 0.44}}})
-ev(227, "mastery.update", "system", "knowledge tracing after a correct answer on a unit mix-up", task=T,
+                    "hidden_variable": {"mean": 0.15, "sample": 0.29}, "none": {"mean": 0.15, "sample": 0.44}},
+         "news": {"title": NEWS["title"], "url": NEWS["url"], "trace": NEWS["trace"], "trap": "unit_mismatch",
+                  "steered": True}})
+move(229.5, "vale", "learner_desk", "vale_office", "the verdict is delivered; back to the office")
+move(229.5, "sam", "panel_table", "whiteboard", "back to the whiteboard")
+move(229.5, "riley", "riley_desk", "learner_desk", "Riley comes over to see who won", to="learner")
+ev(230, "mastery.update", "system", "knowledge tracing after a correct answer on a unit mix-up", task=T,
    text="Unit mix-up mastery: 0.15 to 0.61.",
-   data={"trap": "unit_mismatch", "from": 0.15, "to": 0.61, "correct": True, "attempts": 1, "bruinRun": "run-mock-3"})
-call(227, "system", "bruin", "run", "updated the learner model (bkt_mastery)", 2100, "the learner model runs as a Bruin asset")
+   data={"trap": "unit_mismatch", "from": 0.15, "to": 0.61, "correct": True, "attempts": 1})
 ev(235, "appeal.open", "learner", "the learner thinks the hint deduction is unfair", task=T,
    text="The learner appealed.",
-   data={"appealId": "a1", "taskId": T, "reason": "I'd have found it without the hint, I was about to group by region.",
+   data={"appealId": "a1", "taskId": T, "reason": "I'd have found it without the hints, I was about to group by region.",
          "room": "band"})
 call(235.5, "system", "band", "send_message", "relayed the appeal into the panel room", 150, "appeals are argued in the BAND room")
 ev(240, "appeal.message", "sam", "Sam reports what the log shows", to="learner", task=T,
-   text="The log shows two repeats of the same comparison before my question. The hint came first.",
-   data={"appealId": "a1", "text": "The log shows two repeats of the same comparison before my question. The hint came first.",
+   text="The log shows two repeats of the same comparison before my first question, and q5 came after my second. The hints came first.",
+   data={"appealId": "a1", "text": "The log shows two repeats of the same comparison before my first question, and q5 came after my second. The hints came first.",
          "bandMessageId": "band-mock-40"})
-ev(244, "appeal.ruling", "ines", "the event log shows the hint came before the region query", task=T,
+ev(244, "appeal.ruling", "ines", "the event log shows the hints came before the region query", task=T,
    text="Appeal ruled: the grade stands.",
-   data={"appealId": "a1", "upheld": True, "oldScore": 0.9, "newScore": 0.9,
-         "reason": "q5, the first region query, ran 13 s after Sam's hint, so the deduction stands."})
+   data={"appealId": "a1", "upheld": True, "oldScore": 0.8, "newScore": 0.8,
+         "reason": "q5, the first region query, ran 3 s after Sam's second hint, so the deduction stands."})
 ev(250, "ask", "learner", "the learner asked an agent why", to="vale", text="Why did I get this task first?")
 ev(253, "ask.answer", "vale", "answered only from what Vale saw: the learner profile and the bandit draw", to="learner",
-   text="You were new, so every skill sat at 0.15. The bandit's draw was highest for unit mix-ups, a very common trap in real exports.",
+   text="You were new, so every skill sat at 0.15. Telem's monitor caught a unit mix-up in the news this morning, which "
+        "nudged the draw; it was already highest for unit mix-ups.",
    data={"sources": ["your learner profile", "the bandit's draw for this task"]})
-ev(258, "session.end", "system", "judge mode is one task", data={"tasks": 1, "totalScore": 0.9})
+# N3's Bruin refresh of the learner tables runs as the session ends.
+call(256, "system", "bruin", "run", "refreshed the learner model (learn.bkt_mastery)", 7400,
+     "the learner model runs as a Bruin asset", runId="run-mock-3")
+ev(258, "session.end", "system", "judge mode is one task", data={"tasks": 1, "totalScore": 0.8})
 with open(root / "mock_session.jsonl", "w") as f:
     for e in events:
         f.write(json.dumps(e) + "\n")

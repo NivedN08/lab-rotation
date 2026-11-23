@@ -42,7 +42,7 @@ right after its verdict), `panel.whisper` events have no `text` and carry `seale
 | Open appeal | `POST /api/session/:id/appeal` | `{taskId, reason}` | `{appealId}` | `engine.on_appeal` |
 | Appeal message | `POST /api/session/:id/appeal/:appealId/message` | `{text}` | `{ok: true}` | `engine.on_appeal_message` |
 | Mastery | `GET /api/session/:id/mastery` | | `{traps: [{trap, score, attempts}]}` | `lab.learner.mastery` |
-| Ask an agent | `POST /api/session/:id/ask` | `{agent, text}` | `{agent, text, sources: [string]}` | `engine.ask` |
+| Ask an agent | `POST /api/session/:id/ask` | `{agent, text}` | `{agent, text, sources: [string], links?, trace?}` | `engine.ask` |
 | Agents | `GET /api/agents` | | `[{id, name, role, reads, portrait}]` | `lab.session.cast.agents` |
 | Portraits | `GET /api/portraits/:file` | | the image (not JSON) | static, from `data/portraits/` |
 | Voice audio | `GET /api/audio/:file` | | the audio file (not JSON) | static, from `data/audio/` |
@@ -155,3 +155,5 @@ at the last `seq`. The other read routes (`task`, `tables`, `rows`, `mastery`,
   `learner.query.useful` (they arrive with the task's `panel.transcript`), and nothing in
   the stream tells the trap apart from a clean twin. See "Before the verdict" in
   `events.md`.
+- `ask` to `telem` runs a live Telem search with the learner's question; the reply adds
+  `links` (`[{title, url}]`) and `trace`.

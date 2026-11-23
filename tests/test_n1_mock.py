@@ -85,11 +85,11 @@ def test_totals_and_mastery_follow_the_replay(mock):
     sid = start()["sessionId"]
     mock.now += 1000
     _, totals = call("GET", f"/api/session/{sid}/sponsors")
-    assert totals["band"]["messages"] == 7
+    assert totals["band"]["messages"] == 10
     assert totals["bruin"] == {"checksRun": 5, "checksFailed": 1}
-    assert totals["runware"]["lines"] == 5
-    assert totals["telem"]["searches"] == 2
-    assert totals["glasser"]["calls"] == 2
+    assert totals["runware"]["lines"] == 7
+    assert totals["telem"]["searches"] == 3 and totals["telem"]["monitorHits"] == 1
+    assert totals["glasser"]["calls"] == 4
     _, mastery = call("GET", f"/api/session/{sid}/mastery")
     by_trap = {m["trap"]: m for m in mastery["traps"]}
     assert len(by_trap) == 6 and by_trap["unit_mismatch"] == {"trap": "unit_mismatch", "score": 0.61, "attempts": 1}
@@ -195,7 +195,7 @@ def test_mock_whisper_whys_come_from_the_table(mock):
     texts = {w["seq"]: w["text"] for w in next(e for e in evs if e["k"] == "panel.transcript")["data"]["whispers"]}
     whys = set(WHISPER_WHY.values())
     ws = [e for e in evs if e["k"] == "panel.whisper"]
-    assert len(ws) == 6
+    assert len(ws) == 9
     for e in ws:
         assert e["why"] in whys, e["why"]
         assert not shared_words(e["why"], texts[e["seq"]]), e
@@ -229,3 +229,23 @@ def test_mock_holds_back_useful_until_the_verdict(mock):
     assert {e["why"] for e in qs} <= {"the learner ran a query in the SQL box", "the query failed"}
     meters = [e for e in evs if e["k"] == "meter.update"]
     assert meters and {e["why"] for e in meters} <= set(meter.WHY.values())
+
+
+def test_mock_shows_the_telem_and_glasser_additions(mock):
+    sid = start()["sessionId"]
+    mock.now += 1000
+    evs = call("GET", f"/api/session/{sid}/events", query="since=0")[1]["events"]
+    kinds_ = [e["k"] for e in evs]
+    picked, transcript = kinds_.index("task.picked"), kinds_.index("panel.transcript")
+    assert any(e["k"] == "sponsor.call" and e["data"]["op"] == "monitor" for e in evs[:picked])   # read first
+    assert kinds_.index("monitor.hit") > transcript   # shown only after the verdict
+    hit = next(e for e in evs if e["k"] == "monitor.hit")["data"]
+    assert hit["steered"] is True and hit["title"] not in json.dumps(evs[:transcript])
+    assert next(e for e in evs if e["k"] == "task.end")["data"]["news"]["steered"] is True
+    ask = next(e for e in evs if e["k"] == "ask.answer" and e["agent"] == "telem")
+    assert ask["data"]["links"] and ask["data"]["trace"] and ask["seq"] < kinds_.index("learner.answer")
+    hint2 = next(e for e in evs if e["k"] == "agent.say" and (e.get("data") or {}).get("hintLevel") == 2)
+    assert hint2["data"]["bought"]["sponsor"] == "glasser" and "$30 to $45" in hint2["text"]
+    verdict = next(e for e in evs if e["k"] == "verdict")["data"]
+    assert verdict["benchmark"]["low"] == 30 and verdict["text"].endswith(verdict["benchmark"]["unit"].split(" ", 1)[1]
+                                                                          + " (Glasser, $0.002).")
