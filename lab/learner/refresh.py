@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import fcntl
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -53,7 +54,13 @@ def flatten_sessions(src: Path = SESSIONS) -> list[list]:
     return rows
 
 
-def stage(sessions: Path = SESSIONS, bench: Path = BENCH, dest: Path = STAGE) -> dict:
+def sessions_dir() -> Path:
+    """data/sessions, or LAB_SESSIONS_DIR when set (the session engine writes there too)."""
+    return Path(os.environ.get("LAB_SESSIONS_DIR") or SESSIONS)
+
+
+def stage(sessions: Path | None = None, bench: Path = BENCH, dest: Path = STAGE) -> dict:
+    sessions = sessions or sessions_dir()
     dest.mkdir(parents=True, exist_ok=True)
     rows = flatten_sessions(sessions)
     with open(dest / "session_events.csv", "w", newline="") as f:

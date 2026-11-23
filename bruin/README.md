@@ -1,6 +1,43 @@
 # Bruin pipeline
 
 Owned by N3. DuckDB at `data/warehouse.duckdb` (connection `duckdb-default` in `../.bruin.yml`).
+
+## Bruin in Lab Rotation
+
+Everything runs locally on one DuckDB file; nothing goes to the cloud.
+
+- **The five trap checks** (`bruin/assets/task/quality.sql`). Every task is checked by a real
+  `bruin run`: the five checks are Bruin custom checks, and exactly the planted trap's check
+  fails (none on a clean task). Ines, the grader, shows that failing check as her evidence.
+  `lab/tasks/bruin_run.py` stages the task's public tables (`bruin/assets/task/*.sql`) and
+  runs `bruin run --tag task`. `lab/tasks/checks.py` runs it with `run_checks(task, bruin=True)`,
+  and a test keeps Bruin and the Python checks in agreement on every skill.
+- **ingestr loads** (`lab/learner/refresh.py`). Recorded sessions and N4's benchmark
+  results are loaded into the warehouse as `raw.session_events` and `raw.bench_results`.
+- **The learning assets** (`bruin/assets/learn/*.sql`):
+  - `learn.session_events`: every session event.
+  - `learn.skill_attempts`: one row per graded task.
+  - `learn.session_scores`: one row per session.
+  - `learn.bench_results`: N4's benchmark results.
+
+  Column checks such as `not_null` and `accepted_values` guard them.
+- **BKT as a Python asset** (`bruin/assets/learn/bkt_mastery.py`, `requirements.txt`).
+  `learn.bkt_mastery` replays the learner model (`lab/learner/bkt.py`, Bayesian knowledge
+  tracing) over `learn.skill_attempts`, giving one mastery score per player and trap.
+- **A refresh after every session** (`lab/learner/refresh.py`, `refresh()`). The session
+  engine calls it before `session.end`. It flattens the sessions, runs ingestr, then runs
+  `bruin run --tag learning`. The floor logs it as the Bruin call "refreshed the learner model
+  (learn.bkt_mastery)". Measured: 1.8 s warm, 7.7 s on a cold first run.
+- **The demo** (`bruin/demo.sh`). One command, about 2 s, on the current warehouse:
+  1. `bruin query` answers "which trap do players miss most?" (attempts, misses and miss rate
+     by trap).
+  2. `bruin lineage` traces `learn.bkt_mastery` back to the session events.
+  3. `bruin docs` writes the whole pipeline (assets, checks, lineage) to one HTML page.
+
+  Run it with:
+
+      bash bruin/demo.sh          # add --open to open the docs page
+
 Run from the repo root:
 
     bruin validate bruin
