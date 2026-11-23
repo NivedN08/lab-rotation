@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Note, Role } from "../data/types";
 import { fmtElapsed, MODEL_NAME, ROLE_READS, roleLabel, roundWord, statusWord, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
+import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
 import { Avatar } from "./Avatar";
 
@@ -462,14 +463,14 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 // ---- A room -----------------------------------------------------------------------------------
 
 const ROOM_TEXT: Record<string, { role?: Role; what: string }> = {
-  director: { role: "director", what: "One director for the whole lab. It reads every department's memory and decides what may cross from one team to another: a briefing for Team A, questions built from each team's warning signs, and a challenge to every agreed answer." },
-  library: { role: "library", what: "One librarian per study. Before anyone analyses the data, it searches the web for how the method should be done and what usually goes wrong, and writes what it finds to memory. It never looks up the benchmark's source study." },
-  "team-a": { role: "team-a", what: "One analyst per study. Team A gets the library's briefing from the director, writes its plan to memory before it touches the data, then hands in an answer." },
-  "team-b": { role: "team-b", what: "One analyst per study, working from the data alone. It never sees Team A's notes or answers. The wall between the rooms has no door." },
+  director: { role: "director", what: "Dr. Vale's office. Vale picks your task, walks it to your desk, and sits on the panel that rules on your answer with Ines and Sam." },
+  library: { role: "library", what: "Telem's library. When you need a method, Telem searches papers and the web for how it should be done and what usually goes wrong, then carries what it finds to your desk." },
+  "team-a": { role: "team-a", what: "Your desk is here. Sam, your mentor, sits at the head desk at the back and can drop by with a hint, never the answer." },
+  "team-b": { role: "team-b", what: "Riley works the same task from the same tables, blind. Riley never sees your work and you never see Riley's until the verdict. The wall between the rooms has no door." },
   "team-c": { role: "team-c", what: "Called only when the referee cannot settle a disagreement. A third blind team, given the warning signs but no answers." },
-  referee: { role: "referee", what: "Called only when the teams still disagree after the question round. It gets both answers as X and Y, without knowing whose is whose, and must design and run a test that tells them apart. It may not vote." },
+  referee: { role: "referee", what: "Ines and the Bruin terminal. Ines gets your answer and Riley's as X and Y, without knowing whose is whose, and runs the Bruin checks that tell them apart. She may not vote." },
   solo: { role: "solo", what: "The comparison arm: the same model, the same data and the same time limit, but no lab. Four attempts per study, each alone, with no memory and no library." },
-  lobby: { what: "Agents arrive here when their first session starts." },
+  lobby: { what: "You arrive here when your session starts, then walk to your desk in Team A." },
 };
 
 export function RoomPanel({ id, ...nav }: Nav & { id: string }) {
@@ -507,7 +508,7 @@ export function RoomPanel({ id, ...nav }: Nav & { id: string }) {
 }
 
 function roomName(id: string) {
-  return ({ director: "Director's office", library: "Library", "team-a": "Team A", "team-b": "Team B", "team-c": "Team C", referee: "Referee", solo: "Solo agents", lobby: "Lobby" } as Record<string, string>)[id] ?? id;
+  return (roomById as Record<string, { name: string } | undefined>)[id]?.name ?? id;
 }
 
 // ---- Fixtures -----------------------------------------------------------------------------------
@@ -571,9 +572,9 @@ export function FixturePanel({ id, ...nav }: Nav & { id: string }) {
     const pd = notes.filter((n) => n.kind === "pass_down").length;
     return (
       <div>
-        <h2 style={{ fontFamily: "var(--pixel)", fontSize: 30, margin: "0 0 6px" }}>Memory vault</h2>
+        <h2 style={{ fontFamily: "var(--pixel)", fontSize: 30, margin: "0 0 6px" }}>Your learner profile</h2>
         <p style={{ color: "var(--mist)", margin: "8px 0 0" }}>
-          Shared memory on past.dev. Every note is written with an audience, and every read names who is reading, so a read returns only what that agent may see. One cabinet per study, one drawer per department. Every call goes through a gateway on Modal that knows each agent from a header the agent cannot forge.
+          Your learner profile lives here: after each ruling, a mastery note flies here from your desk. Shared memory on past.dev. Every note is written with an audience, and every read names who is reading, so a read returns only what that agent may see. One cabinet per study, one drawer per department. Every call goes through a gateway on Modal that knows each agent from a header the agent cannot forge.
         </p>
         <Section title="Written so far">
           <dl className="kv">
