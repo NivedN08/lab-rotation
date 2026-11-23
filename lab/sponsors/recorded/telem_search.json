@@ -19,30 +19,30 @@
           "snippet": "## A Taxonomy of PoS Data Quality Failures Point-of-sale data, despite its reputation as a reliable transactional record, is subject to a diverse array of quality failures that can compromise downstream analytics. Missing transactions arise from hardware malfunctions (network out"
         },
         {
+          "title": "Sales Totals Protected From Duplicate POS Transactions",
+          "url": "https://en.kii.com/updates/duplicate-pos-transactions",
+          "snippet": "Sales figures are only as reliable as the data the point of sale sends. A bug in certain versions and configurations of some POS systems causes the same transaction to be reported more than once within a single transaction log. Counted as received, each repeated transaction infla"
+        },
+        {
           "title": "Why am I Seeing Duplicate Payment Information? – Help Center",
           "url": "https://support.commercesync.com/hc/en-us/articles/205913653-Why-am-I-Seeing-Duplicate-Payment-Information",
           "snippet": "Some merchants confuse this, thinking that these are duplicate entries. These numbers will be similar, they are complementary to each other. The bank transfers what was deposited into your bank, Commerce Sync transfers what was tendered as payments in your POS. You will reconcile"
-        },
-        {
-          "title": "What Is Point of Sale Data & Why It Matters",
-          "url": "https://insights.ehl.edu/pos-data",
-          "snippet": "Not all POS data is created equal. Modern systems capture dozens of different data points during each transaction, creating layers of information that serve different business purposes. While a simple cash register might only record the total sale amount, today's sophisticated PO"
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/606e00af-84b7-4d6f-9831-53c26a9e6c2c"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/26eab7cd-191f-4169-b07c-719c816597c6"
     },
     "retail sales data error amounts recorded in cents instead of dollars": {
       "query": "retail sales data error amounts recorded in cents instead of dollars",
       "results": [
         {
-          "title": "The Census Bureau Needs to Significantly Revise Reporting and ...",
-          "url": "https://mitsloan.mit.edu/shared/ods/documents?DocumentID=2914",
-          "snippet": "David S. Evans, Scott Murray, and Richard Schmalensee * February 7, 2016 Abstract: This paper reports significant discrepancies in the Census’s methods and reports of online and physical retail sales in the United States. ... We released a paper on January 18, 2016 that reported "
+          "title": "Retail Sales Index (RSI) QMI - Office for National Statistics",
+          "url": "https://www.ons.gov.uk/businessindustryandtrade/retailindustry/methodologies/retailsalesindexrsiqmi",
+          "snippet": "Last revised: 4 November 2025 ... The main output measures include value and volume estimates, in both seasonally adjusted and non-seasonally adjusted forms. The value estimates reflect the total turnover that businesses have collected over a standard period, while the volume est"
         },
         {
-          "title": "Massive Online Retail Data Error Uncovered",
-          "url": "https://www.pymnts.com/commerce/ecommerce/2016/massive-online-retail-data-error-uncovered/",
-          "snippet": "Six months of analysis and some email correspondence with the Census folks later, they uncovered a data bombshell: online sales as a percentage of all retail sales has been undercounted – and by a lot. Online sales as a percentage of physical retail sales has been undercounted by"
+          "title": "ADVANCE MONTHLY SALES FOR RETAIL AND FOOD SERVICES, ...",
+          "url": "https://www.census.gov/retail/marts/www/marts_current.pdf",
+          "snippet": "Reliability of Estimates Because the estimates presented in this report are based on a sample survey, they contain sampling error and nonsampling error. Sampling error is the difference between the estimate and the result that would be obtained from a complete enumeration of the "
         },
         {
           "title": "Errors Associated with Period Reporters in Retail Trade Estimates",
@@ -50,9 +50,9 @@
           "snippet": "## Errors Associated with Period Reporters in Retail Trade Estimates 1 Kelly Dixon U.S. Census Bureau, SSSD, Room 2754-3, Washington DC 20233-6500 ### Abstract In MARTS, the Advanced Monthly Retail Trade Survey, the Census Bureau asks companies to report their sales for the prior"
         },
         {
-          "title": "ADVANCE MONTHLY SALES FOR RETAIL AND FOOD ...",
-          "url": "https://www.census.gov/retail/marts/www/marts_current.pdf",
-          "snippet": "(Estimates are shown as percents and are based on data from the Advance Monthly Retail Trade Survey and Monthly Retail Trade Survey) Median standard error(1) for Revision for month-Percent change to-month change(2) [...] estimate. This type of error can occur because of nonrespon"
+          "title": "Understanding discrepancies and cash rounding in register closures – Lightspeed Retail (X-Series)",
+          "url": "https://x-series-support.lightspeedhq.com/hc/en-us/articles/25534277095323-Sales-and-payments-report-1-cent-rounding-discrepancies",
+          "snippet": "As the rounding discrepancies between your Sales and payments reports will always be plus or minus 1 cent, these discrepancies are far below any retailer's materiality and can stand as-is. Note: [...] Sales and payments made during a register closure may appear unmatched because "
         },
         {
           "title": "U.S. retail sales decline despite a strong holiday season",
@@ -60,7 +60,7 @@
           "snippet": "Since the estimate for retail sales is based on advance data, it is often subject to revision. For retail sales in December, the margin of error for the top-line number was 0.5 percentage point, according to the report. But it is hard to predict the direction of revision, which w"
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/9175da64-12b2-4382-9d21-8add8c5439e1"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/f0218115-5282-4dd0-abfd-a37b4a73f6d7"
     },
     "survey or loyalty flag coded backwards in a data dictionary led to wrong result": {
       "query": "survey or loyalty flag coded backwards in a data dictionary led to wrong result",
@@ -81,17 +81,17 @@
           "snippet": "| Variable | Source and Applicable Population | Values or Calculation | Analysis Notes | | --- | --- | --- | --- | | `used_feature` | Q3, all who passed screening | 1=used in past 30 days; 0=not used; -8=don’t know | -8 must not be merged with “not used” | | `sat_feature` | Q4, o"
         },
         {
-          "title": "How to Reverse Code in SPSS: Step-by-Step Guide",
-          "url": "https://statisticalanalysishelp.com/how-to-reverse-code-in-spss",
-          "snippet": "Reverse coding is one of the most important steps in questionnaire and survey data preparation. Many research instruments include both positively worded and negatively worded items. If the negatively worded items are not reversed before analysis, the scale score can become incorr"
+          "title": "Common Survey Scoring Mistakes in Dissertation Research: How to Handle Reverse-Coded Items and Composite Scores – blog @ precision",
+          "url": "https://precisionconsultingblog.com/common-survey-scoring-mistakes-in-dissertation-research-how-to-handle-reverse-coded-items-and-composite-scores",
+          "snippet": "Reverse coding changes the numerical direction of an item without changing the response the participant originally selected. Suppose a five-point scale measures confidence, with higher values representing greater confidence. A participant who strongly agrees with the statement “I"
         },
         {
-          "title": "AEC410/PD079: The Savvy Survey #15: Survey Responses and Data Entry",
-          "url": "https://ask.ifas.ufl.edu/publication/PD079",
-          "snippet": "There are also situations in which a savvy surveyor may use a questionnaire with reverse coded items. This method is typically used to encourage respondents to think about each question carefully and select the proper response. Figure 3 provides an example of a survey item with r"
+          "title": "Reverse Coding in Survey Design",
+          "url": "https://it.insidercx.com/knowledge-base-article/reverse-coding-in-survey-design",
+          "snippet": "Example: The purpose of this technique is to avoid response patterns where respondents simply agree or disagree with all items — called acquiescence bias — without carefully considering the question content. While reverse coding can help combat a number of biases, it isn’t always"
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/f0b482c6-40d0-4fe9-bbbb-37f9d2fbd297"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/b5a58fef-7e15-48ce-adf4-0297ed896597"
     },
     "retail promotion analysis misled by a confounding variable store traffic": {
       "query": "retail promotion analysis misled by a confounding variable store traffic",
@@ -112,17 +112,17 @@
           "snippet": "## Author Listed: - Epstein, Leonardo D. - Flores, Arturo A. - Goodstein, Ronald C. - Milberg, Sandra J. Registered: ## Abstract This article presents an approach to measure the effect of promotions on customer traffic, a measure of effectiveness of retail promotions important bo"
         },
         {
-          "title": "\"Product Price Level and Retail Price Promotion: An Empirical Analysis \" by Kristopher Keller and Raj Sethuraman",
-          "url": "https://scholar.smu.edu/business_marketing_research/49",
-          "snippet": "Prior research suggests that price promotions by higher-priced products generate greater sales lift than those by lower-priced products. This view implies that higher-priced products should promote more often, all else equal. However, this assertion largely rests on the asymmetri"
+          "title": "Avoiding Misinterpretations in Data Analysis (Simpson's Paradox) – Wingify",
+          "url": "https://help.wingify.com/hc/en-us/articles/58838288995609-Avoiding-Misinterpretations-in-Data-Analysis-Simpson-s-Paradox",
+          "snippet": "Example: E-commerce Experiment Consider an example in the context of an online e-commerce store during Black Friday sales. The store wants to test whether increasing the price and offering a 5% discount will boost sales. Week 1 (Black Friday Sale): The store allocates 66% of the "
         },
         {
-          "title": "How Retailers Can Improve Promotion Effectiveness",
-          "url": "https://www.bcg.com/publications/2015/retail-pricing-how-retailers-can-improve-promotion-effectiveness",
-          "snippet": "Craft a winning promotion strategy to guide category-level decisions. For many retailers, the promotion process is heavily focused on implementation rather than strategy. Many retailers lack a clear goal for their promotions; management does not consider whether it is trying to i"
+          "title": "What are confounding variables and why do they matter… | Prescient AI",
+          "url": "https://prescientai.com/blog/cofounding-variables-in-marketing",
+          "snippet": "Consider this scenario: An ecommerce brand runs a new Facebook campaign in July and sees a 20% increase in sales compared to June. Traditional attribution might credit the campaign for this impressive growth. However, a deeper analysis might reveal several confounding variables a"
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/fc68d126-d02d-4e1a-8cae-d3e5f78a98d7"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/2577b8e6-93e9-4256-9373-7d5c279acc0a"
     },
     "business analysis wrong conclusion because of a missing join or hidden variable": {
       "query": "business analysis wrong conclusion because of a missing join or hidden variable",
@@ -148,12 +148,12 @@
           "snippet": "SPSS Miss-ing Value Analysis determines whether the missing data are problem-atic and may affect the results white paper Missing data: the hidden problem 4 ® sented, so this conclusion could be incorrect. If every customer reported their age, you might get different results. For "
         },
         {
-          "title": "Medium",
-          "url": "https://medium.com/@tarangds/the-impact-of-missing-data-on-statistical-analysis-and-how-to-fix-it-3498ad084bfe",
-          "snippet": "- Loss of Statistical Power: When data is missing, it reduces the amount of information available for your analysis. This makes it harder to find patterns and can weaken your results. - Bias in Results: If missing data isn’t random, it can end up over representing certain groups "
+          "title": "Common Mistakes in Membership Data Analysis",
+          "url": "https://www.linkedin.com/top-content/business-strategy/common-analysis-mistakes/common-mistakes-in-membership-data-analysis",
+          "snippet": "𝐌𝐚𝐧𝐲 𝐭𝐢𝐦𝐞𝐬, 𝐭𝐡𝐞 𝐒𝐐𝐋 𝐪𝐮𝐞𝐫𝐲 𝐲𝐨𝐮 𝐰𝐫𝐢𝐭𝐞 𝐢𝐬 𝐭𝐞𝐜𝐡𝐧𝐢𝐜𝐚𝐥𝐥𝐲 𝐜𝐨𝐫𝐫𝐞𝐜𝐭… It runs without errors, gives results instantly, and even passes basic checks. But the business answer coming out of it is completely wrong. And this is where most analysts struggle - not with SQL syntax, but with logic."
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/197a7428-ece0-440c-8163-89216db65f29"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/cc69df1b-6eb1-4802-b542-2b534c09d4b5"
     },
     "checking a clean retail dataset before trusting a sales trend": {
       "query": "checking a clean retail dataset before trusting a sales trend",
@@ -174,17 +174,17 @@
           "snippet": "('Duplicate invoices:', dup_invoices) print('Fully duplicated rows:', dup_fullrows) ... 'Price': 'mean'}) missing_invoices = set(df_retail['Invoice']) - set(sales_by_invoice.index) print(' ... missing values, duplicates, and data types before analysis -"
         },
         {
+          "title": "Before trusting any dataset, I always check these 3 things. | Nameer khan",
+          "url": "https://www.linkedin.com/posts/nameer-khan-9587661b5_before-trusting-any-dataset-i-always-check-activity-7525215806222393344-W1pj",
+          "snippet": "records? For example, does the total sales figure in my dataset match the sales records from the source? I've learned that working with data isn't just about creating charts or calculating numbers. It's also about questioning the numbers before trusting them. Because a wrong conc"
+        },
+        {
           "title": "Best Retail Datasets for Machine Learning 2026 — Unidata",
           "url": "https://unidata.pro/blog/best-retail-datasets-for-ml",
           "snippet": "Online Retail II is a clean transaction log — line items, quantities, prices, customer IDs, and invoice timestamps across two years. It is standard for RFM analysis and market basket mining. The main limitation is retailer type: a gift wholesaler operates on bulk-order logic with"
-        },
-        {
-          "title": "GitHub - Ehsan-Behzadi/Online-Retail-Data-Analysis-and-Preprocessing: This project analyzes and preprocesses the Online Retail dataset to uncover insights into ",
-          "url": "https://github.com/Ehsan-Behzadi/Online-Retail-Data-Analysis-and-Preprocessing",
-          "snippet": "Regression Assumption Checks: + Normality Test: Checked with Anderson-Darling. + Multicollinearity Check: Verified with VIF. + Feature Relationship. Data Preparation for Linear Regression Modeling: + Box-Cox Transformation. + Outlier Detection. + One-Hot Encode. + Final Dataset C"
         }
       ],
-      "trace": "https://app.telem.ai/platform/traffic2/b5595751-b212-4fa7-97d3-9d7a3b786bb5"
+      "trace": "https://app.telem.ai/o/dc84c03e-1184-4e47-9c2e-90624e9e9f37/p/c408162f-72fc-4bab-9408-004219cd11de/traffic2/b0842164-b7b5-40bc-9bb9-30f37b8b575a"
     }
   }
 }

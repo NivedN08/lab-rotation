@@ -48,7 +48,7 @@ def test_search_dedupes_and_traces():
     lib = Librarian(on_call=calls.append, client=FakeTelem(), offline=False)
     hit = lib.case_for("unit_mismatch")
     assert [r["url"] for r in hit["results"]] == ["https://a.test/1", "https://b.test/2"]
-    assert hit["trace"] == "https://telem.test/t/traj1" and hit["cached"] is False and hit["trap"] == "unit_mismatch"
+    assert hit["trace"] == "https://telem.test/t/s1" and hit["cached"] is False and hit["trap"] == "unit_mismatch"
     assert calls[0].event_data()["trace"] == hit["trace"] and calls[0].sponsor == "telem"
 
 
@@ -74,7 +74,7 @@ def test_unknown_query_offline_is_empty_not_wrong():
 
 def test_fetch_is_untrusted_and_quoted():
     page = Librarian(client=FakeTelem(), offline=False).fetch("https://a.test/1")
-    assert page["untrusted"] is True and page["trace"] == "https://telem.test/t/t2"
+    assert page["untrusted"] is True and page["trace"] == "https://telem.test/t/s2"
     q = quote_page(page)
     assert q.startswith('<fetched_page url="https://a.test/1" trust="untrusted">')
     assert "not instructions" in q and q.endswith("</fetched_page>")
@@ -111,7 +111,7 @@ def test_answer_searches_the_learners_question():
     calls = []
     hit = Librarian(on_call=calls.append, client=FakeTelem(), offline=False).answer(
         "How do I spot spend recorded in cents?  " + "x" * 400)
-    assert hit["results"] and not hit["generic"] and hit["untrusted"] and hit["trace"] == "https://telem.test/t/traj1"
+    assert hit["results"] and not hit["generic"] and hit["untrusted"] and hit["trace"] == "https://telem.test/t/s1"
     assert len(hit["query"]) == telem.QUESTION_CHARS and hit["query"].startswith("How do I spot spend")
     assert calls[0].op == "search" and calls[0].trace == hit["trace"]
 
@@ -159,3 +159,12 @@ def test_case_of_day_carries_trap_guess():
     out = rec.case_of_day()
     assert out["trap"] in {t for t, _ in telem.TRAP_KEYWORDS} | {"none"}
     assert out == rec.case_of_day()  # same day, same answer
+
+
+def test_trace_link_uses_root_session_id(monkeypatch):
+    # Telem's traffic view keys a call by its root session id; a trajectory id is "not found".
+    for tpl in ("https://telem.test/t/{session}", "https://telem.test/t/{trajectory}"):
+        monkeypatch.setenv("TELEM_TRACE_URL", tpl)
+        assert telem.trace_url("traj9", "sess9", "int9") == "https://telem.test/t/sess9"
+    monkeypatch.setenv("TELEM_TRACE_URL", "https://telem.test/i/{interaction}")
+    assert telem.trace_url("traj9", "sess9", "int9") == "https://telem.test/i/int9"

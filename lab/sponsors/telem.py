@@ -6,9 +6,11 @@ committed set. When Telem is down (or `TELEM_OFFLINE=1`), a cached result answer
 `cached: True`. Fetched pages are untrusted text: `quote_page()` wraps them as data for
 an agent prompt, never as instructions.
 
-The trace link opens the call in Telem's traffic view. Set `TELEM_TRACE_URL` in `.env`
-to `https://app.telem.ai/o/<org id>/p/<project id>/traffic2/{trajectory}` (the ids are in
-the app's address bar); `{session}` and `{interaction}` also work.
+The trace link opens the call in Telem's traffic view, which lists each call as a
+conversation keyed by its root session id. Set `TELEM_TRACE_URL` in `.env` to
+`https://app.telem.ai/o/<org id>/p/<project id>/traffic2/{session}` (the ids are in the app's
+address bar). `{trajectory}` is filled with the session id too, so older templates still open
+the right call; `{interaction}` is the interaction id.
 
     lib = Librarian(on_call=engine.sponsor_call)
     hit = lib.case_for("unit_mismatch")   # {query, results: [{title, url, snippet}], trace, cached}
@@ -31,7 +33,7 @@ from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, load_recorded
 
 CACHE = DATA / "telem_cache.json"
 RECORDED_SEARCH = "telem_search.json"
-DEFAULT_TRACE = "https://app.telem.ai/platform/traffic2/{trajectory}"
+DEFAULT_TRACE = "https://app.telem.ai/platform/traffic2/{session}"
 TIMEOUT_S = 20
 SNIPPET_CHARS = 280
 PAGE_CHARS = 6000
@@ -67,8 +69,11 @@ def _key(query: str) -> str:
 
 
 def trace_url(trajectory: str = "", session: str = "", interaction: str = "") -> str:
+    """Telem's traffic view keys a call by its root session id (checked in the app on 2026-11-23:
+    a trajectory id gives "Conversation not found"), so `{trajectory}` gets the session id too."""
     tpl = os.environ.get("TELEM_TRACE_URL") or DEFAULT_TRACE
-    return tpl.format(trajectory=trajectory or session, session=session, interaction=interaction)
+    root = session or trajectory
+    return tpl.format(trajectory=root, session=root, interaction=interaction)
 
 
 def _clean(text: str, limit: int) -> str:
