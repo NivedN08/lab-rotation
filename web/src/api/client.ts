@@ -8,6 +8,7 @@ import type { AnswerSubmission, Cell, CurrentTask, EventsPage, LabEvent, Mastery
 
 export * from "./types";
 export * from "./traps";
+export * from "./session";
 
 export const useMock = (): boolean => {
   try {

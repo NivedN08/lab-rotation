@@ -21,7 +21,12 @@ export type TaskInfo = {
 };
 
 /** Tasks arrive one at a time. `task` is the current one, or null when all are done. */
-export type SessionInfo = { sessionId: string; task: TaskInfo | null };
+export type SessionInfo = {
+  sessionId: string;
+  /** Every task in the rotation, in order, so the top bar can show them before they are reached. */
+  tasks: { id: string; title: string }[];
+  task: TaskInfo | null;
+};
 
 /** One thing from the event stream. The floor and the workspace both read these. */
 export type LabEvent = {

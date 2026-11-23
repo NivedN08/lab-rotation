@@ -7,7 +7,7 @@ Errors: any non-2xx reply, or a JSON body with `{"error": "plain words"}`, is sh
 
 | Job | Route | Sends | Gets back |
 |---|---|---|---|
-| Start a session | `POST /api/session/start` | nothing | `{sessionId, task}` where task is `{id, title, brief, seconds}` or null |
+| Start a session | `POST /api/session/start` | nothing | `{sessionId, tasks: [{id, title}], task}` where `tasks` is the whole rotation in order and `task` is the current one `{id, title, brief, seconds}` or null |
 | Current task | `GET /api/session/:id/task` | nothing | `{task}` (same shape, null when all are done). Tasks come one at a time; polled after an answer is sent until the id changes. |
 | List tables | `GET /api/session/:id/tables` | nothing | `[{name, about, columns: [{name, type}], rowCount}]` (type: text, int, real or date) |
 | Read rows | `GET /api/session/:id/tables/:table/rows?offset=&limit=` | query string | `{rows: [[cell, ...], ...]}` (cell: string, number, boolean or null) |
@@ -26,6 +26,12 @@ Trap names come from `traps.ts`: the `trap` field in the answer is one of those 
 
 `session.start`, `task.picked`, `search`, `monitor.hit`, `learner.query`, `learner.evidence`, `agent.say`, `panel.whisper`, `learner.answer`, `rival.answer`, `check.result`, `verdict`, `mastery.update`, `appeal.open`, `appeal.message`, `appeal.ruling`, `voice.line`, `sponsor.call` (`data.sponsor` is `band`, `telem`, `bruin`, `runware` or `glasser`).
 
+The `verdict` event's `data` must carry `{taskId, result: "passed" | "failed"}`; the top bar's marks come from it.
+
 `mockSession.ts` plays all of them in about two minutes. Add `?mockspeed=10` to the URL to play it ten times faster.
 
 `row` is 1-based within what the learner saw. For a SQL result, `source` is `"query"` and `sql` holds the query.
+
+## One shared state (`session.ts`)
+
+`useRotation()` and `subscribeEvents(cb)` are the only way the rest of the app reads the session. The first reader starts the session and the single one-second poll; nobody else starts a session, polls or keeps time. `RotationState` holds `sessionId`, `tasks`, `current`, `startedAt` (the clock the Timer counts from), `results` (from verdict events), `events` (all so far), plus `error` and `awaitingNext`.

@@ -127,7 +127,8 @@ function advanceTask(afterMs: number) {
 const wait = <T,>(v: T, ms = 150) => new Promise<T>((res) => setTimeout(() => res(v), ms));
 
 export const mock = {
-  startSession: () => wait<SessionInfo>({ sessionId: "mock-session", task: TASKS[taskIndex()] ?? null }),
+  startSession: () =>
+    wait<SessionInfo>({ sessionId: "mock-session", tasks: TASKS.map(({ id, title }) => ({ id, title })), task: TASKS[taskIndex()] ?? null }),
 
   getCurrentTask: () => wait<CurrentTask>({ task: TASKS[taskIndex()] ?? null }, 50),
 

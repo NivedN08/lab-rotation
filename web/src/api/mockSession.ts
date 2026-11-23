@@ -33,7 +33,7 @@ export const SCRIPT: Step[] = [
   { t: 86, k: "check.result", a: "ines", text: "Duplicates check failed.", data: { check: "duplicates", passed: false } },
   { t: 86, k: "sponsor.call", data: { sponsor: "bruin", label: "Check run", count: 1, failed: 1 } },
   { t: 90, k: "sponsor.call", data: { sponsor: "glasser", label: "Call", count: 1 } },
-  { t: 94, k: "verdict", a: "ines", text: "Verdict: you found the trap. Sealed.", data: { correct: true, key: "fails", trap: "Duplicated rows", sealed: true } },
+  { t: 94, k: "verdict", a: "ines", text: "Verdict: you found the trap. Sealed.", data: { taskId: "t1", result: "passed", correct: true, key: "fails", trap: "Duplicated rows", sealed: true } },
   { t: 100, k: "mastery.update", a: "learner", text: "Duplicated rows: 40% to 60%.", data: { trap: "Duplicated rows", from: 0.4, to: 0.6 } },
   { t: 104, k: "voice.line", a: "vale", text: "Good catch. The same sample was entered twice.", data: { audio: null } },
   { t: 104, k: "sponsor.call", data: { sponsor: "runware", label: "Voice line", count: 1, cost: 0.004 } },

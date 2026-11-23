@@ -1,32 +1,18 @@
 import { useEffect, useState } from "react";
 
-const startKey = (id: string) => `lab-rotation.workspace.start.${id}`;
-
-/** Start time for a task, kept so closing the panel or reloading does not reset the clock. */
-function startedAt(id: string): number {
-  try {
-    const saved = Number(sessionStorage.getItem(startKey(id)));
-    if (saved) return saved;
-    const now = Date.now();
-    sessionStorage.setItem(startKey(id), String(now));
-    return now;
-  } catch {
-    return Date.now();
-  }
-}
-
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-export function Timer({ taskId, seconds }: { taskId: string; seconds: number }) {
-  const [start] = useState(() => startedAt(taskId));
-  const left = () => Math.max(0, seconds - Math.floor((Date.now() - start) / 1000));
+/** Counts down from the shared clock (`startedAt` comes from the rotation state). */
+export function Timer({ startedAt, seconds }: { startedAt: number; seconds: number }) {
+  const left = () => Math.max(0, seconds - Math.floor((Date.now() - startedAt) / 1000));
   const [remaining, setRemaining] = useState(left);
 
   useEffect(() => {
+    setRemaining(left());
     const id = setInterval(() => setRemaining(left()), 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, seconds]);
+  }, [startedAt, seconds]);
 
   const state = remaining === 0 ? "over" : remaining <= 60 ? "low" : "ok";
   return (
