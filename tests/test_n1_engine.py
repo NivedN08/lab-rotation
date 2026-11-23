@@ -537,3 +537,13 @@ def test_naive_sentence_only_when_the_quick_number_is_clearly_off():
     assert naive_sentence({"trap": "hidden_variable"}) == ""                                   # no naive key
     assert naive_sentence({"trap": "none", "naive": unit}) == ""
     assert naive_sentence({"trap": "unit_mismatch", "naive": {**unit, "fixed": 0}}) == ""
+
+
+def test_session_end_comes_after_the_last_voice_line(env):
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
+    time.sleep(0.5)
+    evs = events(sid)
+    assert evs[-1]["k"] == "session.end", [e["k"] for e in evs[-4:]]
