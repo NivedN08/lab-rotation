@@ -20,3 +20,8 @@ node_modules/
 web/dist/
 
 .DS_Store
+
+.bruin.yml
+logs/runs
+logs/*.log
+*.py[cod]

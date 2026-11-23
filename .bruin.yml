@@ -4,4 +4,4 @@ environments:
         connections:
             duckdb:
                 - name: duckdb-default
-                  path: data/lab.duckdb
+                  path: data/warehouse.duckdb

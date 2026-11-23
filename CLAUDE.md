@@ -75,7 +75,7 @@ Tests that call a real sponsor service are marked `@pytest.mark.live`.
 - `lab/` Python: session engine, prompts, sponsor clients, tasks, learner model,
   SQL runner, server (FastAPI, `uv run uvicorn lab.server:app --port 8000`).
 - `bench/` BEA 2025 shared task (MRBench) benchmark of the examiner panel.
-- `bruin/` Bruin pipeline over DuckDB at `data/lab.duckdb`.
+- `bruin/` Bruin pipeline over DuckDB at `data/warehouse.duckdb`.
 - `web/` Vite + React + TypeScript. `npm run dev` proxies `/api` to port 8000.
 - `contract/` events, API routes and a hand-written mock session.
 - `data/` local, git-ignored: DuckDB files, session logs, audio, portraits.

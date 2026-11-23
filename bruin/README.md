@@ -1,6 +1,6 @@
 # Bruin pipeline
 
-Owned by N3. DuckDB at `data/lab.duckdb` (connection `duckdb-default` in `../.bruin.yml`).
+Owned by N3. DuckDB at `data/warehouse.duckdb` (connection `duckdb-default` in `../.bruin.yml`).
 
     bruin validate bruin
     bruin run bruin
