@@ -895,6 +895,22 @@ a {
   white-space: nowrap;
 }
 
+.msg .src a {
+  background: var(--night-3);
+  color: var(--gold-hi);
+  font-size: 11px;
+  padding: 2px 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg .src a:hover {
+  color: var(--snow);
+  background: var(--night-4);
+}
+
 .msg .src button:hover {
   color: var(--snow);
   background: var(--night-4);

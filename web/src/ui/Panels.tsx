@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { LabEvent } from "../api/types";
 import type { Note, Role } from "../data/types";
-import { fmtElapsed, MODEL_NAME, plainLine, PRIVATE_NOTE, ROLE_READS, roleLabel, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
+import { fmtElapsed, MODEL_NAME, plainLine, PRIVATE_NOTE, ROLE_READS, roundWord, statusWord, whisperHidden, type Replay } from "../sim/replay";
 import type { Target } from "../world/engine";
 import { roomById } from "../world/layout";
 import { colorOf, headDept } from "../world/palette";
@@ -143,7 +143,7 @@ export function RotationPersonPanel({ id, ...nav }: Nav & { id: string }) {
           <h2>{R.name(id)}</h2>
           <p className="role">
             <span className="swatch" style={{ background: colorOf(a.role, id) }} />
-            {roleLabel(id, a.role)}
+            {R.label(id)}
           </p>
         </div>
       </div>
@@ -206,7 +206,7 @@ export function PersonPanel({ id, ...nav }: Nav & { id: string }) {
           <h2>{R.name(id)}</h2>
           <p className="role">
             <span className="swatch" style={{ background: colorOf(a.role, id) }} />
-            {roleLabel(id, a.role)}
+            {R.label(id)}
           </p>
           <p className="sub">
             {MODEL_NAME[a.model ?? ""] ?? a.model ?? "Model unknown"}
@@ -516,7 +516,7 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 
       <Section title="Who is on it">
         <div className="people">
-          {members.length ? members.map((a) => <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={roleLabel(a.id, a.role)} />) : <p className="empty">Nobody yet.</p>}
+          {members.length ? members.map((a) => <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={R.label(a.id)} />) : <p className="empty">Nobody yet.</p>}
         </div>
         {solos.length > 0 && (
           <p className="sub" style={{ marginTop: 10 }}>
@@ -595,7 +595,7 @@ export function RoomPanel({ id, ...nav }: Nav & { id: string }) {
         <Section title="People" count={people.length}>
           <div className="people">
             {present.map((a) => (
-              <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={a.role === "head" ? roleLabel(a.id, a.role) : a.study ?? ""} />
+              <PersonButton key={a.id} id={a.id} R={R} t={t} select={nav.select} note={a.study ?? R.label(a.id)} />
             ))}
             {!present.length && <p className="empty">Nobody has arrived yet.</p>}
           </div>

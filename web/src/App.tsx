@@ -7,7 +7,7 @@ import { MasteryChart, MuteButton, PanelRoom, SponsorStrip, Voice } from "./pane
 import type { Run } from "./data/types";
 import { isTimeUp, Replay, TIME_UP } from "./sim/replay";
 import { rotationRun } from "./sim/rotation";
-import { Chat, type Msg } from "./ui/Chat";
+import { AskTab, type Msg } from "./ui/AskTab";
 import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, RotationPersonPanel, StudyPanel } from "./ui/Panels";
@@ -97,7 +97,7 @@ export function App() {
   };
   const [taskRunning, setTaskRunning] = useState(false); // the workspace has a task open: widen the panel
   const [filter, setFilter] = useState<string | null>(null);
-  const [chatAgent, setChatAgent] = useState("guide");
+  const [chatAgent, setChatAgent] = useState("vale");
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
   const [tour, setTour] = useState<number | null>(null);
   const [welcome, setWelcome] = useState(false);
@@ -436,19 +436,8 @@ export function App() {
   const R = replay;
   const status = !run ? "Loading the lab…" : rotation.current ? `Your rotation: ${rotation.current.title} is waiting` : "Your rotation is ready";
 
-  const chatPeople = R
-    ? Array.from(
-        new Set(
-          [
-            "director",
-            selected?.type === "agent" ? selected.id : "",
-            ...(filter ? R.run.agents.filter((a) => a.study === filter && a.role !== "solo").map((a) => a.id) : []),
-            ...Object.keys(chats),
-            chatAgent,
-          ].filter((id) => id && id !== "guide" && R.agents.has(id)),
-        ),
-      )
-    : [];
+  // Anyone on the panel can be asked; you can't ask yourself.
+  const chatPeople = R ? ["vale", "sam", "telem", "ines", "riley"].filter((id) => R.agents.has(id)) : [];
 
   const nav = R ? { R, t, select, talk, filter: chooseStudy, live: rotation.events } : null;
 
@@ -596,7 +585,7 @@ export function App() {
                     </Safe>
                   </div>
                 ) : panel === "chat" ? (
-                  <Chat R={R} t={t} server={false} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
+                  <AskTab R={R} sessionId={rotation.sessionId} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} />
                 ) : (
                   <div className="side-body">
                     {selected?.type === "agent" && (isRotation ? <RotationPersonPanel id={selected.id} {...nav} /> : <PersonPanel id={selected.id} {...nav} />)}

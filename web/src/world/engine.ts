@@ -967,7 +967,9 @@ export class LabEngine {
       case "hatch":
         return who.role === "team-b" ? FIX.hatchB : FIX.hatchA;
       case "terminal":
-        // The Bruin terminal: Ines's seat; anyone else stands beside it.
+        // Telem's terminal is the web search terminal in the library; anyone else's is the
+        // Bruin terminal (Ines's seat, handled above), where they stand beside her.
+        if (who.id === "telem") return { tx: 34, ty: 4, px: 34 * TILE + TILE / 2, py: 4 * TILE + TILE - 1 };
         return { tx: 15, ty: 22, px: 15 * TILE + TILE / 2, py: 22 * TILE + TILE - 1 };
       case "search":
         return { tx: 34, ty: 4, px: 34 * TILE + TILE / 2, py: 4 * TILE + TILE - 1 };

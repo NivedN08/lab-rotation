@@ -280,6 +280,12 @@ export class Replay {
     return this.names.get(id) ?? id;
   }
 
+  /** The line under a person's name: the backend's job title when it sends one, else our role label. */
+  label(id: string): string {
+    const a = this.agents.get(id);
+    return a?.title || (a ? roleLabel(id, a.role) : "");
+  }
+
   /** Events of the grading step are pinned to the end of the replay. */
   timeOf(e: Ev) {
     return e.k === "grade.done" ? Math.min(e.t, this.end) : e.t;
