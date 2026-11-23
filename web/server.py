@@ -1,6 +1,12 @@
-"""Optional local server for the Summit Lab replay: static files, run data, and "ask an agent".
+"""Lab Rotation's server: the session API of contract/api.md, plus summit-lab's replay routes.
 
-    python3 web/server.py [--port 8790] [--host 127.0.0.1]
+    uv run python web/server.py [--port 8790] [--host 127.0.0.1]      (LAB_MOCK=1 for mock mode)
+
+Lab Rotation routes (/api/session/..., /api/agents, /api/demo, /api/health, /api/audio/<file>,
+/api/portraits/<file>) are answered by lab.session.api; see contract/api.md. With LAB_MOCK=1 the
+server replays contract/mock_session.jsonl and serves contract/mock_task/.
+
+The rest of this docstring describes summit-lab's routes, which still work.
 
 Python standard library only. The front end works without it (a static deploy answers questions
 offline); with it, a visitor can ask any agent in a replayed run a question, and Claude answers
@@ -45,6 +51,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WEB = pathlib.Path(__file__).resolve().parent
 ROOT = WEB.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+AUDIO = ROOT / "data" / "audio"
+PORTRAITS = ROOT / "data" / "portraits"
+FILE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
+SUMMIT_GET = ("/api/runs", "/api/run/")
 DIST = WEB / "dist"
 PUBLIC_RUNS = WEB / "public" / "runs"
 # (folder, source name), in order of preference when a run name exists in both.
@@ -980,12 +992,32 @@ class Handler(BaseHTTPRequestHandler):
                 if data is None:
                     return self.send_json(404, {"error": f"unknown run {name}"})
                 return self.send_json(200, data)
+            if path.startswith("/api/audio/") or path.startswith("/api/portraits/"):
+                return self.serve_media(path)
             if path.startswith("/api/"):
-                return self.send_json(404, {"error": "unknown endpoint"})
+                return self.send_session_api("GET", path, None)
             return self.serve_static(path)
         except Exception as e:   # never a traceback to the client
             log(f"GET failed: {type(e).__name__}: {e}")
             return self.send_json(500, {"error": "internal error"})
+
+    def send_session_api(self, method: str, path: str, body) -> None:
+        from lab.session import api
+        query = self.path.split("?", 1)[1].split("#", 1)[0] if "?" in self.path else ""
+        status, reply = api.handle(method, path, query, body)
+        return self.send_json(status, reply)
+
+    def serve_media(self, path: str) -> None:
+        base, name = (AUDIO, path[len("/api/audio/"):]) if path.startswith("/api/audio/") else (
+            PORTRAITS, path[len("/api/portraits/"):])
+        if not FILE_RE.match(name) or name.startswith("."):
+            return self.send_json(400, {"error": "bad file name"})
+        target = base / name
+        if not target.is_file():
+            return self.send_json(404, {"error": "no such file"})
+        ctype = CONTENT_TYPES.get(target.suffix.lower()) or mimetypes.guess_type(target.name)[0] \
+            or "application/octet-stream"
+        return self.send_bytes(200, target.read_bytes(), ctype, "public, max-age=3600")
 
     def serve_static(self, path: str) -> None:
         if not (DIST / "index.html").is_file():
@@ -1007,7 +1039,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = self.path.split("?", 1)[0]
             if path != "/api/ask":
-                return self.send_json(404, {"error": "unknown endpoint"})
+                if not path.startswith("/api/"):
+                    return self.send_json(404, {"error": "unknown endpoint"})
+                return self.send_session_api("POST", path, self.read_json_body())
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
@@ -1033,6 +1067,26 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(500, {"error": "internal error"})
 
 
+    def read_json_body(self):
+        """The request body as JSON, or None when there is none. Bad bodies become {"_bad": reason}."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return None
+        if length > MAX_BODY:
+            self.rfile.read(length)
+            return "body too large"
+        raw = self.rfile.read(length)
+        if not raw.strip():
+            return None
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return "body is not JSON"
+
+
 def make_server(host: str = "127.0.0.1", port: int = 8790) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
@@ -1044,7 +1098,14 @@ def main(argv=None) -> None:
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args(argv)
+    try:
+        from lab.env import load_env
+        load_env()
+    except Exception as e:   # never print a value; the name of the failure is enough
+        log(f"could not read .env: {type(e).__name__}")
     server = make_server(args.host, args.port)
+    from lab.session.mock import is_on as mock_on
+    log(f"Lab Rotation API on http://{args.host}:{args.port}/api  mock={'on' if mock_on() else 'off'}")
     backend = "Messages API" if os.environ.get("ANTHROPIC_API_KEY") else (
         "Claude Code CLI" if os.path.exists(CLAUDE_BIN) else "none (asks return 503)")
     log(f"http://{args.host}:{args.port}  ask backend: {backend}, model {ask_model()}")
