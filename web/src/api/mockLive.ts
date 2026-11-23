@@ -450,24 +450,40 @@ export const live = {
     save(s);
   },
 
-  /** The person asked an agent a question. Each agent answers only from what it could see. */
+  /** The person asked an agent a question. Each agent answers only from what it could see. Telem runs a live search and adds links and a trace. */
   ask(q: AskRequest): AskReply {
     const s = session();
     const d = def(s);
     const sees: Record<AgentId, { text: string; sources: string[] }> = {
       vale: { text: `You were new, so every skill sat at 0.15, and the pick was ${d.pickReason}.`, sources: ["your learner profile", "the task pick"] },
       sam: { text: "I can see what you have queried and cited. I can't see the answer key, so I can't say if you are right.", sources: ["your queries", "your cited items"] },
-      telem: { text: "I can search for background on the topic, and for real cases once you have your verdict.", sources: ["Telem searches"] },
+      telem: { text: "", sources: [] },
       ines: { text: "I keep the answer key, so I can't discuss the answer before the verdict.", sources: ["the lab's rules"] },
       riley: { text: "I work on my own and can't share my work while you are on the task.", sources: [] },
       learner: { text: "That's you.", sources: [] },
       system: { text: "", sources: [] },
     };
-    const r = sees[q.agent] ?? sees.vale;
+    let r: AskReply = { agent: q.agent, ...(sees[q.agent] ?? sees.vale) };
     const T = nowT(s);
+    if (q.agent === "telem") {
+      // Telem searches with the learner's question alone and builds its answer from the results.
+      const trace = `https://app.telem.ai/traces/mock-${++s.traces}`;
+      const links = [
+        { title: "How retailers report spend per visit for loyalty members", url: "https://example.com/mock-ask-loyalty-spend" },
+        { title: "Comparing customer groups: what to check before you trust an average", url: "https://example.com/mock-ask-compare-groups" },
+      ];
+      r = {
+        agent: "telem",
+        text: "I searched for your question. The results cover how teams usually compare spend between customer groups and what they check first. The sources and the trace are below.",
+        sources: ["a live Telem search with your question"],
+        links,
+        trace,
+      };
+      plan(s, { t: T + 0.8, k: "sponsor.call", agent: "system", why: "Telem searches live to answer the learner's question", data: { sponsor: "telem", label: "searched to answer a question", count: 1, op: "search", by: "telem", ms: 1210, fallback: false, trace } });
+    }
     byPerson(s, { t: 0, k: "ask", agent: "learner", to: q.agent, task: d.id, why: `the learner asked ${q.agent} a question`, text: q.text });
-    plan(s, { t: T + 1.5, k: "ask.answer", agent: q.agent, to: "learner", task: d.id, why: `answered only from what ${q.agent} could see`, text: r.text, data: { sources: r.sources } });
+    plan(s, { t: T + 1.5, k: "ask.answer", agent: q.agent, to: "learner", task: d.id, why: `answered only from what ${q.agent} could see`, text: r.text, data: { sources: r.sources, ...(r.links ? { links: r.links, trace: r.trace } : {}) } });
     save(s);
-    return { agent: q.agent, text: r.text, sources: r.sources };
+    return r;
   },
 };

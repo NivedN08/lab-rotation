@@ -19,7 +19,7 @@ All backend calls live in `client.ts`. Nothing else in the front end touches `/a
 | `openAppeal(id, taskId, reason)` | `POST /api/session/:id/appeal` |
 | `sendAppealMessage(id, appealId, text)` | `POST /api/session/:id/appeal/:appealId/message` |
 | `getMastery(id)` | `GET /api/session/:id/mastery` |
-| `askAgent(id, {agent, text})` | `POST /api/session/:id/ask` |
+| `askAgent(id, {agent, text})` | `POST /api/session/:id/ask` (a Telem reply adds `links: [{title, url}]` and `trace`; `AskReply`, `AskLink`) |
 | `getAgents()` | `GET /api/agents` |
 | `audioUrl(file)` | `GET /api/audio/:file` (a URL for an audio element) |
 | `getSponsors(id)` | `GET /api/session/:id/sponsors` |
@@ -35,6 +35,7 @@ On by default. `?mock=0` calls the real server. `mock.ts` answers every function
 **The live sample never acts for the learner.** In Your rotation and Judge mode the fake server (`mockLive.ts`) emits `learner.query`, `learner.evidence`, `learner.answer`, `appeal.*` and `ask` events only when the real person does those things (a SQL query, Submit, opening an appeal, asking an agent). Everything else is the lab's own work: Vale's task and brief, Telem's topic-only background, Riley's answer, the panel's whispers, the checks, the verdict, Telem's real case after the verdict, the mastery update. When the person submits, the fake compares their answer with its key and sends a matching verdict: right (verdict and trap both right, `passed`), partly right (one of them right, `failed`, with a score between) or wrong (`failed`, score 0). Whisper words arrive in `panel.transcript` after the verdict. An appeal gets an `appeal.message` from Sam and a ruling that the grade stands. Each agent answers an ask only from what it could see.
 
 - **Judge mode** (`startSession({mode: "judge"})`): one task, `t1`, tier 1, 240 seconds. The start reply lists only that task, and the session ends after its verdict (`session.end`, then `GET /task` returns `{task: null}`).
+- **Asking Telem** returns a canned reply with two `links` and a `trace` (and an `ask.answer` event carrying the same in `data`), so the Ask tab's link row shows without a live server. The other agents answer without links.
 - **Your rotation** (no body, or `mode: "rotation"`): three tasks at tiers 1, 2 and 3. Task 1 is the contract's sample task. Tasks 2 and 3 are made up for the sample and reuse the same tables, so their answer keys are arbitrary.
 - **Time runs out:** if the learner has not answered when the task's seconds are up, the fake answers `cant_tell` for them, and that `learner.answer`'s `why` says so.
 - Only the **demo** (`mock-demo`, `mockSession.ts`) plays the contract's recorded session with its scripted learner.

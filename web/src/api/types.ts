@@ -151,8 +151,18 @@ export type TableProfile = { table: string; columns: ColumnProfile[] };
 
 export type AskRequest = { agent: AgentId; text: string };
 
-/** An agent's answer. It only knows what that agent could see; `sources` says what it used. */
-export type AskReply = { agent: AgentId; text: string; sources: string[] };
+/** One link in an ask reply: where a Telem search result lives. */
+export type AskLink = { title: string; url: string };
+
+/**
+ * An agent's answer. It only knows what that agent could see; `sources` says what it used (in plain words).
+ * When Telem answers, it runs a live search with the learner's question and the reply adds `links` (the results) and
+ * `trace` (the Telem AI trace link).
+ */
+export type AskReply = { agent: AgentId; text: string; sources: string[]; links?: AskLink[]; trace?: string };
+
+/** `ask.answer`'s `data`: the same extras as the reply. */
+export type AskAnswerData = { sources: string[]; links?: AskLink[]; trace?: string };
 
 export type AgentInfo = {
   id: AgentId;
