@@ -10,7 +10,7 @@ __pycache__/
 .pytest_cache/
 
 # Local data (DuckDB files, session logs, audio, portraits)
-data/
+/data/
 *.duckdb
 *.duckdb.wal
 logs/

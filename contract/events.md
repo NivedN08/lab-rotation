@@ -1,150 +1,123 @@
 # Events
 
-Every session is a stream of events, one JSON object per line. The server writes
-them to `data/sessions/<session>.jsonl` and streams them to the browser
-(`GET /api/sessions/{id}/events`, see `api.md`). The web app draws the floor, the
-lab log, the transcript and the sponsor strip from these events only.
+Each session is a list of events. The server writes them to
+`data/sessions/<sessionId>.jsonl`, one per line. The browser reads them with
+`GET /api/session/:id/events?since=N`, polled every second, which returns
+`{events, next}`. The floor, the workspace, the lab log, the transcript and the
+sponsor strip are all drawn from these events. Types live in
+`web/src/api/types.ts` (`LabEvent`).
 
-The contract is frozen at 12:00. After that it only grows (new kinds, new optional
-fields), and only N1 edits it. Ask for changes in `requests/<your stream>.md`.
+The contract only grows from here: new kinds and new optional fields, added by N1 and
+announced to both of us. Ask for changes in `requests/<your stream>.md`.
 
-## Envelope (every event)
+## Fields
 
 | field | type | required | meaning |
 |---|---|---|---|
-| `seq` | int | yes | 1, 2, 3 ... within a session, no gaps |
-| `ts` | string | yes | ISO 8601 UTC, e.g. `2026-11-23T20:15:03.120Z` |
-| `session` | string | yes | session id, e.g. `s-7f3a` |
-| `kind` | string | yes | one of the kinds below |
-| `agent` | string | yes | who acted: an agent id, `learner` or `system` |
-| `why` | string | yes | the reason, in plain words. Shown in the lab log. Never empty. |
-| `to` | string | no | who it is for: an agent id, `learner`, `panel` or `all` |
-| `text` | string | no | words to show (or speak) |
-| `task` | string | no | task id the event belongs to |
-| `evidence` | list | no | refs that back the event, see Evidence refs |
-| `data` | object | no | kind-specific fields, listed below |
+| `seq` | int | yes | 1, 2, 3 ... within a session. `next` in a reply is the last `seq` it returned. |
+| `t` | number | yes | Seconds since the session started (millisecond precision). |
+| `k` | string | yes | The kind, from the list below. |
+| `agent` | string | yes | Who did it, or who it is about: an agent id. `system` when no agent did. |
+| `why` | string | yes | The reason, in plain words. Never empty. This is the decision log the judges read. |
+| `to` | string | no | The second agent, for events between two (whispers, moves toward someone, appeal messages). |
+| `task` | string | no | The task slot id (`t1`, `t2`, `t3`). |
+| `text` | string | no | A plain-words line for the lab log, or the words spoken. |
+| `data` | object | no | Details for that kind, listed below. Field names are camelCase. |
 
-Agent ids: `vale`, `ines`, `sam`, `telem`, `riley`. Plus `learner` and `system`.
+Agent ids: `vale`, `ines`, `sam`, `telem`, `riley`, `learner`, `system`.
 
-Unknown fields must be ignored by readers. Unknown kinds must be shown in the lab
-log as plain text and otherwise ignored.
+Readers ignore fields they don't know. An event of an unknown kind is shown in the
+lab log as its `text` (or `why`) and otherwise ignored.
 
 ## Shared values
 
 - **trap**: `duplicate_rows`, `unit_mismatch`, `dictionary_flip`, `confounder`,
-  `hidden_variable`, `none` (a clean twin: no trap, the claim holds as stated).
-- **skill** (learner model): the five traps plus `trust_clean`.
+  `hidden_variable`, `none`. Mastery uses the same ids, with `none` standing for
+  "trusting a clean result".
+- **verdict**: `holds`, `fails`, `cant_tell`.
+- **mode**: `rotation` (3 tasks with rising tiers) or `judge` (one task, 240 s).
 - **tier**: `1` one trap in one table; `2` a trap plus a decoy; `3` a trap that
   spans two tables.
-- **verdict**: `holds`, `fails`, `cannot_judge`.
-- **mode**: `rotation` (3 tasks, rising tiers) or `judge` (one task, 4-minute clock).
-- **place** (floor spots for `agent.move`): `door`, `vale_office`, `learner_desk`,
-  `riley_desk`, `shelves`, `terminal`, `panel_table`, `whiteboard`.
+- **place** (for `agent.move`): `door`, `vale_office`, `learner_desk`, `riley_desk`,
+  `shelves`, `terminal`, `panel_table`, `whiteboard`.
+- **Evidence** is in the same shape as in `api.md`: `{kind, source, sql?, row?, column?, value?, label}`.
 
-## Evidence refs
+## Kinds and their `data`
 
-```json
-{"type": "query", "id": "q3"}
-{"type": "row", "table": "visits", "key": "v0412"}
-{"type": "column", "table": "visits", "column": "spend"}
-{"type": "cell", "table": "visits", "key": "v0412", "column": "spend"}
-{"type": "check", "id": "unit_mismatch.spend_range_by_region"}
-{"type": "source", "url": "https://...", "trace": "https://..."}
-{"type": "message", "id": "band:..."}
-```
-
-`key` is the value of the table's key column (named in the task's table list).
-
-## Kinds
-
-Each entry lists its `data` fields. Fields marked `?` are optional.
+Fields marked `?` are optional. The front end reads the fields in **bold**; the rest
+are there for the lab log, the verdict card and the people reading them.
 
 ### Session and task
-
-- **`session.start`**: `mode`, `learner` (learner id), `clock_s?` (judge mode: 240).
-- **`task.picked`** (agent `vale`): `task` (id), `skill`, `tier`, `claim`,
-  `tables` (list of table names), `reason` (why this task, also in `why`),
-  `bandit?` (`{"skill": {"mean": 0.41, "sample": 0.37}, ...}`), `fallback?` (bool:
-  the rules fallback chose).
-- **`task.end`**: `task`, `score` (0..1), `beat_rival` (bool).
-- **`session.end`**: `tasks` (count), `total_score`.
+- `session.start` (system): `mode`, `learner`, `tasks` (the number of slots).
+- `task.picked` (vale): **`taskId`**, `title`, `tier`, `claim`, `reason` (why this
+  task, also in `why`; it never names the trap), `fallback` (true when the rules
+  fallback chose instead of the bandit). The trap is never sent before the verdict.
+- `task.end` (system): `taskId`, `score` (0 to 1), `beatRival`, `trap`, `pickReason`
+  (the full reason for the pick, now that it can name the trap), `bandit?`
+  (`{trap: {mean, sample}}`).
+- `session.end` (system): `tasks`, `totalScore`.
 
 ### Floor
+- `agent.move`: `from`, `place`. The floor animates the walk.
+- `agent.say`: `text` is the line and `to` the listener. `data`: `hintLevel?` (0 to 3,
+  Sam only), `quotes?` (`[{text, source}]`, where `source` is `"note"` or a query's
+  SQL. Code has checked every quote word for word against its source.)
+- `voice.line`: **`file`** (played from `/api/audio/:file`), `lineOf` (the `seq` of the
+  `agent.say` it voices), `seconds`, `cost?`, `provider` (`runware`, or `browser`,
+  in which case `file` is empty and the browser speaks the `agent.say` text).
 
-- **`agent.move`**: `from`, `place` (destination). The floor animates the walk.
-- **`agent.say`**: `text` set; `to` set. `data`: `hint_level?` (0..3, Sam only),
-  `quotes?` (list of `{"text": "...", "source": {"type": "query", "id": "q3"}}`,
-  every quote was checked by code against its source), `audio?` (see voice.line).
-- **`voice.line`**: `line_of` (seq of the `agent.say` it voices), `url`
-  (`/api/audio/<file>.mp3`), `duration_s`, `cost_usd?`, `provider` (`runware` or
-  `browser` when we fall back to browser speech; then `url` is empty).
-
-### Librarian
-
-- **`search`** (agent `telem`): `query`, `results` (list of `{"title", "url",
-  "snippet"}`), `trace` (Telem AI trace link), `cached` (bool).
-- **`monitor.hit`** (agent `telem`): `title`, `url`, `trace`, `summary` (the case
-  of the day).
+### Librarian (telem)
+- `search`: `query`, `results` (`[{title, url, snippet}]`), **`trace`** (a Telem AI
+  trace link), `cached` (true when a recorded result answered).
+- `monitor.hit`: `title`, `url`, **`trace`**, `summary` (the case of the day).
 
 ### Learner
+- `learner.query`: `queryId` (`q1`, `q2` ...), `sql`, `ok`, `rowCount`, `ms`, `error?`,
+  `useful` (set by the struggle meter: did the query touch a column that matters?).
+- `learner.evidence`: `action` (`add` or `remove`), `items` (`[Evidence]`). The server
+  sends it when the answer arrives, listing the cited items (there is no separate
+  evidence route).
+- `learner.answer`: **`verdict`**, **`trap`**, `note` (the learner's own words),
+  `evidence` (`[Evidence]`).
+- `meter.update` (system): `value` (0 to 1), `idleSeconds`, `deadEnds`,
+  `wrongGuesses`, `hintLevel` (0 to 3).
 
-- **`learner.query`**: `id` (`q1`, `q2` ...), `sql`, `ok` (bool), `row_count`,
-  `ms`, `error?`, `useful` (bool, set by the struggle meter: did it touch a
-  column that matters?).
-- **`learner.evidence`**: `items` (list of evidence refs), `action` (`add` or
-  `remove`).
-- **`learner.answer`**: `verdict`, `trap`, `text` (the learner's own words),
-  `evidence` (refs), `via` (`text` or `voice`).
-- **`meter.update`** (agent `system`): `value` (0..1), `parts` (`{"idle_s": 95,
-  "dead_ends": 2, "wrong_guesses": 0}`), `hint_level` (0..3).
-
-### Rival
-
-- **`rival.answer`** (agent `riley`): `verdict`, `trap`, `text`, `model` (the
-  open model's name), `provider` (`runware` or `claude_fallback`). Shown to the
-  learner only after `learner.answer`.
+### Rival (riley)
+- `rival.answer`: **`verdict`**, **`trap`**, `note`, `model`, `provider` (`runware` or
+  `claude_fallback`). Sent after `learner.answer`.
 
 ### Panel
-
-- **`panel.whisper`**: private message between panel agents in the BAND room.
-  `from`, `to` (list of agent ids), `text`, `band_message_id?`, `local` (bool:
-  true when BAND is down and the local room carried it). The floor flies an
-  envelope from `from` to each `to`. The browser hides `text` until the
-  verdict.
-- **`check.result`** (agent `ines`): `check` (id, e.g.
-  `duplicate_rows.unique_visit`), `trap`, `passed` (bool), `detail` (one line),
-  `rows?` (up to 5 failing rows, public columns only), `bruin_run?` (run id).
-- **`verdict`** (agent `ines` or `vale`): `score` (0..1), `parts`
-  (`{"verdict": 1, "trap": 1, "evidence": 0.5}`), `correct_verdict`,
-  `correct_trap`, `text` (the feedback), `quotes` (as in agent.say),
-  `failing_check` (check id), `ledger` (`{"index": 3, "hash": "ab12..",
-  "prev": "9f0c.."}`).
-- **`ledger.seal`** (agent `system`): `index`, `hash`, `prev`, `record` (what was
-  sealed: `{"task", "score", "verdict", "trap"}`).
+- `panel.whisper`: a private message between panel agents in the BAND room. `agent`
+  sends it, `to` is the first recipient, and `data.cc` lists any others; the floor
+  flies an envelope to each. `data`: `text` (hidden by the browser until the verdict),
+  `bandMessageId?`, `local` (true when BAND was down and the local room carried it).
+- `check.result` (ines): `check` (an id such as `unit_mismatch.spend_range_by_region`),
+  `trap`, `passed`, `detail` (one line), `rows?` (up to 5 failing rows, public columns
+  only), `bruinRun?`. Sent only after the answer.
+- `verdict` (ines): **`taskId`**, **`result`** (`passed` or `failed`), `score` (0 to 1),
+  `parts` (`{verdict, trap, evidence, hints}`), `correctVerdict`, `correctTrap`, `text`
+  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`).
+- `ledger.seal` (system): `index`, `hash`, `prev`, `record` (`{taskId, score, verdict, trap}`).
 
 ### Appeal
-
-- **`appeal.open`** (agent `learner`): `text`, `room` (BAND chat id or `local`).
-- **`appeal.message`**: `from`, `text`, `band_message_id?`.
-- **`appeal.ruling`** (agent `ines`): `upheld` (bool: the original grade stands),
-  `old_score`, `new_score`, `reason`.
+- `appeal.open` (learner): `appealId`, `taskId`, `reason`, `room` (`band` or `local`).
+- `appeal.message`: `appealId`, `text`, `bandMessageId?`. `agent` is the speaker.
+- `appeal.ruling` (ines): `appealId`, `upheld` (true means the grade stands), `oldScore`,
+  `newScore`, `reason`.
 
 ### Learning
-
-- **`mastery.update`** (agent `system`): `learner`, `skill`, `before`, `after`
-  (0..1, BKT probability), `correct` (bool), `bruin_run?`. One event per skill
-  that changed.
+- `mastery.update` (system): **`trap`**, **`from`**, **`to`** (scores 0 to 1),
+  `correct`, `attempts`, `bruinRun?`. One event per trap whose score changed.
 
 ### Sponsors
-
-- **`sponsor.call`** (agent: whoever made the call, or `system`): `sponsor`
-  (`bruin`, `band`, `telem`, `runware`, `glasser`, `teamily`), `op` (e.g.
-  `search`, `fetch`, `tts`, `image`, `chat`, `send_message`, `run`, `check`),
-  `ok` (bool), `ms`, `cost_usd?`, `trace?` (link), `fallback` (bool: a recorded
-  fallback answered). The sponsor strip counts these.
+- `sponsor.call` (agent `system`): **`sponsor`** (`band`, `telem`, `bruin`, `runware`,
+  `glasser`, `teamily`), **`label`** (what was done, in plain words), **`count`**
+  (calls in this event, usually 1), **`failed?`**, **`cost?`** (dollars), **`trace?`**
+  (link). It also has `op` (`search`, `fetch`, `tts`, `image`, `chat`, `send_message`,
+  `run`, `check`, ...), `by` (the agent that made the call), `ms` and `fallback` (true
+  when a recorded fallback answered).
 
 ### Ask any agent
-
-- **`ask`**: (agent `learner`, `to` the agent asked) `text` the question.
-- **`ask.answer`**: (agent: the agent asked) `text`, `seen` (list of evidence
-  refs the answer used; the agent only sees what its role allows).
+- `ask` (learner): `to` is the agent asked, `text` the question.
+- `ask.answer`: `agent` is the one asked, `text` the answer, `data.sources` (in plain
+  words) what it used.

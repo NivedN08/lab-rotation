@@ -1,0 +1,96 @@
+[
+  {
+    "name": "visits",
+    "about": "One row per store visit",
+    "rowCount": 300,
+    "key": "visit_id",
+    "columns": [
+      {
+        "name": "visit_id",
+        "type": "text",
+        "about": "One store visit"
+      },
+      {
+        "name": "customer_id",
+        "type": "text",
+        "about": "Who visited (customers.customer_id)"
+      },
+      {
+        "name": "store_id",
+        "type": "text",
+        "about": "Where (stores.store_id)"
+      },
+      {
+        "name": "visit_date",
+        "type": "date",
+        "about": "Day of the visit"
+      },
+      {
+        "name": "items",
+        "type": "int",
+        "about": "Items in the basket"
+      },
+      {
+        "name": "spend",
+        "type": "real",
+        "about": "Basket total in dollars"
+      }
+    ]
+  },
+  {
+    "name": "customers",
+    "about": "One row per customer",
+    "rowCount": 60,
+    "key": "customer_id",
+    "columns": [
+      {
+        "name": "customer_id",
+        "type": "text",
+        "about": "Customer"
+      },
+      {
+        "name": "loyalty_member",
+        "type": "int",
+        "about": "1 = loyalty member, 0 = not"
+      },
+      {
+        "name": "joined",
+        "type": "date",
+        "about": "First purchase"
+      },
+      {
+        "name": "home_store",
+        "type": "text",
+        "about": "Store they visit most"
+      }
+    ]
+  },
+  {
+    "name": "stores",
+    "about": "One row per store",
+    "rowCount": 12,
+    "key": "store_id",
+    "columns": [
+      {
+        "name": "store_id",
+        "type": "text",
+        "about": "Store"
+      },
+      {
+        "name": "region",
+        "type": "text",
+        "about": "Sales region"
+      },
+      {
+        "name": "pos_version",
+        "type": "text",
+        "about": "Point-of-sale software version"
+      },
+      {
+        "name": "opened",
+        "type": "int",
+        "about": "Year the store opened"
+      }
+    ]
+  }
+]

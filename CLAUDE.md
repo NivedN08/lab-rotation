@@ -39,13 +39,13 @@ Each stream is one Claude Code session in its own git worktree and branch.
 | N4 Benchmark | Nived | `n4-bench` | `bench/` |
 | P1 World | partner | `p1-world` | `web/src/world/`, `web/src/world3d/`, `web/package.json`, `web/package-lock.json`, `web/index.html`, `web/vite.config.ts`, `web/tsconfig*.json`, `web/public/` |
 | P2 Workspace | partner | `p2-workspace` | `web/src/workspace/` |
-| P3 UI and flow | partner | `p3-ui` | `web/src/ui/`, `web/src/data/`, `web/src/App.tsx`, `web/src/main.tsx`, `web/src/styles.css` |
+| P3 UI and flow | partner | `p3-ui` | `web/src/ui/`, `web/src/api/`, `web/src/ask/`, `web/src/data/`, `web/src/App.tsx`, `web/src/main.tsx`, `web/src/styles.css` |
 | P4 Show | partner | `p4-show` | `README.md`, `docs/`, `demo/` |
 
 Tests go in stream-prefixed files: `tests/test_n1_*.py`, `tests/test_n3_*.py`, and so
 on. Web code needs no test runner; `npm run build` (type check + build) is the gate.
 
-Cross-stream imports are fine (P2 imports types from `web/src/data/`, N1 calls
+Cross-stream imports are fine (P2 imports types from `web/src/api/types.ts`, N1 calls
 `lab.workspace_sql`); editing another stream's files is not.
 
 ## Merge rules
