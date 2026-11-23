@@ -102,4 +102,4 @@ For the demo to show the task and the top bar, the `task.picked` event's `data` 
 
 **Mock mode only:** `getDemo()` returns the fake session (`mockSession.ts`), `sample` is `true`, and the page shows a "Sample data" chip (`SampleBadge`, mounted once in the app) for as long as it plays. Against a real backend `sample` is `false` and nothing says "sample".
 
-Known limit: the workspace Timer counts real seconds from where the recording is, so at a speed other than 1, or while paused, it drifts from the recording.
+The workspace Timer follows the recording's clock while the demo runs (time since `task.picked`), so speed, pause, seek and loop all show correctly. `startedAt` in the rotation state is still wall-clock; a reader that draws its own countdown during the demo should use `useDemo().position` and the `task.picked` time in `timeline` the same way.
