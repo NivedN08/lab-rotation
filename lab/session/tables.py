@@ -102,7 +102,8 @@ class TaskTables:
     def tables(self) -> list[dict]:
         out = []
         for t in self.meta:
-            n = self.con.execute(f'SELECT count(*) FROM "{t["name"]}"').fetchone()[0]
+            with self._lock:   # one DuckDB connection, shared by the HTTP threads and the engine
+                n = self.con.execute(f'SELECT count(*) FROM "{t["name"]}"').fetchone()[0]
             cols = [{k: c[k] for k in ("name", "type", "about") if k in c} for c in t["columns"]]
             out.append({"name": t["name"], "about": t.get("about", ""), "columns": cols, "rowCount": int(n)})
         return out
