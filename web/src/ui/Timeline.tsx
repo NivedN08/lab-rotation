@@ -27,9 +27,12 @@ type Props = {
   onSeek: (t: number) => void;
   onSpeed: (s: number) => void;
   onNext: (dir: 1 | -1) => void;
+  /** In a rotation: whether the floor is following now, and the button that jumps back to it. */
+  live?: { on: boolean; go: () => void };
 };
 
-export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext }: Props) {
+export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek, onSpeed, onNext, live }: Props) {
+  const into = live ? "into the session" : "into the run";
   const ref = useRef<HTMLDivElement>(null);
   const span = Math.max(1, hi - lo);
   const at = (time: number) => `${Math.max(0, Math.min(1, (time - lo) / span)) * 100}%`;
@@ -55,7 +58,9 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
       </select>
       <div className="clock">
         <b>{fmtClock(R.run.started, t)}</b>
-        <span>{fmtElapsed(t)} into the run</span>
+        <span>
+          {fmtElapsed(t)} {into}
+        </span>
       </div>
       <div
         className="scrub"
@@ -66,7 +71,7 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
         aria-valuemin={Math.round(lo)}
         aria-valuemax={Math.round(hi)}
         aria-valuenow={Math.round(t)}
-        aria-valuetext={`${fmtElapsed(t)} into the run`}
+        aria-valuetext={`${fmtElapsed(t)} ${into}`}
         onPointerDown={(e) => {
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           seekAt(e.clientX);
@@ -93,6 +98,12 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
         <NextIcon />
         <span className="hide-sm">Next moment</span>
       </button>
+      {live && (
+        <button className={`btn ${live.on ? "gold" : ""}`} aria-pressed={live.on} onClick={live.go} title="Jump to now and follow the session">
+          <span className={`dot ${live.on ? "working" : ""}`} aria-hidden="true" />
+          Live
+        </button>
+      )}
     </div>
   );
 }

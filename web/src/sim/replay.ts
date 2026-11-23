@@ -49,6 +49,17 @@ export const MODEL_NAME: Record<string, string> = {
 export type CastId = "vale" | "ines" | "sam" | "telem" | "riley" | "learner";
 const CAST_IDS = new Set<string>(["vale", "ines", "sam", "telem", "riley", "learner"]);
 
+/** Rotation events that mark a moment on the timeline, and the tick colour each takes. */
+const LIVE_MOMENT: Record<string, Moment["kind"]> = {
+  "task.picked": "brief",
+  "agent.say": "questions",
+  "learner.answer": "challenge",
+  "rival.answer": "challenge",
+  "check.result": "agree",
+  verdict: "final",
+  "appeal.ruling": "referee",
+};
+
 /** A lab log line for a live event: the backend's own words, nothing added. */
 export function describeLive(e: LabEvent): { text: string; why: string; tone?: "bad" } | null {
   if (!e.text || e.k === "sponsor.call") return null;
@@ -145,6 +156,16 @@ export class Replay {
     this.end = Math.min(run.duration, last + 20);
     if (!run.finished) this.end = run.duration;
     this.buildMoments();
+  }
+
+  /** A rotation grows as its events arrive: the session's end moves on and key events become moments. */
+  addLive(events: LabEvent[]) {
+    for (const e of events) {
+      this.end = Math.max(this.end, e.t);
+      const kind = LIVE_MOMENT[e.k];
+      const d = (e.data ?? {}) as { passed?: boolean };
+      if (kind) this.moments.push({ t: e.t, kind: e.k === "check.result" ? (d.passed === false ? "disagree" : "agree") : kind, label: e.text ?? e.k });
+    }
   }
 
   /** The floor agent with this backend id, if it is on this floor. */

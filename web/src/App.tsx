@@ -45,6 +45,7 @@ export function App() {
   const tRef = useRef(0);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [liveOn, setLiveOn] = useState(false);
   const [speed, setSpeed] = useState(12);
   const [selected, setSelected] = useState<Target | null>(null);
   const [panel, setPanel] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
@@ -117,6 +118,7 @@ export function App() {
         tRef.current = time;
         setT(time);
         setPlaying(p);
+        setLiveOn(!!engineRef.current?.live);
       },
       onSelect: (target) => {
         if (!target) {
@@ -131,30 +133,25 @@ export function App() {
     });
     engine.setSpeed(speed);
     engineRef.current = engine;
-    for (const e of rotationEvents.current) engine.placeLive(e);
+    if (replay.run.run === ROTATION) {
+      // Your rotation: take in everything so far and follow it live.
+      engine.addLive(rotationEvents.current);
+      engine.goLive();
+    }
     if (import.meta.env.DEV) (window as unknown as { __lab: LabEngine }).__lab = engine;
     const live = source?.runs.find((r) => r.run === replay.run.run)?.live;
-    if (tRef.current > 0) engine.seek(Math.min(tRef.current, replay.end));
+    if (replay.run.run === ROTATION) {
+      /* already following the session */
+    } else if (tRef.current > 0) engine.seek(Math.min(tRef.current, replay.end));
     else if (live) engine.seek(replay.end);
     engine.interactive = view === "lab";
     return () => engine.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replay]);
 
-  // The rotation's events play on the floor as they arrive, with the animations it already has.
-  // A batch that spans more than a few seconds is catching up on the past: only its last
-  // moments animate, the rest just puts people where they are.
-  useEffect(
-    () =>
-      subscribeEvents((events) => {
-        const last = events[events.length - 1]?.t ?? 0;
-        for (const e of events) {
-          if (e.t >= last - 4) engineRef.current?.playLive(e);
-          else engineRef.current?.placeLive(e);
-        }
-      }),
-    [],
-  );
+  // The rotation's events reach the floor as they arrive; each plays, with the animations the
+  // floor already has, when the floor's clock reaches it.
+  useEffect(() => subscribeEvents((events) => engineRef.current?.addLive(events)), []);
 
   // Play only the clip while demo mode is on.
   useEffect(() => {
@@ -627,27 +624,26 @@ export function App() {
               </div>
             )}
 
-            {!isRotation && (
-              <Timeline
-                R={R}
-                t={t}
-                playing={playing}
-                speed={speed}
-                filter={filter}
-                lo={lo}
-                hi={hi}
-                onPlay={() => {
-                  setHold(false);
-                  engine()?.setPlaying(!engine()!.playing);
-                }}
-                onSeek={(x) => engine()?.seek(x)}
-                onSpeed={(s) => {
-                  setSpeed(s);
-                  engine()?.setSpeed(s);
-                }}
-                onNext={nextMoment}
-              />
-            )}
+            <Timeline
+              R={R}
+              t={t}
+              playing={playing}
+              speed={speed}
+              filter={filter}
+              lo={lo}
+              hi={hi}
+              onPlay={() => {
+                setHold(false);
+                engine()?.setPlaying(!engine()!.playing);
+              }}
+              onSeek={(x) => engine()?.seek(x)}
+              onSpeed={(s) => {
+                setSpeed(s);
+                engine()?.setSpeed(s);
+              }}
+              onNext={nextMoment}
+              live={isRotation ? { on: liveOn, go: () => engine()?.goLive() } : undefined}
+            />
           </>
         )}
       </div>

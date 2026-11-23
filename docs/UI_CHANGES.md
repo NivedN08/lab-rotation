@@ -47,7 +47,7 @@
 - [x] W3. Evidence picker: click rows, columns or cells to cite them
 - [x] W4. Answer form: holds / fails / can't tell, the trap you found, your evidence, submit
 - [x] W5. Timer and the empty, loading and error states
-- [ ] W6.* Column profile (one click per column)
+- [x] W6.* Column profile (one click per column)
 - [ ] W7.* Chart builder
 - [ ] W8.* Voice input (browser speech to text into the answer form)
 
@@ -99,6 +99,7 @@ No new animation types are needed. Each new event reuses one that the original a
 - 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.
 - 5: Riley sits at the Team B desk nearest the hatch, plate reads "Riley's desk" when zoomed in; both answers fly to the hatch between the rooms.
 - 9: verdict card built from the results card opens when a task's verdict event arrives: your verdict and trap against the key, the Bruin checks next to your cited evidence, your own words when the answer carries them, Riley's answer, sealed. "Open the panel room" or "Back to the lab" closes it. Landing button now reads "Start your rotation".
+- Timeline in your rotation: play/pause, scrub back through the session, speed, previous/next moment (task picked, hints, answers, checks, verdict, ruling), and a Live button that jumps to now and follows the session in real time. The lab log follows the scrubbed time.
 - 8: top bar shows Task 1, 2, 3 with passed/failed marks and the time left, all read from the shared rotation state (same clock as the workspace timer); clicking a task opens the Workspace tab. Falls back to the study chips when there is no rotation.
 - 7: every rotation event from the shared poll plays one of the floor's existing animations on the cast (table above); the lab log shows the backend's own line for each event. Live animations keep moving while the replay is paused. The hatch shows "answers match" or "answers differ" by comparing the two answers as sent.
 - Rotation floor: the floor opens on your rotation, built from the backend's agent list and matched by id (vale, ines, sam, telem, riley, learner); recorded runs stay in the run picker with their timeline, tour and demo. Every event's why shows under its lab log line and in a person's Details panel ("Decisions, and why").

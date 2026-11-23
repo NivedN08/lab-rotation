@@ -9,11 +9,12 @@ export function LabLog({ R, t, filter, select, live = [] }: { R: Replay; t: numb
   const liveLines = useMemo(() => {
     const out: { e: LabEvent; text: string; why: string; tone?: string }[] = [];
     for (const e of live) {
+      if (e.t > t + 0.5) break; // scrubbed back: only what had happened by then
       const d = describeLive(e);
       if (d && out[out.length - 1]?.text !== d.text) out.push({ e, ...d });
     }
     return out.slice(-3);
-  }, [live]);
+  }, [live, t]);
   const described = useMemo(
     () =>
       R.run.events

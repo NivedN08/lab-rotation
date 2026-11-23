@@ -86,8 +86,11 @@ export class LabEngine {
   private liveSeen = new Set<string>();
   /** Each side's latest answer at the hatch, to flash it once both are in. */
   private liveAnswers: { learner?: string; rival?: string } = {};
-  /** Live animations keep moving until this real time, even while the replay is paused. */
-  private liveUntil = 0;
+  /** A rotation's events, in order, and how many of them the clock has passed. */
+  private liveEvents: LabEvent[] = [];
+  private liveIndex = 0;
+  /** Following the session as it happens: the clock runs in real time with the newest events. */
+  live = false;
   private roomLight = new Map<RoomId, number>();
   private elevatorNext = 0;
   private visitorSlot = 0;
@@ -156,6 +159,7 @@ export class LabEngine {
   }
 
   setPlaying(p: boolean) {
+    if (!p) this.live = false;
     if (p && this.t >= this.hi - 0.01) this.seek(this.lo);
     this.playing = p;
     this.cb.onTick(this.t, this.playing);
@@ -166,6 +170,9 @@ export class LabEngine {
   }
 
   seek(t: number) {
+    this.live = false;
+    this.liveSeen.clear();
+    this.liveAnswers = {};
     this.t = Math.max(this.lo, Math.min(this.hi, t));
     this.flyers = [];
     this.floaters = [];
@@ -185,6 +192,9 @@ export class LabEngine {
       a.atHome = true;
       a.bubble = null;
     }
+    // A rotation: put people where its events up to now have them, without animating.
+    this.liveIndex = 0;
+    while (this.liveIndex < this.liveEvents.length && this.liveEvents[this.liveIndex].t <= this.t) this.placeLive(this.liveEvents[this.liveIndex++]);
     for (const r of ROOMS) this.roomLight.set(r.id, this.roomActive(r.id) ? 1 : 0);
     this.cb.onTick(this.t, this.playing);
   }
@@ -309,7 +319,13 @@ export class LabEngine {
     const dt = Math.min(0.1, this.lastNow ? (now - this.lastNow) / 1000 : 0);
     this.lastNow = now;
     this.real += dt;
-    if (this.playing) {
+    if (this.live) {
+      // Live: the clock runs in real time and never falls far behind the newest event.
+      const newest = this.liveEvents[this.liveEvents.length - 1]?.t ?? 0;
+      this.t = Math.max(this.t + dt, newest - 2);
+      this.replay.end = Math.max(this.replay.end, this.t);
+      this.crossLive();
+    } else if (this.playing) {
       const before = this.t;
       this.t = Math.min(this.hi, this.t + dt * this.speed);
       this.crossEvents(before, this.t);
@@ -336,6 +352,31 @@ export class LabEngine {
       this.handle(this.events[this.evIndex]);
       this.evIndex++;
     }
+    this.crossLive();
+  }
+
+  private crossLive() {
+    while (this.liveIndex < this.liveEvents.length && this.liveEvents[this.liveIndex].t <= this.t) {
+      this.playLive(this.liveEvents[this.liveIndex]);
+      this.liveIndex++;
+    }
+  }
+
+  /** Take in a rotation's new events. They play when the clock reaches them. */
+  addLive(events: LabEvent[]) {
+    const lastSeq = this.liveEvents[this.liveEvents.length - 1]?.seq ?? -Infinity;
+    const fresh = events.filter((e) => e.seq > lastSeq);
+    if (!fresh.length) return;
+    this.liveEvents.push(...fresh);
+    this.replay.addLive(fresh);
+  }
+
+  /** Jump to now and follow the session as it happens. */
+  goLive() {
+    this.seek(this.replay.end);
+    this.live = true;
+    this.playing = true;
+    this.cb.onTick(this.t, true);
   }
 
   private handle(e: Ev) {
@@ -485,7 +526,6 @@ export class LabEngine {
   }
 
   playLive(e: LabEvent) {
-    this.liveUntil = this.real + 20;
     const d = (e.data ?? {}) as Record<string, unknown>;
     const who = this.liveActor(e.agent);
     const to = this.liveActor(e.to);
@@ -680,8 +720,8 @@ export class LabEngine {
   // ---- Movement -------------------------------------------------------------------------------
 
   private walkFactor() {
-    if (this.playing) return Math.max(0.7, Math.min(3, this.speed / 10));
-    return this.real < this.liveUntil ? 1 : 0;
+    if (this.live) return 1;
+    return this.playing ? Math.max(0.7, Math.min(3, this.speed / 10)) : 0;
   }
 
   private update(dt: number) {
@@ -737,7 +777,7 @@ export class LabEngine {
       }
     }
     // Notes in flight.
-    const fly = this.playing || this.real < this.liveUntil ? 1 : 0.0;
+    const fly = this.playing ? 1 : 0.0;
     for (const fl of this.flyers) fl.d += fl.speed * dt * Math.max(fly, 0) * Math.max(0.8, Math.min(2.5, this.speed / 12));
     const arrived = this.flyers.filter((fl) => fl.d >= fl.len);
     this.flyers = this.flyers.filter((fl) => fl.d < fl.len);
