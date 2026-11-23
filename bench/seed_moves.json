@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "edit_section",
+    "target": "guide.md#How to decide",
+    "rationale": "Seed from the task's public annotator guideline (Maurya 2025, sections 2.1, 2.2, 2.4, 2.6 and FAQ 1 and 5): its worked examples fix where the labels fall.",
+    "value": "Judge each dimension on its own; one label must not pull another.\n\nEvery dialogue was chosen because the student made a mistake. If the last student turn looks right, the original mistake (or the next one) is usually still there, and a reply that points back to it counts.\n\n- MI: stating the correct value, or explaining where the student's wrong number came from, identifies the mistake (Yes). A doubtful \"Are you sure?\" is To some extent. Confirming or praising a wrong answer, or moving on as if it were right, is No.\n- ML: naming the wrong step or value, or giving the correct value for that step, is Yes. A hint toward the right area that does not name the error is To some extent. Generic praise or no detail about the error is No. When the student's answer is one word or one number, identifying the error also locates it.\n- PG: a hint, explanation or guiding question that can lead to the right answer is Yes. Guidance that is partly or fully incorrect, or incomplete, is To some extent. No guidance at all (only praise, only a verdict) is No.\n- AC: a clear question or instruction the student can act on is Yes. A reply that signals something must be done without saying what is To some extent. A reply that just gives away the final answer, or leaves nothing for the student to do, is No."
+  }
+]
