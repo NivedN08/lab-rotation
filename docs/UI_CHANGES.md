@@ -27,7 +27,7 @@
 - [ ] 3. Room labels for the new cast (`world/layout.ts`: `ROOMS`)
 - [ ] 4. Your desk and sprite in Team A; Sam at the head desk at the back of Team A (`world/layout.ts`, `world/people.ts`)
 - [ ] 5. Riley's desk in Team B, so both answers meet at the hatch (decide: or a desk next to you)
-- [ ] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
+- [x] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
 - [ ] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
 - [ ] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
 - [ ] 9. Verdict card, built from the results card: your verdict against the key, the failing Bruin check next to your evidence, your quoted words, Riley's answer, "sealed" (`App.tsx` or `ui/Verdict.tsx`)
@@ -91,3 +91,5 @@ No new animation types are needed. Each new event reuses one that summit-lab alr
 ## Log
 
 <!-- One line per finished item: number, what changed, screenshot names. -->
+
+- 6: side panel tabs are now Workspace, Details, Ask, Panel room; Workspace mounts `web/src/workspace/index.tsx` (default or `Workspace` export, props in `ui/WorkspaceTab.tsx`), stays mounted across tab switches, widens to 720px while `onTaskChange(true)`; Workspace button in the top bar opens it. Shots: `06-before.png`, `06-after.png`.

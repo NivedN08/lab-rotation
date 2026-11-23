@@ -7,6 +7,7 @@ import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, StudyPanel } from "./ui/Panels";
 import { Timeline } from "./ui/Timeline";
+import { WorkspaceTab } from "./ui/WorkspaceTab";
 import { buildTour } from "./ui/tour";
 import { LabEngine, type Target } from "./world/engine";
 
@@ -27,7 +28,8 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(12);
   const [selected, setSelected] = useState<Target | null>(null);
-  const [panel, setPanel] = useState<"details" | "chat" | null>(null);
+  const [panel, setPanel] = useState<"workspace" | "details" | "chat" | "room" | null>(null);
+  const [taskRunning, setTaskRunning] = useState(false); // the workspace has a task open: widen the panel
   const [filter, setFilter] = useState<string | null>(null);
   const [chatAgent, setChatAgent] = useState("guide");
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
@@ -386,15 +388,24 @@ export function App() {
               <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
                 Tour
               </button>
+              <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
+                Workspace
+              </button>
               <button className="btn gold" onClick={() => talk(chatAgent)}>
                 Ask the lab
               </button>
             </header>
 
             {panel && nav && (
-              <aside className="side box" aria-label={panel === "chat" ? "Ask the lab" : "Details"}>
+              <aside
+                className={`side box${taskRunning && panel === "workspace" ? " wide" : ""}`}
+                aria-label={{ workspace: "Workspace", details: "Details", chat: "Ask the lab", room: "Panel room" }[panel]}
+              >
                 <div className="side-head">
                   <div className="tabs" role="tablist">
+                    <button className="tab" role="tab" aria-selected={panel === "workspace"} onClick={() => setPanel("workspace")}>
+                      Workspace
+                    </button>
                     {selected && (
                       <button className="tab" role="tab" aria-selected={panel === "details"} onClick={() => setPanel("details")}>
                         Details
@@ -403,6 +414,9 @@ export function App() {
                     <button className="tab" role="tab" aria-selected={panel === "chat"} onClick={() => setPanel("chat")}>
                       Ask
                     </button>
+                    <button className="tab" role="tab" aria-selected={panel === "room"} onClick={() => setPanel("room")}>
+                      Panel room
+                    </button>
                   </div>
                   <button className="btn quiet icon" onClick={() => setPanel(null)} aria-label="Close panel" title="Close (Esc)">
                     <svg width="12" height="12" viewBox="0 0 6 6" shapeRendering="crispEdges" aria-hidden="true">
@@ -410,7 +424,15 @@ export function App() {
                     </svg>
                   </button>
                 </div>
-                {panel === "chat" ? (
+                {/* Stays mounted while the panel is open, so switching tabs never loses a task in progress. */}
+                <div className="ws-slot" hidden={panel !== "workspace"}>
+                  <WorkspaceTab onTaskChange={setTaskRunning} />
+                </div>
+                {panel === "workspace" ? null : panel === "room" ? (
+                  <div className="side-body">
+                    <p className="empty">The panel room opens after the verdict. Vale, Ines and Sam talk it over here.</p>
+                  </div>
+                ) : panel === "chat" ? (
                   <Chat R={R} t={t} server={!!source?.server} agent={chatAgent} setAgent={setChatAgent} people={chatPeople} chats={chats} setChats={setChats} select={(x) => select(x)} />
                 ) : (
                   <div className="side-body">

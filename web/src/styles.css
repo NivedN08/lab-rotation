@@ -1261,3 +1261,30 @@ a {
     transition-duration: 1ms !important;
   }
 }
+
+/* ---- Workspace tab: the side panel widens while a task runs ------------------------------------- */
+
+.ws-slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-slot[hidden] {
+  display: none;
+}
+
+.side.wide {
+  width: min(720px, calc(100vw - 28px));
+}
+
+.side.wide ~ .mapctl {
+  right: 746px;
+}
+
+@media (max-width: 860px) {
+  .side.wide {
+    width: auto;
+  }
+}
