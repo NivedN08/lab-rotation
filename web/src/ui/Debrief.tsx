@@ -33,7 +33,8 @@ export function Debrief({ step, events, onBack, onNext, onDone }: Props) {
   }
   // Telem's real case of the same mistake comes after the verdict.
   const verdictAt = events.find((e) => e.k === "verdict")?.t ?? Infinity;
-  const realCase = events.find((e) => e.agent === "telem" && (e.k === "agent.say" || e.k === "search") && e.t >= verdictAt && e.text);
+  const after = events.filter((e) => e.agent === "telem" && e.t >= verdictAt && e.text);
+  const realCase = after.find((e) => e.k === "agent.say") ?? after.find((e) => e.k === "search");
   return (
     <div className="tour box verdict" role="dialog" aria-label="What's next">
       <span className="count">Debrief 3 of 3</span>

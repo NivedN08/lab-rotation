@@ -307,7 +307,12 @@ export class LabEngine {
     const x1 = Math.max(...rs.map((r) => r.x + r.w));
     const y1 = Math.max(...rs.map((r) => r.y + r.h));
     const z = Math.max(this.fitZoom(), Math.min(3, this.cw / ((x1 - x0 + 8) * TILE), this.ch / ((y1 - y0 + 7) * TILE)));
-    this.glide = { x: ((x0 + x1) / 2) * TILE, y: ((y0 + y1) / 2) * TILE + 4, z, at: this.real };
+    // Keep the view on the building: no sky above it or snow beside it when the rooms sit at an edge.
+    const halfW = this.cw / 2 / z;
+    const halfH = this.ch / 2 / z;
+    const x = Math.min(Math.max(((x0 + x1) / 2) * TILE, halfW - TILE), W * TILE - halfW + TILE);
+    const y = Math.min(Math.max(((y0 + y1) / 2) * TILE + 4, halfH - 2 * TILE), H * TILE - halfH + 3 * TILE);
+    this.glide = { x, y, z, at: this.real };
   }
 
   /** Slow, smooth camera moves toward the glide target, or back to the framed rooms after 6 quiet seconds. */

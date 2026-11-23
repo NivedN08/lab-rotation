@@ -115,6 +115,11 @@ export function plainLine(e: LabEvent): string {
   const d = (e.data ?? {}) as { result?: string; trap?: string; from?: number; to?: number };
   if (isTimeUp(e)) return TIME_UP;
   if (e.k === "verdict") return d.result === "passed" ? "You passed this task." : "This task was not passed.";
+  if (e.k === "learner.answer" && e.agent === "learner") {
+    const a = (e.data ?? {}) as { verdict?: string; trap?: string };
+    const said = ({ holds: "the claim holds", fails: "the claim fails", cant_tell: "you can't tell" } as Record<string, string>)[a.verdict ?? ""] ?? a.verdict;
+    return `You answered: ${said}${a.trap && a.trap !== "none" ? `, ${trapLabel(a.trap).toLowerCase()}` : ""}.`;
+  }
   if (e.k === "learner.query") {
     const q = (e.data ?? {}) as { ok?: boolean; rowCount?: number };
     return q.ok === false ? "Your query hit an error." : `You ran a query${typeof q.rowCount === "number" ? ` and got ${q.rowCount} row${q.rowCount === 1 ? "" : "s"}` : ""}.`;

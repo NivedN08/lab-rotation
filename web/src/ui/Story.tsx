@@ -60,7 +60,9 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
   const verdictAt = events.find((e) => e.k === "verdict")?.t;
   const realCase =
     (s.id === "verdict" || s.id === "next") && verdictAt !== undefined
-      ? events.find((e) => e.agent === "telem" && (e.k === "agent.say" || e.k === "search") && e.t >= Math.max(s.start, verdictAt) && e.t < end && e.text)
+      ? ((inRange) => inRange.find((e) => e.k === "agent.say") ?? inRange.find((e) => e.k === "search"))(
+          events.filter((e) => e.agent === "telem" && e.t >= Math.max(s.start, verdictAt) && e.t < end && e.text),
+        )
       : undefined;
   return (
     <div className="tour box" role="region" aria-label="The story so far" aria-live="polite">

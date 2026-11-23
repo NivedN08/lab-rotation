@@ -1400,3 +1400,36 @@ a {
   object-fit: cover;
   object-position: center top;
 }
+
+/* ---- Judge mode while playing: no strip or timeline, so the panel, log and map buttons use the space -- */
+
+.lab.calm .side,
+.lab.calm .log,
+.lab.calm .mapctl {
+  bottom: 14px;
+}
+
+/* ---- The Sample data chip: under the top left, clear of the sponsor strip and the lab log ---------- */
+
+.sample-slot > [role="status"] {
+  top: 116px;
+  bottom: auto !important;
+}
+
+/* A tall card scrolls, but its buttons stay in view at the bottom. */
+.tour.verdict .row {
+  position: sticky;
+  bottom: -14px;
+  margin-bottom: -14px;
+  padding: 10px 0 14px;
+  background: var(--night-2);
+}
+
+/* Judge mode has no strip or timeline below: its cards can use the height. */
+.lab.calm .tour {
+  bottom: 24px;
+}
+
+.lab.calm .tour.verdict {
+  max-height: calc(100vh - 100px);
+}

@@ -454,7 +454,7 @@ export function App() {
 
   return (
     <>
-      <div className={`lab${isRotation && !calm ? " with-strip" : ""}`} inert={view !== "lab" ? true : undefined}>
+      <div className={`lab${isRotation && !calm ? " with-strip" : ""}${calm ? " calm" : ""}`} inert={view !== "lab" ? true : undefined}>
         <canvas ref={canvasRef} className="floor" aria-label="The lab floor. Click a person to see what they are working on." />
         {R && view !== "landing" && (
           <>
@@ -492,7 +492,7 @@ export function App() {
                       Judge mode
                     </span>
                   )}
-                  <TaskChips rotation={judge ? { ...rotation, tasks: rotation.tasks.slice(0, 1) } : rotation} onOpen={() => setPanel("workspace")} noTimer={judgeFlow} />
+                  <TaskChips rotation={judge ? { ...rotation, tasks: rotation.tasks.slice(0, 1) } : rotation} onOpen={() => setPanel("workspace")} noTimer={judgeFlow || demoOn} />
                 </>
               ) : (
                 <nav className="chips" aria-label="Studies">
@@ -528,17 +528,22 @@ export function App() {
                   Tour
                 </button>
               )}
-              {isRotation && (
-                <Safe name="The mute button">
-                  <MuteButton />
-                </Safe>
+              {/* Before Start, nothing here may open a session in the wrong mode. */}
+              {!judgeIntro && (
+                <>
+                  {isRotation && (
+                    <Safe name="The mute button">
+                      <MuteButton />
+                    </Safe>
+                  )}
+                  <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
+                    Workspace
+                  </button>
+                  <button className="btn gold" onClick={() => talk(chatAgent)}>
+                    Ask the lab
+                  </button>
+                </>
               )}
-              <button className="btn quiet hide-sm" aria-pressed={panel === "workspace"} onClick={() => setPanel(panel === "workspace" ? null : "workspace")}>
-                Workspace
-              </button>
-              <button className="btn gold" onClick={() => talk(chatAgent)}>
-                Ask the lab
-              </button>
             </header>
 
             {panel && nav && (
@@ -867,7 +872,9 @@ export function App() {
           </>
         )}
       </div>
-      <SampleBadge />
+      <div className="sample-slot">
+        <SampleBadge />
+      </div>
       {started && (
         <Safe name="Voice lines">
           <Voice />

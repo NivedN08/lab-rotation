@@ -77,9 +77,7 @@ export function Timeline({ R, t, playing, speed, filter, lo, hi, onPlay, onSeek,
       )}
       <div className="clock">
         <b>{session ? fmtElapsed(t) : fmtClock(R.run.started, t)}</b>
-        <span>
-          {fmtElapsed(t)} {into}
-        </span>
+        <span>{session ? into : `${fmtElapsed(t)} ${into}`}</span>
       </div>
       <div
         className="scrub"
