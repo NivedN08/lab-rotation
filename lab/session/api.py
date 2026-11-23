@@ -84,12 +84,9 @@ def engine_for(session_id: str):
 def band_status() -> str:
     try:
         from lab.sponsors import band   # N2
-        status = getattr(band, "status", None)
-        if callable(status):
-            return "live" if status() == "live" else "local"
+        return "live" if band.configured() else "local"
     except Exception:
-        pass
-    return "local"
+        return "local"
 
 
 # ------------------------------------------------------------------------------- inputs
