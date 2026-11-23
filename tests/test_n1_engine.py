@@ -207,7 +207,7 @@ def test_appeal_refunds_a_hint_when_the_log_supports_it(env):
     assert "cents" not in hint["text"].lower()
     status, ap = call("POST", f"/api/session/{sid}/appeal", {"taskId": "t1", "reason": "I had it before the hint"})
     assert status == 200
-    evs = wait_for(sid, lambda evs: any(e["k"] == "appeal.ruling" for e in evs))
+    evs = wait_for(sid, lambda evs: [e["k"] for e in evs].count("ledger.seal") == 2)
     ruling = next(e for e in evs if e["k"] == "appeal.ruling")["data"]
     assert ruling == {**ruling, "appealId": ap["appealId"], "upheld": False, "oldScore": 0.9, "newScore": 1.0}
     assert [e["k"] for e in evs].count("ledger.seal") == 2
