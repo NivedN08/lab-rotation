@@ -1,6 +1,6 @@
 import type { LabEvent } from "../api/types";
 import { MasteryChart, PanelRoom } from "../panels";
-import { plainNumbers } from "../sim/replay";
+import { caseEvent, plainNumbers } from "../sim/replay";
 import { Safe } from "./Safe";
 
 // Judge mode's debrief, one card at a time, centered: (1) the verdict card, then these two:
@@ -31,10 +31,8 @@ export function Debrief({ step, events, onBack, onNext, onDone }: Props) {
       </div>
     );
   }
-  // Telem's real case of the same mistake comes after the verdict.
-  const verdictAt = events.find((e) => e.k === "verdict")?.t ?? Infinity;
-  const after = events.filter((e) => e.agent === "telem" && e.t >= verdictAt && e.text);
-  const realCase = after.find((e) => e.k === "agent.say") ?? after.find((e) => e.k === "search");
+  // Telem's real case of the same mistake, sent after the panel transcript.
+  const realCase = caseEvent(events);
   return (
     <div className="tour box verdict" role="dialog" aria-label="What's next">
       <span className="count">Debrief 3 of 3</span>

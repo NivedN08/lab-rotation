@@ -83,6 +83,19 @@ export function whisperHidden(e: LabEvent, seen: LabEvent[]): boolean {
 /** What a hidden whisper says instead. */
 export const PRIVATE_NOTE = { text: "The panel passes a private note.", why: "Kept private until the verdict." };
 
+/**
+ * Telem's real case of the trap: a search with data.phase "case", sent after the panel transcript.
+ * Older sessions had no phase; for those, what Telem says (or finds) after the verdict.
+ */
+export function caseEvent(events: LabEvent[], from = -Infinity, to = Infinity): LabEvent | undefined {
+  const inRange = events.filter((e) => e.agent === "telem" && e.t >= from && e.t < to);
+  const tagged = inRange.find((e) => e.k === "search" && (e.data as { phase?: string } | undefined)?.phase === "case");
+  if (tagged) return tagged;
+  const verdictAt = events.find((e) => e.k === "verdict")?.t ?? Infinity;
+  const after = inRange.filter((e) => e.t >= verdictAt && e.text);
+  return after.find((e) => e.k === "agent.say") ?? after.find((e) => e.k === "search");
+}
+
 /** A lab log line for a live event: the backend's own words, nothing added. */
 /** Kinds the log leaves out: counters, the struggle meter, voice lines (the agent.say just before has the
  * words) and walks (the floor shows them). Every event stays in each person's Details. */

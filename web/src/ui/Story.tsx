@@ -1,5 +1,5 @@
 import type { LabEvent } from "../api/types";
-import { plainLine, plainNumbers } from "../sim/replay";
+import { caseEvent, plainLine, plainNumbers } from "../sim/replay";
 
 // The demo as a guided story: one scene at a time, following the task as the recording has it.
 // Scene starts come from the recording's own events; the words under each come from those events
@@ -60,9 +60,7 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
   const verdictAt = events.find((e) => e.k === "verdict")?.t;
   const realCase =
     (s.id === "verdict" || s.id === "next") && verdictAt !== undefined
-      ? ((inRange) => inRange.find((e) => e.k === "agent.say") ?? inRange.find((e) => e.k === "search"))(
-          events.filter((e) => e.agent === "telem" && e.t >= Math.max(s.start, verdictAt) && e.t < end && e.text),
-        )
+      ? caseEvent(events, Math.max(s.start, verdictAt), end)
       : undefined;
   return (
     <div className="tour box" role="region" aria-label="The story so far" aria-live="polite">
