@@ -64,6 +64,9 @@ the panel on dev-B at about a third of the calls.
     uv run python -m bench.run single --split test --guide bench/guide_tuned.md --name single-opus-tuned --jobs 4
     uv run python -m bench.submit --name single-opus-tuned
 
+Run on 23 Nov 2026, 14:03-14:16: 191 calls, 0 errors, 1,547 replies labelled, 12 min 42 s
+at 4 parallel calls, all zips written with 0 fallback labels.
+
 This writes one zip per track, each `predictions.json` inside `predictions.json.zip`: the
 test file with an `annotation` holding that track's label added to every tutor response
 (the organisers' sample format; `bench/submit.py` checks every file against the test file
