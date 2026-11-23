@@ -120,3 +120,56 @@ def test_refresh_flattens_the_mock_session(tmp_path):
     # the batch replay (Bruin's bkt_mastery) gives the same mastery as the live model
     st = bkt.trace([{"skill": r["trap"], "correct": float(r["score"]) >= bkt.CORRECT_SCORE} for r in end])
     assert round(st["unit_mismatch"]["score"], 2) == 0.61
+
+
+NEWS = {"trap": "unit_mismatch", "headline": "Grocer's sales report mixed cents and dollars",
+        "url": "https://example.test/news", "trace": "https://example.test/trace"}
+LEAK_WORDS = ("cents", "dollars", "news", "headline", "telem", "case of the day", "unit", "duplicate",
+              "dictionary", "flip", "confound", "hidden", "nudge")
+
+
+def test_nudge_raises_pick_rate_and_never_leaks():
+    def rate(nudge, seed):
+        rng = random.Random(seed)
+        picks = [L.pick_next("gil", tier=1, rng=rng, nudge=nudge) for _ in range(400)]
+        return picks, sum(p["skill"] == "unit_mismatch" for p in picks) / len(picks)
+
+    plain, base = rate(None, 11)
+    nudged, boosted = rate(NEWS, 11)
+    assert boosted > base + 0.1, (base, boosted)
+    assert boosted < 0.8                                   # modest: other skills still come up
+    assert any(p["skill"] == "none" for p in nudged)       # a clean task stays possible
+    for p in nudged:
+        assert p["nudge"] == NEWS
+        assert p["nudged"] == (p["skill"] == "unit_mismatch")
+        assert p["bandit"]["unit_mismatch"]["boost"] == model.NUDGE_BOOST
+        low = p["reason"].lower()
+        assert NEWS["headline"].lower() not in low
+        assert not any(w in low for w in LEAK_WORDS), p["reason"]
+        assert not any(s in low for s in bkt.SKILLS if s != "none")
+        assert NEWS["headline"] in p["pickReason"]
+    assert any(p["nudgeDecided"] for p in nudged)
+    assert all(p["nudged"] is False and p["nudge"] is None for p in plain)
+
+
+def test_nudge_does_not_overrule_mastery():
+    for _ in range(8):
+        L.record("hal", "unit_mismatch", True)
+    rng = random.Random(2)
+    picks = [L.pick_next("hal", tier=1, rng=rng, nudge=NEWS) for _ in range(200)]
+    assert sum(p["skill"] == "unit_mismatch" for p in picks) < 20
+    missed = next(p for p in picks if p["skill"] != "unit_mismatch")
+    assert missed["nudged"] is False and "mastery still favoured" in missed["pickReason"]
+    for p in picks:
+        assert not any(w in p["reason"].lower() for w in LEAK_WORDS)
+
+
+def test_nudge_edge_cases():
+    # avoided skill, unknown trap and the rules fallback: no boost, still a valid pick
+    p = L.pick_next("ivy", tier=1, avoid=["unit_mismatch"], rng=random.Random(0), nudge=NEWS)
+    assert p["skill"] != "unit_mismatch" and p["nudged"] is False and "no boost" in p["pickReason"]
+    p = L.pick_next("ivy", tier=1, rng=random.Random(0), nudge={"trap": "weather", "headline": "x"})
+    assert p["nudge"] is None and p["nudged"] is False
+    p = L.pick_next("ivy", tier=1, rng=random.Random(0), nudge=NEWS, use_bandit=False)
+    assert p["fallback"] is True and p["nudged"] is False and p["nudge"] == NEWS
+    assert not any(w in p["reason"].lower() for w in LEAK_WORDS)
