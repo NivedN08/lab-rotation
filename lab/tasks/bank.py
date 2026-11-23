@@ -32,6 +32,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2] / "data" / "tasks"
 PUBLIC, SEALED = ROOT / "public", ROOT / "sealed"
 SEED = 20261123
 PER = 4
+VERSION = 2   # bump when the key or the public files change shape; an older bank rebuilds itself
 
 
 @dataclass
@@ -68,10 +69,17 @@ def index(log=None) -> dict:
     if _INDEX is None:
         with _BUILD_LOCK:
             if _INDEX is None:
-                if not (SEALED / "index.json").exists():
-                    build(log=log or (lambda *_: None))
+                if not (SEALED / "index.json").exists() or _built_version() != VERSION:
+                    build(per=PER, seed=SEED, root=ROOT, log=log or (lambda *_: None))
                 _INDEX = json.loads((SEALED / "index.json").read_text())
     return _INDEX
+
+
+def _built_version() -> int | None:
+    try:
+        return json.loads((SEALED / "generation.json").read_text()).get("version")
+    except (OSError, ValueError):
+        return None
 
 
 def ids(skill: str | None = None, tier: int | None = None) -> list[str]:
@@ -155,9 +163,11 @@ def generate_one(skill: str, tier: int, truth: str, seed: int, n: int, folder: p
                     "plainReading": short(naive)}
     else:
         careless = {"verdict": naive["verdict"], "trap": "none", "note": R.careless_note(naive), **short(naive)}
+    number = R.naive_number(careless, careful, skill, d["higher"])
     return {"trap": skill, "tier": tier, "correctVerdict": truth, "correctTrap": skill, "claim": d["claim"],
             "higher": d["higher"], "decoy": d["decoy"], "footprint": d["footprint"],
             "careful": careful, "careless": careless,
+            **({"naive": number} if number else {}),
             "matters": R.matters(skill, d), "hints": R.hints(skill, d),
             "checks": list(CHECK_IDS.values()), "failingCheck": want_fail[0] if want_fail else None,
             "checkResults": checks, "seed": seed, "n": n, "attempts": attempt + 1}
@@ -198,7 +208,7 @@ def build(per: int = PER, seed: int = SEED, root: pathlib.Path = ROOT, log=print
             log(f"{bid} {skill:16s} t{tier} {truth:6s} attempts={key['attempts']}")
     (sealed / "index.json").write_text(json.dumps(dict(sorted(idx.items())), indent=2) + "\n")
     (sealed / "generation.json").write_text(json.dumps(
-        {"seed": seed, "per": per, "params": params, "params_source": source}, indent=2, default=str) + "\n")
+        {"version": VERSION, "seed": seed, "per": per, "params": params, "params_source": source}, indent=2, default=str) + "\n")
     global _INDEX
     _INDEX = None
     return idx

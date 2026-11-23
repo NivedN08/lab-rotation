@@ -604,3 +604,23 @@ def hints(trap: str, d: dict) -> list[str]:
             "Nothing is planted in this one: the plain comparison is the right one.",
         ],
     }[trap]
+
+
+GROUP_WORDS = {"members": "members'", "others": "other customers'"}
+
+
+def naive_number(careless: dict, careful: dict, trap: str, higher: str) -> dict | None:
+    """The number the careless analysis gives for the claim's metric (average spend per visit),
+    for the verdict's reality check: {value, unit, label, group, fixed}. `fixed` is the careful
+    value for the same group. For a unit mix-up it is the inflated group (the one that should have
+    looked wrong); otherwise the group the claim says spends more. None when the careless answer
+    has no number (it said can't tell)."""
+    if careless.get("verdict") == CANT_TELL or not careless.get("means"):
+        return None
+    means = careless["means"]
+    group = max(means, key=means.get) if trap == "unit_mismatch" else higher
+    out = {"value": round(float(means[group]), 2), "unit": "USD per visit",
+           "label": f"{GROUP_WORDS[group]} average spend per visit, before the fix", "group": group}
+    if careful.get("means") and group in careful["means"]:
+        out["fixed"] = round(float(careful["means"][group]), 2)
+    return out
