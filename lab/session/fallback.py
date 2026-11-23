@@ -27,6 +27,23 @@ STUB_KEY = {
         {"check": "duplicate_rows.unique_visit", "trap": "duplicate_rows",
          "sql": "select visit_id, count(*) as n from visits group by 1 having count(*) > 1 order by 1 limit 5",
          "pass": "visit_id is unique", "fail": "some visit ids appear more than once"},
+        {"check": "dictionary_flip.loyalty_flag_values", "trap": "dictionary_flip",
+         "sql": "select customer_id, loyalty_member from customers where loyalty_member not in (0, 1) limit 5",
+         "pass": "loyalty_member holds only 0 and 1, as the dictionary says",
+         "fail": "loyalty_member holds values the dictionary does not describe"},
+        {"check": "confounder.pos_version_balance", "trap": "confounder",
+         "sql": "select pos_version, round(100 * avg(loyalty_member)) as member_pct from visits "
+                "join stores using (store_id) join customers using (customer_id) group by 1 "
+                "having abs(avg(loyalty_member) - (select avg(loyalty_member) from visits "
+                "join customers using (customer_id))) > 0.15 order by 1",
+         "pass": "members' share of visits is similar on every point-of-sale version",
+         "fail": "members' share of visits differs a lot between point-of-sale versions"},
+        {"check": "hidden_variable.joins_complete", "trap": "hidden_variable",
+         "sql": "select v.visit_id from visits v left join customers c on c.customer_id = v.customer_id "
+                "left join stores s on s.store_id = v.store_id "
+                "where c.customer_id is null or s.store_id is null limit 5",
+         "pass": "every visit joins to a customer and a store",
+         "fail": "some visits join to no customer or no store"},
         {"check": "unit_mismatch.spend_range_by_region", "trap": "unit_mismatch",
          "sql": "select visit_id, store_id, spend from visits join stores using (store_id) "
                 "where spend > 20 * (select median(spend) from visits) order by spend desc limit 5",

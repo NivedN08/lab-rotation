@@ -51,7 +51,8 @@ are there for the lab log, the verdict card and the people reading them.
 - `session.start` (system): `mode`, `learner`, `tasks` (the number of slots).
 - `task.picked` (vale): **`taskId`**, **`title`**, **`brief`** (the same text as
   `GET /task`), **`seconds`** (the time allowed: 240 in judge mode), `tier`, `claim`,
-  `reason` (why this task, also in `why`), `fallback` (true when the rules fallback
+  `dictionary` (the data dictionary in Markdown, as in `GET /task`), `reason` (why this
+  task, also in `why`), `fallback` (true when the rules fallback
   chose instead of the bandit). None of these name the trap; the trap is never sent
   before the verdict. In a replay `GET /task` is null, so the screen reads the task
   from this event.
@@ -92,20 +93,22 @@ are there for the lab log, the verdict card and the people reading them.
 ### Panel
 - `panel.whisper`: a private message between panel agents in the BAND room. `agent`
   sends it, `to` is the first recipient, and `data.cc` lists any others; the floor
-  flies an envelope to each. `data`: `text` (hidden by the browser until the verdict),
-  `bandMessageId?`, `local` (true when BAND was down and the local room carried it).
-  The server seals the text: until that task's `verdict`, the events route sends
-  `text: ""` and `sealed: true`, and the `verdict` event carries the texts in
-  `data.whispers`. After the verdict (and in a replay of a finished task) whispers
-  arrive with their text.
+  flies an envelope to each. `data`: `text?`, `sealed?`, `bandMessageId?`, `local`
+  (true when BAND was down and the local room carried it). The server holds the text
+  back: until the task's `panel.transcript`, a whisper has no `text` and has
+  `sealed: true`. Once the transcript is out (and in any replay of a finished task, read
+  from `since=0`), whispers arrive with `text` filled in; the front end hides it in a
+  replay until the `verdict` event has played.
+- `panel.transcript` (ines): sent right after the `verdict`. `taskId`, `whispers`
+  (`[{seq, agent, to, text}]`): the text of every whisper of that task.
 - `check.result` (ines): `check` (an id such as `unit_mismatch.spend_range_by_region`),
   `trap`, `passed`, `detail` (one line), `rows?` (up to 5 failing rows, public columns
-  only), `bruinRun?`. Sent only after the answer.
+  only), `bruinRun?`. Sent only after the answer, one per check that ran (one per trap
+  id). The Bruin run that ran them is one `sponsor.call` with `count: 1`; the sponsor
+  totals count checks from these events.
 - `verdict` (ines): **`taskId`**, **`result`** (`passed` or `failed`), `score` (0 to 1),
   `parts` (`{verdict, trap, evidence, hints}`), `correctVerdict`, `correctTrap`, `text`
-  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`),
-  `whispers?` (`[{seq, agent, to, text}]`: the texts of that task's whispers, sent
-  sealed before the verdict).
+  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`).
 - `ledger.seal` (system): `index`, `hash`, `prev`, `record` (`{taskId, score, verdict, trap}`).
 
 ### Appeal

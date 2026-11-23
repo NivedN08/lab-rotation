@@ -85,23 +85,26 @@ def demo() -> dict:
 
 
 def seal_whispers(events: list[dict]) -> list[dict]:
-    """The events as the browser may see them: whisper text stays sealed until its task's verdict.
+    """The events as the browser may see them: whisper text waits for the panel transcript.
 
-    A `panel.whisper` before its task's `verdict` goes out with `data.text` empty and
-    `data.sealed: true`; the `verdict` event carries the texts in `data.whispers`
-    (`[{seq, agent, to, text}]`). Events are copied, never changed in place.
+    A `panel.whisper` goes out without `data.text` and with `data.sealed: true` until the
+    task's `panel.transcript` (sent right after its `verdict`) is among `events`; from then
+    on, and in any replay of a finished task, it goes out with its text. The transcript
+    carries the texts too. Events are copied, never changed in place.
     """
-    done = {e.get("task") for e in events if e.get("k") == "verdict"}
-    by_task: dict = {}
+    opened = {}
+    for e in events:
+        if e.get("k") == "panel.transcript":
+            for w in (e.get("data") or {}).get("whispers") or []:
+                opened[w.get("seq")] = w.get("text", "")
     out = []
     for e in events:
         if e.get("k") == "panel.whisper":
-            d = e.get("data") or {}
-            by_task.setdefault(e.get("task"), []).append(
-                {"seq": e["seq"], "agent": e["agent"], "to": e.get("to"), "text": d.get("text", "")})
-            if e.get("task") not in done:
-                e = {**e, "data": {**d, "text": "", "sealed": True}}
-        elif e.get("k") == "verdict" and "whispers" not in (e.get("data") or {}):
-            e = {**e, "data": {**(e.get("data") or {}), "whispers": list(by_task.get(e.get("task"), []))}}
+            d = {k: v for k, v in (e.get("data") or {}).items() if k not in ("text", "sealed")}
+            if e["seq"] in opened:
+                d["text"] = opened[e["seq"]] or (e.get("data") or {}).get("text", "")
+            else:
+                d["sealed"] = True
+            e = {**e, "data": d}
         out.append(e)
     return out

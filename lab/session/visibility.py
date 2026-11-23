@@ -132,6 +132,8 @@ def view(agent: str, s) -> list[tuple[str, str]]:
     parts = [public_task(s)]
     if agent == "vale":
         parts += [learner_profile(s), whispers(s)] + ([checks(s)] if after else [])
+        if getattr(s, "retail", None):
+            parts.append(("retail benchmarks from Glasser", json.dumps(s.retail, default=str)[:800]))
     elif agent == "ines":
         parts += [key(s)] + ([checks(s), answer(s)] if after else [])
     elif agent == "sam":

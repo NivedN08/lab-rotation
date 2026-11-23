@@ -67,14 +67,16 @@ def test_events_release_at_real_speed(mock, monkeypatch):
     status, first = call("GET", f"/api/session/{sid}/events", query="since=0")
     assert status == 200 and [e["seq"] for e in first["events"]] == [1]   # only t=0 so far
     assert first["next"] == 1
+    script = [json.loads(line) for line in (CONTRACT / "mock_session.jsonl").read_text().splitlines() if line]
+    upto13 = [e["seq"] for e in script if e["t"] <= 13]
     mock.now += 13
     _, more = call("GET", f"/api/session/{sid}/events", query="since=1")
-    assert [e["seq"] for e in more["events"]] == list(range(2, 17))
+    assert [e["seq"] for e in more["events"]] == upto13[1:]
     _, none = call("GET", f"/api/session/{sid}/events", query=f"since={more['next']}")
-    assert none == {"events": [], "next": 16}
+    assert none == {"events": [], "next": upto13[-1]}
     monkeypatch.setenv("LAB_MOCK_SPEED", "100")
-    _, rest = call("GET", f"/api/session/{sid}/events", query="since=16")
-    assert rest["events"][-1]["k"] == "session.end" and rest["next"] == 68
+    _, rest = call("GET", f"/api/session/{sid}/events", query=f"since={upto13[-1]}")
+    assert rest["events"][-1]["k"] == "session.end" and rest["next"] == script[-1]["seq"]
     assert call("GET", f"/api/session/{sid}/task") == (200, {"task": None})
 
 
@@ -83,8 +85,9 @@ def test_totals_and_mastery_follow_the_replay(mock):
     mock.now += 1000
     _, totals = call("GET", f"/api/session/{sid}/sponsors")
     assert totals["band"]["messages"] == 6
-    assert totals["bruin"] == {"checksRun": 2, "checksFailed": 1}
+    assert totals["bruin"] == {"checksRun": 5, "checksFailed": 1}
     assert totals["runware"]["lines"] == 4
+    assert totals["glasser"]["calls"] == 2
     _, mastery = call("GET", f"/api/session/{sid}/mastery")
     by_trap = {m["trap"]: m for m in mastery["traps"]}
     assert len(by_trap) == 6 and by_trap["unit_mismatch"] == {"trap": "unit_mismatch", "score": 0.61, "attempts": 1}
@@ -147,14 +150,17 @@ def test_sql_box_caps_rows():
     assert len(res["rows"]) == 500 and res["truncated"] is True
 
 
-def test_mock_whispers_sealed_until_verdict(mock):
+def test_mock_whispers_sealed_until_the_transcript(mock):
     sid = start()["sessionId"]
     mock.now += 215   # after the panel confers, before the verdict at 220
     _, before = call("GET", f"/api/session/{sid}/events", query="since=0")
     ws = [e for e in before["events"] if e["k"] == "panel.whisper"]
-    assert ws and all(e["data"]["text"] == "" and e["data"]["sealed"] for e in ws)
+    assert ws and all("text" not in e["data"] and e["data"]["sealed"] for e in ws)
     mock.now += 10
     _, after = call("GET", f"/api/session/{sid}/events", query="since=0")
-    verdict = next(e for e in after["events"] if e["k"] == "verdict")
-    assert [w["seq"] for w in verdict["data"]["whispers"]] == [e["seq"] for e in ws]
-    assert all(e["data"]["text"] for e in after["events"] if e["k"] == "panel.whisper")
+    kinds_ = [e["k"] for e in after["events"]]
+    assert kinds_.index("panel.transcript") == kinds_.index("verdict") + 1
+    transcript = next(e for e in after["events"] if e["k"] == "panel.transcript")["data"]
+    assert transcript["taskId"] == "t1" and [w["seq"] for w in transcript["whispers"]] == [e["seq"] for e in ws]
+    opened = [e for e in after["events"] if e["k"] == "panel.whisper"]
+    assert all(e["data"]["text"] and "sealed" not in e["data"] for e in opened)

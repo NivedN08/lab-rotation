@@ -57,7 +57,7 @@ def test_values_the_front_end_reads():
         if e["k"] == "verdict":
             assert d["result"] in ("passed", "failed") and d["taskId"]
         if e["k"] == "task.picked":
-            assert {"taskId", "title", "brief", "seconds"} <= set(d) and d["seconds"] > 0
+            assert {"taskId", "title", "brief", "seconds", "dictionary"} <= set(d) and d["seconds"] > 0
         if e["k"] == "mastery.update":
             assert d["trap"] in TRAPS and 0 <= d["from"] <= 1 and 0 <= d["to"] <= 1
         if e["k"] == "sponsor.call":
@@ -92,3 +92,25 @@ def test_mock_task_tables_match_tables_json():
         assert {c["type"] for c in table["columns"]} <= COLUMN_TYPES
         keys = [r[table["key"]] for r in rows]
         assert len(keys) == len(set(keys))
+
+
+def test_whispers_wait_for_the_transcript():
+    events = mock_events()
+    opened = set()
+    for e in events:
+        if e["k"] == "panel.transcript":
+            opened |= {w["seq"] for w in e["data"]["whispers"]}
+            assert all(w["text"] for w in e["data"]["whispers"])
+        if e["k"] == "panel.whisper":
+            assert "text" not in e["data"] and e["data"]["sealed"] is True
+    assert opened == {e["seq"] for e in events if e["k"] == "panel.whisper"}
+
+
+def test_checks_agree_with_the_bruin_call():
+    events = mock_events()
+    checks = [e for e in events if e["k"] == "check.result"]
+    assert sorted(c["data"]["trap"] for c in checks) == sorted(TRAPS - {"none"})
+    assert sum(not c["data"]["passed"] for c in checks) == 1
+    for e in events:
+        if e["k"] == "sponsor.call":
+            assert e["data"]["count"] == 1 and not e["data"].get("failed")

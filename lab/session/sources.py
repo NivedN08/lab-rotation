@@ -402,3 +402,29 @@ def teamily_post(session: str, tasks: list, mastery_: dict, learner: str, on_cal
     except Exception as e:
         _log(f"Teamily unavailable ({type(e).__name__})")
         return None
+
+
+def glasser_params(on_call) -> dict | None:
+    """Glasser's retail numbers (N2 caches them per day), logged as one sponsor.call.
+
+    N2's client reports live calls itself; a cache hit reports nothing, so this logs it.
+    """
+    if not sponsors_on():
+        return None
+    reported = []
+
+    def relay(call):
+        reported.append(call)
+        if on_call:
+            on_call(call)
+    try:
+        from lab.sponsors.glasser import Glasser   # N2
+        start = time.monotonic()
+        got = Glasser(on_call=relay).retail_params()
+    except Exception as e:
+        _log(f"Glasser unavailable ({type(e).__name__})")
+        return None
+    if not reported and on_call:
+        on_call({"sponsor": "glasser", "label": "read today's retail numbers (cached)", "count": 1, "op": "run",
+                 "by": "system", "ms": int((time.monotonic() - start) * 1000), "fallback": True})
+    return got if isinstance(got, dict) else None

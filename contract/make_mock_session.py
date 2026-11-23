@@ -65,19 +65,26 @@ def query(t, qid, sql, rows, ms, useful, why, ok=True, error=None):
 def meter(t, value, idle, dead, wrong, level, why):
     ev(t, "meter.update", "system", why, task=T,
        data={"value": value, "idleSeconds": idle, "deadEnds": dead, "wrongGuesses": wrong, "hintLevel": level})
+whispers = []  # (seq, agent, to, text) for the panel.transcript after the verdict
 def whisper(t, frm, to, text, why):
-    ev(t, "panel.whisper", frm, why, to=to[0], task=T,
-       data={"text": text, "cc": to[1:], "bandMessageId": f"band-mock-{seq + 1}", "local": False})
+    # Before the verdict a whisper goes out sealed: no text. panel.transcript carries it later.
+    n = ev(t, "panel.whisper", frm, why, to=to[0], task=T,
+           data={"sealed": True, "cc": to[1:], "bandMessageId": f"band-mock-{seq + 1}", "local": False})
+    whispers.append({"seq": n, "agent": frm, "to": to[0], "text": text})
     call(t + 0.2, frm, "band", "send_message", f"{frm} posted in the panel room", 140,
          "the panel talks in its BAND room")
 
 ev(0, "session.start", "system", "a judge sat down at the desk and chose judge mode",
    data={"mode": "judge", "learner": "guest", "tasks": 1})
 call(0.5, "system", "bruin", "run", "loaded the task tables with ingestr", 1900, "every task's tables go through Bruin")
+call(0.6, "system", "glasser", "run", "looked up a typical basket size", 640, "real retail numbers come from Glasser",
+     cost=0.002)
+call(0.7, "system", "glasser", "run", "looked up store counts for the chain", 710, "real retail numbers come from Glasser",
+     cost=0.002)
 ev(1, "task.picked", "vale", "new learner with no history: start with the most common kind of trap, at tier 1",
    task=T, text="Vale picked the first task.",
    data={"taskId": T, "title": task["title"], "brief": task["brief"], "seconds": task["seconds"],
-         "tier": 1, "claim": claim, "fallback": False,
+         "dictionary": task["dictionary"], "tier": 1, "claim": claim, "fallback": False,
          "reason": "new learner with no history: start with the most common kind of trap, at tier 1"})
 move(1.5, "vale", "vale_office", "learner_desk", "brief the learner in person", to="learner")
 say(5, "vale", "learner", "Marketing says loyalty members spend 2.4 times as much per visit. It goes to the board on Friday. Check it before it does.",
@@ -146,15 +153,26 @@ whisper(208, "sam", ["ines", "vale"], "They needed one hint (level 1). Credit th
 whisper(210, "vale", ["ines", "sam"], "Full marks on verdict and trap. Ines, deliver it with the failing check.", "Vale decides the verdict")
 move(212, "ines", "panel_table", "terminal", "run the Bruin checks at the terminal")
 call(213, "ines", "bruin", "check", "ran 5 quality checks", 2600, "Bruin's checks prove the planted trap")
-ev(216, "check.result", "ines", "no duplicate visits, so this check passes", task=T, text="Check passed: visit ids are unique.",
+ev(215.5, "check.result", "ines", "no duplicate visits, so this check passes", task=T, text="Check passed: visit ids are unique.",
    data={"check": "duplicate_rows.unique_visit", "trap": "duplicate_rows", "passed": True,
          "detail": "visit_id is unique (300 of 300)", "bruinRun": "run-mock-2"})
+ev(215.7, "check.result", "ines", "the loyalty flag holds only the values the dictionary describes", task=T,
+   text="Check passed: the loyalty flag matches the dictionary.",
+   data={"check": "dictionary_flip.loyalty_flag_values", "trap": "dictionary_flip", "passed": True,
+         "detail": "loyalty_member holds only 0 and 1 (20 members of 60 customers)", "bruinRun": "run-mock-2"})
+ev(215.9, "check.result", "ines", "members and others use both point-of-sale versions in similar shares", task=T,
+   text="Check passed: no point-of-sale imbalance between the groups.",
+   data={"check": "confounder.pos_version_balance", "trap": "confounder", "passed": True,
+         "detail": "members are 35% of visits on POS 4.2 and 30% on POS 5.0", "bruinRun": "run-mock-2"})
+ev(216.1, "check.result", "ines", "every visit joins to its customer and store", task=T,
+   text="Check passed: nothing is missing across the tables.",
+   data={"check": "hidden_variable.joins_complete", "trap": "hidden_variable", "passed": True,
+         "detail": "300 of 300 visits join to a customer and a store", "bruinRun": "run-mock-2"})
 ev(216.5, "check.result", "ines", "the planted trap: West's spend is out of range for dollars", task=T,
    text="Check failed: West's spend is out of range.",
    data={"check": "unit_mismatch.spend_range_by_region", "trap": "unit_mismatch", "passed": False,
          "detail": "West spend runs 792 to 5600; every other region runs 4 to 74", "bruinRun": "run-mock-2",
          "rows": [["v0083", "st04", 5600.0], ["v0165", "st04", 5272.0], ["v0150", "st04", 5108.0]]})
-call(216.6, "ines", "bruin", "check", "1 check failed", 0, "a failed check is counted on the strip", failed=True)
 ev(218, "ledger.seal", "system", "seal the grade in the hash chain", task=T,
    data={"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000",
          "record": {"taskId": T, "score": 0.9, "verdict": "fails", "trap": "unit_mismatch"}})
@@ -168,6 +186,8 @@ ev(220, "verdict", "ines", "graded against the answer key, with the failing Brui
          "correctVerdict": "fails", "correctTrap": "unit_mismatch", "text": verdict_text, "quotes": quotes,
          "failingCheck": "unit_mismatch.spend_range_by_region",
          "ledger": {"index": 1, "hash": "5b0e2c4f9a7d", "prev": "000000000000"}})
+ev(220.2, "panel.transcript", "ines", "the verdict is in, so the panel's whispers are open", task=T,
+   data={"taskId": T, "whispers": whispers})
 say(221, "ines", "learner", verdict_text, "deliver the verdict out loud", quotes=quotes)
 ev(226, "task.end", "system", "the verdict is in", task=T,
    data={"taskId": T, "score": 0.9, "beatRival": True, "trap": "unit_mismatch",

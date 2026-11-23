@@ -186,7 +186,7 @@ def test_finished_session_replays_after_restart(env, monkeypatch):
     assert call("GET", f"/api/session/{sid}/task") == (200, {"task": None})
     assert [t["name"] for t in call("GET", f"/api/session/{sid}/tables")[1]] == ["visits", "customers", "stores"]
     assert call("GET", f"/api/session/{sid}/tables/visits/rows", query="task=t1&limit=1")[1]["rows"][0][0] == "v0001"
-    assert call("GET", f"/api/session/{sid}/sponsors")[1]["bruin"]["checksRun"] == 2
+    assert call("GET", f"/api/session/{sid}/sponsors")[1]["bruin"] == {"checksRun": 5, "checksFailed": 1}
     assert any(m["attempts"] for m in call("GET", f"/api/session/{sid}/mastery")[1]["traps"])
     assert call("GET", "/api/session/s-none-here/events")[0] == 404
 
@@ -235,11 +235,30 @@ def test_whisper_text_is_sealed_until_the_verdict(env):
     with s.lock:
         s.give_hint(1, s.meter_now())
     whispers = [e for e in events(sid) if e["k"] == "panel.whisper"]
-    assert whispers and all(e["data"]["text"] == "" and e["data"]["sealed"] for e in whispers)
-    assert any(e["data"]["text"] for e in s.log.of_kind("panel.whisper"))   # the log keeps the text
+    assert whispers and all("text" not in e["data"] and e["data"]["sealed"] for e in whispers)
+    assert all(e["data"]["text"] for e in s.log.of_kind("panel.whisper"))   # the log keeps the text
     call("POST", f"/api/session/{sid}/answer", ANSWER)
-    evs = wait_for(sid, lambda evs: any(e["k"] == "verdict" for e in evs))
-    verdict = next(e for e in evs if e["k"] == "verdict")["data"]
-    assert len(verdict["whispers"]) == len([e for e in evs if e["k"] == "panel.whisper"])
-    assert all(w["text"] for w in verdict["whispers"])
+    evs = wait_for(sid, lambda evs: any(e["k"] == "panel.transcript" for e in evs))
+    kinds_ = [e["k"] for e in evs]
+    assert kinds_.index("panel.transcript") == kinds_.index("verdict") + 1
+    transcript = next(e for e in evs if e["k"] == "panel.transcript")["data"]
+    assert len(transcript["whispers"]) == kinds_.count("panel.whisper")
+    assert all(w["text"] for w in transcript["whispers"])
     assert all(e["data"]["text"] for e in evs if e["k"] == "panel.whisper")
+
+
+def test_moves_track_where_agents_are(env):
+    sid = call("POST", "/api/session/start")[1]["sessionId"]
+    for tid in ("t1", "t2"):
+        wait_for(sid, opened(tid))
+        call("POST", f"/api/session/{sid}/answer", {**ANSWER, "taskId": tid})
+        wait_for(sid, lambda evs, tid=tid: any(e["k"] == "task.end" and e.get("task") == tid for e in evs))
+    wait_for(sid, opened("t3"))
+    where = {}
+    for e in events(sid):
+        if e["k"] == "agent.move":
+            assert e["data"]["from"] == where.get(e["agent"], e["data"]["from"]), e
+            assert e["data"]["from"] != e["data"]["place"]
+            where[e["agent"]] = e["data"]["place"]
+    picked = [e for e in events(sid) if e["k"] == "task.picked"]
+    assert len(picked) == 3 and all(p["data"]["dictionary"] for p in picked)

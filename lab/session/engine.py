@@ -56,6 +56,9 @@ SPONSOR_WHY = {"band": "the panel talks in its BAND room",
                "teamily": "the practice summary goes to Teamily"}
 
 
+HOME = {"vale": "vale_office", "ines": "terminal", "sam": "whiteboard", "telem": "door", "riley": "door"}
+
+
 class EngineError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -115,6 +118,8 @@ class Session:
         self.q: queue.Queue = queue.Queue()
         self.lock = threading.RLock()
         self.room = None
+        self.retail: dict | None = None
+        self.where = dict(HOME)
         self._sponsors = None
         self.thread: threading.Thread | None = None
 
@@ -175,7 +180,12 @@ class Session:
         except Exception as e:
             self.engine.log_error(self, "voice", e)
 
-    def move(self, agent: str, frm: str, place: str, why: str, to: str | None = None) -> None:
+    def move(self, agent: str, place: str, why: str, to: str | None = None) -> None:
+        """Walk an agent to a place; `from` is where it really is. A walk to where it stands is skipped."""
+        frm = self.where.get(agent, "door")
+        if frm == place:
+            return
+        self.where[agent] = place
         self.emit("agent.move", agent, why, to=to, task=self.slot.id if self.slot else None,
                   data={"from": frm, "place": place})
 
@@ -190,6 +200,7 @@ class Session:
     def save(self) -> None:
         state = {"mode": self.mode, "learner": self.learner, "idx": self.idx, "qn": self.qn,
                  "wrong": self.wrong_guesses, "finished": self.finished, "appeals": self.appeals,
+                 "where": self.where,
                  "slots": [{"id": s.id, "tier": s.tier, "bankId": s.task.bank_id if s.task else None,
                             "pick": s.pick, "phase": s.phase, "hints": s.hints, "seconds": s.seconds,
                             "openedT": s.opened_t, "answer": s.answer, "grade": s.grade,
@@ -239,7 +250,7 @@ class Session:
         p = s.public()
         self.emit("task.picked", "vale", reason, task=s.id, text=f"Vale picked task {s.id[1:]}.",
                   data={"taskId": s.id, "title": p["title"], "brief": p["brief"], "seconds": p["seconds"],
-                        "tier": s.tier, "claim": p["claim"], "reason": reason,
+                        "dictionary": p["dictionary"], "tier": s.tier, "claim": p["claim"], "reason": reason,
                         "fallback": bool(pick.get("fallback") or s.task.stub)})
         self.save()
         self.q.put(("brief",))
@@ -271,7 +282,7 @@ class Session:
     def do_brief(self) -> None:
         s = self.slot
         p, key = s.public(), s.task.key
-        self.move("vale", "vale_office", "learner_desk", "brief the learner in person", to="learner")
+        self.move("vale", "learner_desk", "brief the learner in person", to="learner")
         brief_fallback = f"{p['brief']} The claim: {p['claim']} Check it before it goes any further."
         vale_job = ("Brief the learner on this task in two or three short sentences: the claim, who wants it, "
                     "and why it must be checked. Do not hint at what might be wrong.")
@@ -284,7 +295,7 @@ class Session:
         if leaks(line, key["trap"]):
             line = brief_fallback
         self.say("vale", line, "deliver the brief and the claim", task=s.id)
-        self.move("telem", "door", "shelves", "look for real cases of claims like this going wrong")
+        self.move("telem", "shelves", "look for real cases of claims like this going wrong")
         found = search_f.result()
         s.search = found
         top = (found.get("results") or [{}])[0]
@@ -292,14 +303,14 @@ class Session:
                   text=f"Telem found a real case: {top.get('title', 'a related case')}"[:200],
                   data={"query": found.get("query", case_query), "results": found.get("results", []),
                         "trace": found.get("trace", ""), "cached": bool(found.get("cached"))})
-        self.move("telem", "shelves", "learner_desk", "bring the case to the learner", to="learner")
+        self.move("telem", "learner_desk", "bring the case to the learner", to="learner")
         telem_fb = f"A real case for you: {top.get('title', 'a related case')}. The source is on the card."
         tline, _ = speaker.call("telem", "Share the one real case from your search results with the learner, "
                                          "in one or two sentences.", view("telem", self), telem_fb, 45)
         self.say("telem", tline, "share one real case with its source", task=s.id)
-        self.move("vale", "learner_desk", "vale_office", "brief done; let the learner work")
-        self.move("telem", "learner_desk", "shelves", "back to the shelves")
-        self.move("riley", "door", "riley_desk", "the intern races the learner on the same task")
+        self.move("vale", "vale_office", "brief done; let the learner work")
+        self.move("telem", "shelves", "back to the shelves")
+        self.move("riley", "riley_desk", "the intern races the learner on the same task")
         s.phase = "analysis"
         s.opened_t = self.log.now()
         self.save()
@@ -317,7 +328,7 @@ class Session:
         self.whisper("ines", "sam", f"Point them here, as a question: {hint}",
                      "Ines knows the key, so she says where to point without naming the trap")
         self.whisper("vale", "sam", "Go ahead, keep it a question.", "Vale approves the hint level")
-        self.move("sam", "whiteboard", "learner_desk", f"the struggle meter reached {m['value']}", to="learner")
+        self.move("sam", "learner_desk", f"the struggle meter reached {m['value']}", to="learner")
         line, _ = speaker.call("sam", "Ask the learner one short question that points where Ines suggested. "
                                       "Do not give the answer.", view("sam", self), hint, 30)
         if leaks(line, key["trap"]):
@@ -325,7 +336,7 @@ class Session:
         s.hints, s.last_hint_t = level, self.log.now()
         self.say("sam", line, f"struggle meter {m['value']}; hint level {level}, as a question", task=s.id,
                  data={"hintLevel": level})
-        self.move("sam", "learner_desk", "whiteboard", "back to the whiteboard to watch")
+        self.move("sam", "whiteboard", "back to the whiteboard to watch")
         self.save()
 
     # ------------------------------------------------------------------------- grading
@@ -333,8 +344,8 @@ class Session:
         s = self.slot
         key, ans = s.task.key, s.answer
         self.rival_answer()
-        for agent, frm in (("vale", "vale_office"), ("ines", "terminal"), ("sam", "whiteboard")):
-            self.move(agent, frm, "panel_table", "the panel confers before the verdict")
+        for agent in ("vale", "ines", "sam"):
+            self.move(agent, "panel_table", "the panel confers before the verdict")
         s.checks, bruin_call = sources.run_checks(s.task)
         g = grading.grade(ans, key, s.hints)
         facts = (f"Score {g['score']} ({g['result']}); verdict part {g['parts']['verdict']}, trap part "
@@ -356,7 +367,7 @@ class Session:
                                     f"{'Passed' if g['result'] == 'passed' else 'Not this time'}: {g['score']}. "
                                     "Ines, deliver it with the failing check.", 35)
         self.whisper("vale", "ines", vale_line, "Vale decides the verdict", cc=["sam"])
-        self.move("ines", "panel_table", "terminal", "run the Bruin checks at the terminal")
+        self.move("ines", "terminal", "run the Bruin checks at the terminal")
         self.on_call(bruin_call)
         for c in s.checks:
             self.emit("check.result", "ines", ("the planted trap shows here" if not c["passed"]
@@ -376,6 +387,10 @@ class Session:
                   data={"taskId": s.id, **{k: g[k] for k in ("result", "score", "parts", "correctVerdict",
                                                              "correctTrap")},
                         "text": text, "quotes": qs, "failingCheck": failing, "ledger": s.ledger})
+        opened = [{"seq": e["seq"], "agent": e["agent"], "to": e.get("to"), "text": (e.get("data") or {}).get("text", "")}
+                  for e in self.log.of_kind("panel.whisper") if e.get("task") == s.id]
+        self.emit("panel.transcript", "ines", "the verdict is in, so the panel's whispers are open", task=s.id,
+                  data={"taskId": s.id, "whispers": opened})
         self.say("ines", text, "deliver the verdict out loud", task=s.id, data={"quotes": qs} if qs else None)
         correct = grading.correct_for_mastery(ans, key)
         if not correct:
@@ -387,6 +402,9 @@ class Session:
                         "trap": key["trap"], "pickReason": f"{pick.get('reason', 'picked by the rules')}; "
                                                           f"it was a {TRAP_LABEL[key['trap']]} task at tier {s.tier}",
                         **({"bandit": pick["bandit"]} if pick.get("bandit") else {})})
+        self.move("vale", "vale_office", "the verdict is delivered; back to the office")
+        self.move("sam", "whiteboard", "back to the whiteboard")
+        self.move("riley", "learner_desk", "Riley comes over to see who won", to="learner")
         upd = sources.learner_update(self.learner, key["trap"], correct)
         if upd.get("from") != upd.get("to"):
             self.emit("mastery.update", "system", f"knowledge tracing after a{' correct' if correct else 'n incorrect'}"
@@ -468,6 +486,7 @@ class Session:
         self.save()
 
     def case_of_day(self) -> None:
+        self.retail = sources.glasser_params(self.on_call)
         got = sources.case_of_day(self.sponsors)
         if got:
             self.emit("monitor.hit", "telem", "Telem's daily monitor watches for real data errors in the news",
@@ -596,6 +615,7 @@ class Engine:
                 state = {}
         s.idx, s.qn, s.wrong_guesses = state.get("idx", 0), state.get("qn", 0), state.get("wrong", 0)
         s.appeals = state.get("appeals", {})
+        s.where = {**HOME, **(state.get("where") or {})}
         for slot, st in zip(s.slots, state.get("slots", [])):
             if st.get("bankId"):
                 slot.task = sources.bank_load(st["bankId"])

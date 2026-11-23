@@ -24,6 +24,8 @@ ask take canned replies and add no events.
 
 **Visibility.** No reply contains the answer key, the trap or the bank id of a task
 that has not been graded yet, panel whisper text before the verdict, or any key.
+The server enforces the whisper rule itself: before a task's `panel.transcript` (sent
+right after its verdict), `panel.whisper` events have no `text` and carry `sealed: true`.
 
 ## Routes
 
@@ -120,6 +122,8 @@ when BAND is down). Replies and the ruling arrive as `appeal.message` and
  "teamily": {"posts": 0}}
 ```
 `cost` is in dollars. `teamily` is an addition the front end may ignore.
+`bruin.checksRun` and `checksFailed` count `check.result` events (one per check), not
+`sponsor.call` counts: one Bruin run that runs five checks is one call.
 
 **Demo**: `GET /api/demo` names a recorded session to replay on stage and on the
 live link. `session` is its sessionId; `start` and `end` are `t` values in seconds
