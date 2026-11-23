@@ -97,6 +97,17 @@ allowed 5 submissions per team per track. CodaBench answers scripts with a bot c
 the phase list could not be read from here. Check step 4 by hand. If nothing is open, the
 honest claim stays the dev-B result.
 
+## Demo lines
+
+Exact on-screen text (three lines; every number names its split):
+
+    MRBench (BEA 2025), held-out dev data: our tuned grading guide adds +5.1 macro-F1 (95% CI +2.1 to +8.0).
+    Dev, tuned guide: MI 66.4 · ML 57.1 · PG 59.7 · AC 69.8. Best teams on the test set: 71.8 · 59.8 · 58.3 · 70.9.
+    Two readers plus a referee score the same as one reader (+0.5, CI -0.8 to +1.8). Test set: score pending on CodaBench.
+
+If CodaBench turns out to be closed, end line 3 with "Test set: not scored (competition closed)."
+If it returns scores, replace that clause with "Test (CodaBench): MI .. · ML .. · PG .. · AC ..".
+
 ## Results
 
 3-class macro-F1 (%), model `claude-opus-5-5` for every agent, first 50 dialogues of each
