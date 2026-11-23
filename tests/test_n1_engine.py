@@ -547,3 +547,47 @@ def test_session_end_comes_after_the_last_voice_line(env):
     time.sleep(0.5)
     evs = events(sid)
     assert evs[-1]["k"] == "session.end", [e["k"] for e in evs[-4:]]
+
+
+def test_riley_states_the_planted_careless_verdict():
+    from lab.session.engine import rival_line, rival_prompt, verdicts_said
+    assert verdicts_said("That doesn't hold up.") == {"fails"}
+    assert verdicts_said("Members $45.86 vs $37.04, so the claim holds.") == {"holds"}
+    assert verdicts_said("No loyalty column, so I can't tell.") == {"cant_tell"}
+    assert verdicts_said("I can\u2019t tell from this data.") == {"cant_tell"}
+    suspicion = "One store's baskets look far too big; probably a unit problem."
+    p = rival_prompt("Members spend more.", "visits (10 rows)", "cant_tell", suspicion)
+    assert "Your verdict: you can't tell" in p and "number" in p and "your number" not in p
+    assert "Your verdict: the claim fails" in rival_prompt("c", "t", "fails", "Members $1. The claim fails.")
+    # A can't-tell answer that invents a number or a verdict falls back to the planted suspicion.
+    assert rival_line("Members spend $52 vs $40, so it looks true.", "cant_tell", suspicion) == (
+        suspicion + " So I can't tell from this data.")
+    assert rival_line("Members average $52, but one store looks off, so I can't tell.", "cant_tell",
+                      suspicion).startswith(suspicion)
+    kept = "One store looks off, probably cents, so I can't tell."
+    assert rival_line(kept, "cant_tell", suspicion) == kept
+    planted = "I averaged spend over all 425 visits: members $44.84, others $37.42. The claim holds."
+    assert rival_line("Members $44.84 vs $37.42: the claim fails.", "holds", planted) == planted
+    assert rival_line("Members $44.84 vs $37.42, so it holds.", "holds", planted).endswith("so it holds.")
+
+
+def test_rival_answer_keeps_the_key_verdict_when_the_model_disagrees(env, monkeypatch):
+    from lab.session import engine as engine_mod
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    s = env.get(sid)
+    suspicion = "There's no loyalty column in visits or customers, so the claim can't be checked."
+    monkeypatch.setitem(s.slot.task.key, "careless", {"verdict": "cant_tell", "trap": "hidden_variable",
+                                                     "note": suspicion})
+    prompts = []
+    monkeypatch.setattr(engine_mod.speaker, "canned", lambda: False)
+    monkeypatch.setattr(sources, "riley_model", lambda sp, system, user: prompts.append(user) or
+                        {"text": "Members $48 vs $41 per visit, so the claim looks true.", "model": "m",
+                         "provider": "runware"})
+    text, model, provider = s.rival_text()
+    assert text == suspicion and provider == "runware"
+    assert "Your verdict: you can't tell" in prompts[0] and "your number" not in prompts[0]
+    monkeypatch.setattr(engine_mod.speaker, "canned", lambda: True)
+    s.emit_rival(text, model, provider)
+    rival = [e for e in events(sid) if e["k"] == "rival.answer"][-1]["data"]
+    assert rival["verdict"] == "cant_tell" and rival["trap"] == "hidden_variable" and rival["note"] == suspicion
