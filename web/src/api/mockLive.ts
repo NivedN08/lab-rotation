@@ -24,6 +24,8 @@ type Def = TaskInfo & {
   background: string;
   realCase: string;
   check: { id: string; detail: string; rows?: (string | number)[][] };
+  /** The real case Telem finds after the verdict: a search result with its source. */
+  caseResult: { query: string; title: string; url: string; snippet: string };
   pickReason: string;
 };
 
@@ -39,7 +41,8 @@ const DEFS: Def[] = [
     background: "Some background for you: comparisons like this usually average spend per visit for each customer group. The source and trace are on the card.",
     realCase: "A real case, now that you have your verdict: a chain once restated a region's sales because its export used cents. Source and trace are on the card.",
     check: { id: "unit_mismatch.spend_range_by_region", detail: "West spend runs 792 to 5600; every other region runs 4 to 74", rows: [["v0083", "st04", 5600], ["v0165", "st04", 5272], ["v0150", "st04", 5108]] },
-    pickReason: "new learner with no history: start with the most common kind of trap, at tier 1",
+    pickReason: "new learner with no history: start at tier 1",
+    caseResult: { query: "retail sales data reported in cents instead of dollars restated", title: "Mock case: a chain restated regional sales after an export unit bug", url: "https://example.com/mock-case-units", snippet: "One region's export switched to minor units..." },
   },
   {
     id: "t2", title: "Weekend baskets", seconds: 240, tier: 2, dictionary,
@@ -52,6 +55,7 @@ const DEFS: Def[] = [
     realCase: "A real case, now that you have your verdict: a retailer once credited weekends for a lift that really came from a loyalty promotion. Source and trace are on the card.",
     check: { id: "confounder.loyalty_mix_by_weekday", detail: "Loyalty members make 61% of weekend visits but 28% of weekday visits", rows: [["weekend", "loyalty", 61], ["weekday", "loyalty", 28]] },
     pickReason: "your last task went well, so the next one is a tier harder: a trap plus a decoy",
+    caseResult: { query: "weekend sales lift credited to the wrong cause loyalty promotion", title: "Mock case: a retailer credited weekends for a lift that came from a loyalty promotion", url: "https://example.com/mock-case-confounder", snippet: "The lift disappeared once promotion weeks were set aside..." },
   },
   {
     id: "t3", title: "Home store visits", seconds: 240, tier: 3, dictionary,
@@ -64,8 +68,19 @@ const DEFS: Def[] = [
     realCase: "A real case, now that you have your verdict: a chain once saw one region's visits drop because an old till version stopped logging small baskets. Source and trace are on the card.",
     check: { id: "hidden_variable.pos_version_by_region", detail: "Every West store runs the old point-of-sale version, which drops visits under $5", rows: [["st04", "West", "pos_v1"], ["st08", "West", "pos_v1"]] },
     pickReason: "you are ready for a trap that spans two tables, so this one hides in the stores table",
+    caseResult: { query: "region visits dropped old point of sale version stopped logging small baskets", title: "Mock case: a chain saw one region's visits drop after an old till stopped logging small baskets", url: "https://example.com/mock-case-hidden-variable", snippet: "The drop traced to one point-of-sale version..." },
   },
 ];
+
+// One check per trap id that has a planted form; the planted trap's check fails and the rest pass.
+const CHECKED: TrapId[] = ["duplicate_rows", "dictionary_flip", "confounder", "hidden_variable", "unit_mismatch"];
+const PASSES: Record<string, [string, string]> = {
+  duplicate_rows: ["duplicate_rows.unique_visit", "visit_id is unique (300 of 300)"],
+  dictionary_flip: ["dictionary_flip.loyalty_flag_values", "loyalty_member holds only 0 and 1, as the dictionary says"],
+  confounder: ["confounder.pos_version_balance", "point-of-sale versions are spread evenly across customer groups"],
+  hidden_variable: ["hidden_variable.joins_complete", "every visit joins to a customer and a store"],
+  unit_mismatch: ["unit_mismatch.spend_range_by_region", "spend runs 4 to 74 in every region"],
+};
 
 const BANDIT = {
   unit_mismatch: { mean: 0.15, sample: 0.71 }, duplicate_rows: { mean: 0.15, sample: 0.52 }, dictionary_flip: { mean: 0.15, sample: 0.33 },
@@ -166,7 +181,7 @@ function intro(s: Live, i: number, T: number) {
     ...voice(s, T + 4.4, "vale", d.id, ref("brief")),
     { t: T + 5, k: "agent.move", agent: "telem", task: d.id, why: "look up background on the topic of this claim", data: { from: first ? "door" : "shelves", place: "shelves" } },
     { t: T + 6, k: "sponsor.call", agent: "system", why: "the librarian looks up background on the topic with Telem AI", data: { sponsor: "telem", label: "searched for background on the topic", count: 1, op: "search", by: "telem", ms: 1430, fallback: false, trace } },
-    { t: T + 7.5, k: "search", agent: "telem", task: d.id, why: "background on the topic helps the learner frame the task, without pointing at a trap", text: "Telem looked up background on the topic of this claim.", data: { query: `background: ${d.claim}`, cached: false, trace, results: [{ title: "Background on this kind of comparison", url: "https://example.com/mock-topic", snippet: "How teams usually compare these numbers..." }] } },
+    { t: T + 7.5, k: "search", agent: "telem", task: d.id, why: "background on the claim's topic; the search uses only the public claim", text: "Telem looked up background on the claim.", data: { phase: "topic", query: `retail data: ${d.claim}`, cached: false, trace, results: [{ title: "Background on this kind of comparison", url: "https://example.com/mock-topic", snippet: "How teams usually compare these numbers..." }] } },
     { t: T + 8, k: "agent.move", agent: "telem", to: "learner", task: d.id, why: "bring the background to the learner", data: { from: "shelves", place: "learner_desk" } },
     { t: T + 11, k: "agent.say", agent: "telem", to: "learner", task: d.id, why: "share some background on the topic, with its source, and nothing about what might be wrong", text: d.background, ref: ref("background") },
     ...voice(s, T + 11.4, "telem", d.id, ref("background")),
@@ -219,17 +234,28 @@ function react(s: Live, d: Def, a: Answer, r: ReturnType<typeof score>, T: numbe
     { t: T + 4, k: "agent.move", agent: "vale", task: t, why: "the panel meets to grade the answer", data: { from: "vale_office", place: "panel_table" } },
     { t: T + 4, k: "agent.move", agent: "ines", task: t, why: "the panel meets to grade the answer", data: { from: "terminal", place: "panel_table" } },
     { t: T + 4, k: "agent.move", agent: "sam", task: t, why: "the panel meets to grade the answer", data: { from: "whiteboard", place: "panel_table" } },
-    // Whispers carry no words until the verdict; panel.transcript brings them.
-    { t: T + 5, k: "panel.whisper", agent: "ines", to: "vale", task: t, why: "Ines shares the basis for the grade with the panel", ref: L("w1"), data: { cc: ["sam"], bandMessageId: `band-mock-${t}-1`, local: false } },
+    // Whispers carry no words (and say they are sealed) until the verdict; panel.transcript brings the words.
+    { t: T + 5, k: "panel.whisper", agent: "ines", to: "vale", task: t, why: "Ines shares the basis for the grade", ref: L("w1"), data: { sealed: true, cc: ["sam"], bandMessageId: `band-mock-${t}-1`, local: false } },
     band(T + 5.2, "ines", "posted in the panel room"),
-    { t: T + 6.5, k: "panel.whisper", agent: "sam", to: "ines", task: t, why: "Sam reports the coaching history", ref: L("w2"), data: { cc: ["vale"], bandMessageId: `band-mock-${t}-2`, local: false } },
+    { t: T + 6.5, k: "panel.whisper", agent: "sam", to: "ines", task: t, why: "Sam reports the coaching history", ref: L("w2"), data: { sealed: true, cc: ["vale"], bandMessageId: `band-mock-${t}-2`, local: false } },
     band(T + 6.7, "sam", "posted in the panel room"),
-    { t: T + 8, k: "panel.whisper", agent: "vale", to: "ines", task: t, why: "Vale decides the verdict", ref: L("w3"), data: { cc: ["sam"], bandMessageId: `band-mock-${t}-3`, local: false } },
+    { t: T + 8, k: "panel.whisper", agent: "vale", to: "ines", task: t, why: "Vale decides the verdict", ref: L("w3"), data: { sealed: true, cc: ["sam"], bandMessageId: `band-mock-${t}-3`, local: false } },
     band(T + 8.2, "vale", "posted in the panel room"),
-    { t: T + 9, k: "sponsor.call", agent: "system", why: "Bruin's checks prove the planted trap", data: { sponsor: "bruin", label: "ran 5 quality checks", count: 1, op: "check", by: "ines", ms: 2600, fallback: false } },
-    { t: T + 9.5, k: "check.result", agent: "ines", task: t, why: "no duplicate visits, so this check passes", text: "Check passed: visit ids are unique.", data: { check: "duplicate_rows.unique_visit", trap: "duplicate_rows", passed: true, detail: "visit_id is unique (300 of 300)", bruinRun: "run-mock-2" } },
-    { t: T + 10, k: "check.result", agent: "ines", task: t, why: `the answer key: ${ruleWhy}`, text: `Check failed: ${d.check.detail}.`, data: { check: d.check.id, trap: d.key.trap, passed: false, detail: d.check.detail, bruinRun: "run-mock-2", rows: d.check.rows } },
-    { t: T + 10.2, k: "sponsor.call", agent: "system", why: "a failed check is counted on the strip", data: { sponsor: "bruin", label: "1 check failed", count: 1, op: "check", by: "ines", ms: 0, fallback: false, failed: true } },
+    // One Bruin run, five checks (one per trap id); the planted trap's check fails.
+    { t: T + 8.5, k: "sponsor.call", agent: "system", why: "Bruin's checks prove the planted trap", data: { sponsor: "bruin", label: "ran 5 quality checks", count: 1, op: "check", by: "ines", ms: 2600, fallback: false } },
+    ...CHECKED.map((trap, i): Ev => {
+      const planted = trap === d.key.trap;
+      const [id, passDetail] = PASSES[trap];
+      return {
+        t: T + 8.7 + i * 0.4, k: "check.result", agent: "ines", task: t,
+        why: planted ? `the answer key: ${ruleWhy}` : `no sign of ${trapLabel(trap).toLowerCase()}, so this check passes`,
+        text: planted ? `Check failed: ${d.check.detail}.` : `Check passed: ${passDetail}.`,
+        data: planted
+          ? { check: d.check.id, trap, passed: false, detail: d.check.detail, bruinRun: "run-mock-2", rows: d.check.rows }
+          : { check: id, trap, passed: true, detail: passDetail, bruinRun: "run-mock-2" },
+      };
+    }),
+    { t: T + 10.8, k: "sponsor.call", agent: "system", why: "a failed check is counted on the strip", data: { sponsor: "bruin", label: "1 check failed", count: 1, op: "check", by: "ines", ms: 0, fallback: false, failed: true } },
     { t: T + 11, k: "ledger.seal", agent: "system", task: t, why: "seal the grade in the hash chain", data: { index: index + 1, hash: s.hash, prev: prev, record: { taskId: t, score: a.score, verdict: a.verdict, trap: a.trap } } },
     {
       t: T + 11.5, k: "verdict", agent: "ines", task: t, text: `${a.result === "passed" ? "Passed" : "Failed"}: ${a.score}.`,
@@ -237,31 +263,31 @@ function react(s: Live, d: Def, a: Answer, r: ReturnType<typeof score>, T: numbe
       data: { taskId: t, result: a.result, score: a.score, parts: { verdict: r.verdict ? 1 : 0, trap: r.trap ? 1 : 0, evidence: r.evidence ? 1 : 0, hints: 0 }, correctVerdict: d.key.verdict, correctTrap: d.key.trap, text: said, quotes: quote, failingCheck: d.check.id, ledger: { index: index + 1, hash: s.hash, prev } },
       ref: tracedRef,
     },
-    // The words of the whispers, now that the verdict is in.
-    { t: T + 11.6, k: "panel.transcript", agent: "system", task: t, why: "the verdict is in, so the panel's private messages can be shown", data: { whispers: [
-      { refSeq: L("w1"), agent: "ines", to: "vale", text: `The key says ${d.key.trap}, verdict ${d.key.verdict}. The learner answered ${a.verdict}, ${a.trap}.` },
+    // Right after the verdict: the words of the whispers.
+    { t: T + 11.7, k: "panel.transcript", agent: "ines", task: t, why: "the verdict is in, so the panel's whispers are open", data: { taskId: t, whispers: [
+      { refSeq: L("w1"), agent: "ines", to: "vale", text: `The key says ${trapLabel(d.key.trap).toLowerCase()}, verdict ${d.key.verdict}. The learner answered ${a.verdict}, ${trapLabel(a.trap).toLowerCase()}.` },
       { refSeq: L("w2"), agent: "sam", to: "ines", text: "No hints were needed. Nothing to deduct." },
       { refSeq: L("w3"), agent: "vale", to: "ines", text: `${r.verdict && r.trap ? "Full marks on verdict and trap." : r.verdict || r.trap ? "Partly right." : "Not right."} Ines, deliver it with the failing check.` },
     ] } },
+    { t: T + 12, k: "agent.move", agent: "ines", task: t, why: "the panel is done, so Ines goes back to the terminal", data: { from: "panel_table", place: "terminal" } },
     { t: T + 12.5, k: "agent.say", agent: "ines", to: "learner", task: t, why: "deliver the verdict out loud", text: said, ref: L("say"), data: { quotes: quote } },
-    ...voice(s, T + 13, "ines", t, L("say")),
-    // After the verdict, Telem brings a real case.
+    ...voice(s, T + 12.9, "ines", t, L("say")),
+    { t: T + 13, k: "agent.move", agent: "vale", task: t, why: "the panel is done, so Vale goes back to the office", data: { from: "panel_table", place: "vale_office" } },
+    { t: T + 13, k: "agent.move", agent: "sam", task: t, why: "the panel is done, so Sam goes back to the whiteboard", data: { from: "panel_table", place: "whiteboard" } },
+    // Telem's real case, after the transcript: he walks to the learner's desk and the case search holds the source and trace.
     { t: T + 13.5, k: "agent.move", agent: "telem", to: "learner", task: t, why: "the verdict is in, so Telem can bring a real case", data: { from: "shelves", place: "learner_desk" } },
-    { t: T + 14.5, k: "sponsor.call", agent: "system", why: "the librarian finds real cases with Telem AI", data: { sponsor: "telem", label: "searched for real cases", count: 1, op: "search", by: "telem", ms: 1380, fallback: false, trace } },
-    { t: T + 15.5, k: "search", agent: "telem", task: t, why: "now that the learner has an answer, a real case shows what this kind of trap looks like outside the lab", text: "Telem found a real case.", data: { query: `real cases of: ${trapLabel(d.key.trap).toLowerCase()}`, cached: false, trace, results: [{ title: "A real case", url: "https://example.com/mock-case", snippet: "A team restated its numbers after..." }] } },
-    { t: T + 16.5, k: "agent.say", agent: "telem", to: "learner", task: t, why: "share one real case with its source, now that the verdict is in", text: d.realCase, ref: L("case") },
-    ...voice(s, T + 16.9, "telem", t, L("case")),
-    { t: T + 17, k: "agent.move", agent: "vale", task: t, why: "the panel is done, so Vale goes back to the office", data: { from: "panel_table", place: "vale_office" } },
-    { t: T + 17, k: "agent.move", agent: "ines", task: t, why: "the panel is done, so Ines goes back to the terminal", data: { from: "panel_table", place: "terminal" } },
-    { t: T + 17, k: "agent.move", agent: "sam", task: t, why: "the panel is done, so Sam goes back to the whiteboard", data: { from: "panel_table", place: "whiteboard" } },
-    { t: T + 20, k: "agent.move", agent: "telem", task: t, why: "back to the shelves", data: { from: "learner_desk", place: "shelves" } },
-    { t: T + 21, k: "task.end", agent: "system", task: t, why: "the verdict is in", data: { taskId: t, score: a.score, beatRival: a.score > (d.riley.verdict === d.key.verdict ? 0.4 : 0), trap: d.key.trap, pickReason: d.pickReason, bandit: BANDIT } },
-    { t: T + 22, k: "mastery.update", agent: "system", task: t, why: `knowledge tracing after ${a.result === "passed" ? "a correct" : "a missed"} answer on ${trapLabel(d.key.trap).toLowerCase()}`, text: `${trapLabel(d.key.trap)} mastery: ${from} to ${to}.`, data: { trap: d.key.trap, from, to, correct: a.result === "passed", attempts: m.attempts + 1, bruinRun: "run-mock-3" } },
-    { t: T + 22.1, k: "sponsor.call", agent: "system", why: "the learner model runs as a Bruin asset", data: { sponsor: "bruin", label: "updated the learner model (bkt_mastery)", count: 1, op: "run", by: "system", ms: 2100, fallback: false } },
+    { t: T + 14, k: "sponsor.call", agent: "system", why: "the librarian finds real cases with Telem AI", data: { sponsor: "telem", label: "searched for real cases", count: 1, op: "search", by: "telem", ms: 1380, fallback: false, trace } },
+    { t: T + 14.5, k: "search", agent: "telem", task: t, why: `this happens in real life: a real case of ${trapLabel(d.key.trap).toLowerCase()}`, text: `Telem found a real case: ${d.caseResult.title}`, data: { phase: "case", trap: d.key.trap, query: d.caseResult.query, cached: false, trace, results: [{ title: d.caseResult.title, url: d.caseResult.url, snippet: d.caseResult.snippet }] } },
+    { t: T + 15.5, k: "agent.say", agent: "telem", to: "learner", task: t, why: "share one real case with its source, now that the verdict is in", text: d.realCase, ref: L("case") },
+    ...voice(s, T + 15.9, "telem", t, L("case")),
+    { t: T + 17, k: "agent.move", agent: "telem", task: t, why: "back to the shelves", data: { from: "learner_desk", place: "shelves" } },
+    { t: T + 17.5, k: "task.end", agent: "system", task: t, why: "the verdict is in", data: { taskId: t, score: a.score, beatRival: a.score > (d.riley.verdict === d.key.verdict ? 0.4 : 0), trap: d.key.trap, pickReason: d.pickReason, bandit: BANDIT } },
+    { t: T + 18.5, k: "mastery.update", agent: "system", task: t, why: `knowledge tracing after ${a.result === "passed" ? "a correct" : "a missed"} answer on ${trapLabel(d.key.trap).toLowerCase()}`, text: `${trapLabel(d.key.trap)} mastery: ${from} to ${to}.`, data: { trap: d.key.trap, from, to, correct: a.result === "passed", attempts: m.attempts + 1, bruinRun: "run-mock-3" } },
+    { t: T + 18.6, k: "sponsor.call", agent: "system", why: "the learner model runs as a Bruin asset", data: { sponsor: "bruin", label: "updated the learner model (bkt_mastery)", count: 1, op: "run", by: "system", ms: 2100, fallback: false } },
   );
 
   // What comes next: the next task, or the end of the session.
-  const next = T + 25;
+  const next = T + 21;
   s.nextAt = next;
   if (s.index + 1 < s.tasks) {
     intro(s, s.index + 1, next);
@@ -377,8 +403,7 @@ export const live = {
     const s = session();
     if (s.ended || s.answers[def(s).id] || s.nextAt !== null) return;
     s.queries += 1;
-    const useful = ok && /(group by|join|avg\(|sum\(|min\(|max\()/i.test(sql);
-    byPerson(s, { t: 0, k: "learner.query", agent: "learner", task: def(s).id, why: ok ? "the learner ran a query" : "the learner ran a query that did not work", text: sql, data: { queryId: `q${s.queries}`, sql, ok, rowCount, ms, useful, ...(error ? { error } : {}) } });
+    byPerson(s, { t: 0, k: "learner.query", agent: "learner", task: def(s).id, why: ok ? "the learner ran a query in the SQL box" : "the query failed", text: sql, data: { queryId: `q${s.queries}`, sql, ok, rowCount, ms, ...(error ? { error } : {}) } });
     save(s);
   },
 

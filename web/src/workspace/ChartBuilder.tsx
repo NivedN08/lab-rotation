@@ -22,7 +22,7 @@ function groupColumn(d: Dataset): string {
 
 const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : String(Math.round(n * 100) / 100));
 
-export function ChartBuilder({ sessionId, tables }: { sessionId: string; tables: TableInfo[] }) {
+export function ChartBuilder({ sessionId, taskId, tables }: { sessionId: string; taskId?: string; tables: TableInfo[] }) {
   const query = useLastQuery();
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState(tables[0]?.name ?? "");
@@ -44,7 +44,7 @@ export function ChartBuilder({ sessionId, tables }: { sessionId: string; tables:
     let live = true;
     setLoading(true);
     setError("");
-    getRows(sessionId, t.name, 0, MAX_ROWS)
+    getRows(sessionId, t.name, 0, MAX_ROWS, taskId)
       .then((rows) => live && setCache((c) => ({ ...c, [source]: { columns: t.columns.map((c) => c.name), rows } })))
       .catch((e) => live && setError((e as Error).message))
       .finally(() => live && setLoading(false));

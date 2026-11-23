@@ -266,3 +266,64 @@
   outline: 0;
   box-shadow: 0 0 0 2px var(--gold);
 }
+
+/* ---- Case card ---- */
+
+.pn-case {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pn-case-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pn-case-head .pn-title {
+  font-size: 20px;
+}
+
+.pn-case-trap {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  cursor: default;
+  color: var(--gold-hi);
+}
+
+.pn-case-what {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.pn-case-snippet {
+  margin: 0;
+  color: var(--mist);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pn-case-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pn-case-more {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.pn-case .pn-why {
+  margin: 0;
+}

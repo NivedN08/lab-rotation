@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent, type PanelTranscriptData } from "../api/client";
+import { labelTraps, openAppeal, sendAppealMessage, useDemo, useRotation, type AgentId, type LabEvent, type PanelTranscriptData } from "../api/client";
 import "./panels.css";
 
 const NAME: Record<AgentId, string> = { vale: "Dr. Vale", ines: "Ines", sam: "Sam", telem: "Telem", riley: "Riley", learner: "You", system: "System" };
 
 const wordsOf = (e: LabEvent): string | undefined => {
   const d = (e.data ?? {}) as { text?: string; reason?: string };
-  return e.text ?? d.text ?? d.reason;
+  const words = e.text ?? d.text ?? d.reason;
+  return words === undefined ? undefined : labelTraps(words);
 };
 
 const verdictTask = (events: LabEvent[]): string | undefined => {
@@ -97,7 +98,7 @@ export function PanelRoom() {
                   {NAME[w.agent] ?? w.agent}
                   {w.to ? ` to ${NAME[w.to] ?? w.to}` : ""}
                 </span>
-                <span>{w.text}</span>
+                <span>{labelTraps(w.text)}</span>
                 {whyOf.get(w.seq) && <span className="pn-why">Why: {whyOf.get(w.seq)}</span>}
               </li>
             ))}

@@ -22,17 +22,19 @@ export default function Workspace({ onTaskChange }: Props) {
   const [tablesError, setTablesError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
+  // Each task has its own tables, so they are read again when the task changes (and for a replay, for the task being shown).
+  const taskId = task?.id;
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !taskId) return;
     let live = true;
     setTablesError("");
-    getTables(sessionId)
+    getTables(sessionId, taskId)
       .then((t) => live && setTables(t))
       .catch((e) => live && setTablesError((e as Error).message));
     return () => {
       live = false;
     };
-  }, [sessionId, attempt]);
+  }, [sessionId, taskId, attempt]);
 
   // The side panel widens while a task is running.
   useEffect(() => {
@@ -97,9 +99,9 @@ export default function Workspace({ onTaskChange }: Props) {
               </details>
             )}
           </div>
-          <TableBrowser sessionId={sessionId} tables={tables} />
+          <TableBrowser key={`tables-${task.id}`} sessionId={sessionId} taskId={task.id} tables={tables} />
           <SqlBox key={`sql-${task.id}`} sessionId={sessionId} firstTable={tables[0]?.name ?? "visits"} tableNames={tables.map((t) => t.name)} />
-          <ChartBuilder sessionId={sessionId} tables={tables} />
+          <ChartBuilder key={`chart-${task.id}`} sessionId={sessionId} taskId={task.id} tables={tables} />
           <EvidenceTray />
           {!watching && <AnswerForm key={task.id} sessionId={sessionId} task={task} onSent={rotation.answerSent} />}
           {awaitingNext && (

@@ -71,10 +71,31 @@ export type Place = "door" | "vale_office" | "learner_desk" | "riley_desk" | "sh
 export type AgentMoveData = { from: Place; place: Place };
 
 /**
+ * `search` (Telem). Each task has two, told apart by `data.phase`:
+ * - `topic`: during the brief. Background on the claim only; nothing about what could be wrong.
+ * - `case`: right after `panel.transcript`, with Telem walking to the learner's desk. A real case of this task's trap
+ *   (or, on a clean task, of trusting a clean result), with its source and trace. `trap` is set only with `case`.
+ */
+export type SearchPhase = "topic" | "case";
+
+export type SearchData = {
+  phase?: SearchPhase;
+  trap?: TrapId;
+  query: string;
+  cached: boolean;
+  /** A Telem AI trace link. */
+  trace: string;
+  results: { title: string; url: string; snippet: string }[];
+};
+
+/** `panel.whisper`'s data. Before the task's `panel.transcript` there is no `text` and `sealed` is true. */
+export type WhisperData = { text?: string; sealed?: boolean; cc?: AgentId[]; bandMessageId?: string; local?: boolean };
+
+/**
  * `panel.transcript`: sent right after the verdict. Before the verdict, `panel.whisper` has no `data.text`;
  * this event carries the words of every whisper, keyed by the whisper's `seq`.
  */
-export type PanelTranscriptData = { whispers: { seq: number; agent: AgentId; to?: AgentId; text: string }[] };
+export type PanelTranscriptData = { taskId?: string; whispers: { seq: number; agent: AgentId; to?: AgentId; text: string }[] };
 
 export type EventsPage = { events: LabEvent[]; next: number };
 
@@ -136,6 +157,8 @@ export type AskReply = { agent: AgentId; text: string; sources: string[] };
 export type AgentInfo = {
   id: AgentId;
   name: string;
+  /** A short title, such as "Lab head" or "Examiner". */
+  title?: string;
   /** Floor role: director, referee, library, head, team-a, team-b. */
   role: string;
   /** What this agent can read, in plain words. */

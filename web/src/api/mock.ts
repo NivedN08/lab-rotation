@@ -122,12 +122,12 @@ export const mock = {
 
   getAgents: () =>
     wait<AgentInfo[]>([
-      { id: "vale", name: "Dr. Vale", role: "director", reads: "The task list and your learner profile.", portrait: null },
-      { id: "ines", name: "Ines", role: "referee", reads: "The answers, the checks and the key.", portrait: null },
-      { id: "sam", name: "Sam", role: "head", reads: "What you have queried and cited so far.", portrait: null },
-      { id: "telem", name: "Telem", role: "library", reads: "Search results and monitor hits.", portrait: null },
-      { id: "riley", name: "Riley", role: "team-b", reads: "The same tables you see, worked separately.", portrait: null },
-      { id: "learner", name: "You", role: "team-a", reads: "Everything you open in the workspace.", portrait: null },
+      { id: "vale", name: "Dr. Vale", title: "Lab director", role: "director", reads: "The task list and your learner profile.", portrait: null },
+      { id: "ines", name: "Ines", title: "Examiner", role: "referee", reads: "The answers, the checks and the key.", portrait: null },
+      { id: "sam", name: "Sam", title: "Lab head", role: "head", reads: "What you have queried and cited so far.", portrait: null },
+      { id: "telem", name: "Telem", title: "Librarian", role: "library", reads: "Search results and monitor hits.", portrait: null },
+      { id: "riley", name: "Riley", title: "Intern", role: "team-b", reads: "The same tables you see, worked separately.", portrait: null },
+      { id: "learner", name: "You", title: "Learner", role: "team-a", reads: "Everything you open in the workspace.", portrait: null },
     ]),
 
   // A short silent clip so the audio element has something to play.

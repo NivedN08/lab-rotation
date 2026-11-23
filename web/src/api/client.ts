@@ -42,6 +42,9 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
 
 const enc = encodeURIComponent;
 
+/** `task` picks which task's tables to read (a slot id), so a replay can show any task of a finished session. Without it the server uses the current one. */
+const taskQuery = (taskId: string | undefined, lead: "?" | "&") => (taskId ? `${lead}task=${enc(taskId)}` : "");
+
 /** True for the fake demo session (mock mode, or the backend had no demo to offer), which the server does not know. */
 const fake = (sessionId: string): boolean => useMock() || sessionId === DEMO_SESSION;
 
@@ -54,14 +57,14 @@ export const getCurrentTask = (sessionId: string): Promise<CurrentTask> =>
   fake(sessionId) ? mock.getCurrentTask() : call("GET", `/api/session/${enc(sessionId)}/task`);
 
 /** Table names, descriptions, columns and row counts. */
-export const getTables = (sessionId: string): Promise<TableInfo[]> =>
-  fake(sessionId) ? mock.getTables() : call("GET", `/api/session/${enc(sessionId)}/tables`);
+export const getTables = (sessionId: string, taskId?: string): Promise<TableInfo[]> =>
+  fake(sessionId) ? mock.getTables() : call("GET", `/api/session/${enc(sessionId)}/tables${taskQuery(taskId, "?")}`);
 
 /** A slice of one table's rows. */
-export const getRows = async (sessionId: string, table: string, offset: number, limit: number): Promise<Cell[][]> => {
+export const getRows = async (sessionId: string, table: string, offset: number, limit: number, taskId?: string): Promise<Cell[][]> => {
   const r: { rows: Cell[][] } = useMock()
     ? await mock.getRows(table, offset, limit)
-    : await call("GET", `/api/session/${enc(sessionId)}/tables/${enc(table)}/rows?offset=${offset}&limit=${limit}`);
+    : await call("GET", `/api/session/${enc(sessionId)}/tables/${enc(table)}/rows?offset=${offset}&limit=${limit}${taskQuery(taskId, "&")}`);
   return r.rows;
 };
 
@@ -109,8 +112,8 @@ export const getMastery = (sessionId: string): Promise<Mastery> =>
   fake(sessionId) ? mock.getMastery(sessionId) : call("GET", `/api/session/${enc(sessionId)}/mastery`);
 
 /** Column profiles for one table: counts, nulls, distinct values, min, max, mean and the most common values. */
-export const getProfile = (sessionId: string, table: string): Promise<TableProfile> =>
-  fake(sessionId) ? mock.getProfile(table) : call("GET", `/api/session/${enc(sessionId)}/tables/${enc(table)}/profile`);
+export const getProfile = (sessionId: string, table: string, taskId?: string): Promise<TableProfile> =>
+  fake(sessionId) ? mock.getProfile(table) : call("GET", `/api/session/${enc(sessionId)}/tables/${enc(table)}/profile${taskQuery(taskId, "?")}`);
 
 /** Ask one agent a question. The agent answers only from what it could see. */
 export const askAgent = (sessionId: string, q: AskRequest): Promise<AskReply> =>
