@@ -15,6 +15,7 @@ from tests.test_n1_contract import AGENTS, TRAPS, VERDICTS, kinds
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LAB_AGENTS", "canned")
+    monkeypatch.setenv("LAB_SPONSORS", "off")
     monkeypatch.delenv("LAB_MOCK", raising=False)
     monkeypatch.setenv("LAB_SESSIONS_DIR", str(tmp_path / "sessions"))
     monkeypatch.setenv("LAB_LEARNERS_DIR", str(tmp_path / "learners"))
@@ -224,3 +225,21 @@ def test_rotation_has_three_rising_tiers(env):
         wait_for(sid, lambda evs, tid=tid: any(e["k"] == "task.end" and e.get("task") == tid for e in evs))
     evs = wait_for(sid, lambda evs: any(e["k"] == "session.end" for e in evs))
     assert next(e for e in evs if e["k"] == "session.end")["data"]["tasks"] == 3
+
+
+def test_whisper_text_is_sealed_until_the_verdict(env):
+    eng = env
+    sid = call("POST", "/api/session/start", {"mode": "judge"})[1]["sessionId"]
+    wait_for(sid, opened("t1"))
+    s = eng.get(sid)
+    with s.lock:
+        s.give_hint(1, s.meter_now())
+    whispers = [e for e in events(sid) if e["k"] == "panel.whisper"]
+    assert whispers and all(e["data"]["text"] == "" and e["data"]["sealed"] for e in whispers)
+    assert any(e["data"]["text"] for e in s.log.of_kind("panel.whisper"))   # the log keeps the text
+    call("POST", f"/api/session/{sid}/answer", ANSWER)
+    evs = wait_for(sid, lambda evs: any(e["k"] == "verdict" for e in evs))
+    verdict = next(e for e in evs if e["k"] == "verdict")["data"]
+    assert len(verdict["whispers"]) == len([e for e in evs if e["k"] == "panel.whisper"])
+    assert all(w["text"] for w in verdict["whispers"])
+    assert all(e["data"]["text"] for e in evs if e["k"] == "panel.whisper")

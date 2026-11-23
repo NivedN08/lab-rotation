@@ -406,7 +406,7 @@ class Session:
         verdict, trap = careless.get("verdict", "holds"), careless.get("trap", "none")
         note = careless.get("note", "")
         tables = dict(view("riley", self))["public tables"]
-        got = sources.riley_model(self.sponsors, speaker.system_prompt("riley"),
+        got = None if speaker.canned() else sources.riley_model(self.sponsors, speaker.system_prompt("riley"),
                                   f"Claim: {s.public()['claim']}\nPublic tables:\n{tables}\n"
                                   f"Your quick analysis: {note}\nSay your answer and your number in one or two "
                                   "breezy sentences.")
@@ -662,7 +662,7 @@ class Engine:
 
     def events_since(self, sid: str, since: int) -> dict:
         s = self.get(sid)
-        out = s.log.since(since)
+        out = [e for e in summary.seal_whispers(s.log.since(0)) if e["seq"] > since]
         return {"events": out, "next": out[-1]["seq"] if out else min(since, s.log.last_seq)}
 
     def sql(self, sid: str, sql: str) -> dict:

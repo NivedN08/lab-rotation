@@ -282,6 +282,8 @@ class LocalRoom:
 
 def band_room(on_call):
     """N2's BandRoom when it loads, else a LocalRoom."""
+    if not sponsors_on():
+        return LocalRoom()
     try:
         from lab.sponsors.band import BandRoom   # N2
         return BandRoom(on_call=on_call)
@@ -309,12 +311,19 @@ def band_relay(room, text: str) -> dict:
         return {"id": None, "local": True}
 
 
+def sponsors_on() -> bool:
+    """False with LAB_SPONSORS=off (tests): no BAND, Telem or Runware calls at all."""
+    return os.environ.get("LAB_SPONSORS", "").strip().lower() not in ("off", "0", "no", "false")
+
+
 class Sponsors:
     """One session's sponsor clients (N2), each reporting to that session's log."""
 
     def __init__(self, on_call):
         self.on_call = on_call
         self.lib = self.rw = None
+        if not sponsors_on():
+            return
         try:
             from lab.sponsors.telem import Librarian   # N2
             self.lib = Librarian(on_call=on_call)
@@ -385,6 +394,8 @@ def riley_model(sp: Sponsors, system: str, user: str) -> dict | None:
 
 
 def teamily_post(session: str, tasks: list, mastery_: dict, learner: str, on_call) -> dict | None:
+    if not sponsors_on():
+        return None
     try:
         from lab.sponsors.teamily import Teamily   # N2
         return Teamily(on_call=on_call).post_summary(session, tasks, mastery_, learner)

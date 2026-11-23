@@ -145,3 +145,16 @@ def test_sql_box_blocks_escapes(sql):
 def test_sql_box_caps_rows():
     res = TaskTables(CONTRACT / "mock_task").query("select * from visits a, visits b")
     assert len(res["rows"]) == 500 and res["truncated"] is True
+
+
+def test_mock_whispers_sealed_until_verdict(mock):
+    sid = start()["sessionId"]
+    mock.now += 215   # after the panel confers, before the verdict at 220
+    _, before = call("GET", f"/api/session/{sid}/events", query="since=0")
+    ws = [e for e in before["events"] if e["k"] == "panel.whisper"]
+    assert ws and all(e["data"]["text"] == "" and e["data"]["sealed"] for e in ws)
+    mock.now += 10
+    _, after = call("GET", f"/api/session/{sid}/events", query="since=0")
+    verdict = next(e for e in after["events"] if e["k"] == "verdict")
+    assert [w["seq"] for w in verdict["data"]["whispers"]] == [e["seq"] for e in ws]
+    assert all(e["data"]["text"] for e in after["events"] if e["k"] == "panel.whisper")

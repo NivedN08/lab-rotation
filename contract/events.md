@@ -94,12 +94,18 @@ are there for the lab log, the verdict card and the people reading them.
   sends it, `to` is the first recipient, and `data.cc` lists any others; the floor
   flies an envelope to each. `data`: `text` (hidden by the browser until the verdict),
   `bandMessageId?`, `local` (true when BAND was down and the local room carried it).
+  The server seals the text: until that task's `verdict`, the events route sends
+  `text: ""` and `sealed: true`, and the `verdict` event carries the texts in
+  `data.whispers`. After the verdict (and in a replay of a finished task) whispers
+  arrive with their text.
 - `check.result` (ines): `check` (an id such as `unit_mismatch.spend_range_by_region`),
   `trap`, `passed`, `detail` (one line), `rows?` (up to 5 failing rows, public columns
   only), `bruinRun?`. Sent only after the answer.
 - `verdict` (ines): **`taskId`**, **`result`** (`passed` or `failed`), `score` (0 to 1),
   `parts` (`{verdict, trap, evidence, hints}`), `correctVerdict`, `correctTrap`, `text`
-  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`).
+  (the feedback), `quotes`, `failingCheck`, `ledger` (`{index, hash, prev}`),
+  `whispers?` (`[{seq, agent, to, text}]`: the texts of that task's whispers, sent
+  sealed before the verdict).
 - `ledger.seal` (system): `index`, `hash`, `prev`, `record` (`{taskId, score, verdict, trap}`).
 
 ### Appeal

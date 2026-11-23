@@ -82,3 +82,26 @@ def demo() -> dict:
         return {"session": None}
     return {"session": session, "start": _num("LAB_DEMO_START") or 0.0, "end": _num("LAB_DEMO_END"),
             "speed": _num("LAB_DEMO_SPEED") or 1.0}
+
+
+def seal_whispers(events: list[dict]) -> list[dict]:
+    """The events as the browser may see them: whisper text stays sealed until its task's verdict.
+
+    A `panel.whisper` before its task's `verdict` goes out with `data.text` empty and
+    `data.sealed: true`; the `verdict` event carries the texts in `data.whispers`
+    (`[{seq, agent, to, text}]`). Events are copied, never changed in place.
+    """
+    done = {e.get("task") for e in events if e.get("k") == "verdict"}
+    by_task: dict = {}
+    out = []
+    for e in events:
+        if e.get("k") == "panel.whisper":
+            d = e.get("data") or {}
+            by_task.setdefault(e.get("task"), []).append(
+                {"seq": e["seq"], "agent": e["agent"], "to": e.get("to"), "text": d.get("text", "")})
+            if e.get("task") not in done:
+                e = {**e, "data": {**d, "text": "", "sealed": True}}
+        elif e.get("k") == "verdict" and "whispers" not in (e.get("data") or {}):
+            e = {**e, "data": {**(e.get("data") or {}), "whispers": list(by_task.get(e.get("task"), []))}}
+        out.append(e)
+    return out
