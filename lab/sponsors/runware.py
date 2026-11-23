@@ -1,4 +1,4 @@
-"""Runware: agent voices, agent portraits, and Riley's careless analysis on an open model.
+"""Runware: agent voices, agent portraits, and Riley's careless analysis on a non-Claude model.
 
 What Runware serves (checked 2026-11-23 with modelSearch and test calls):
 - Images: Runware's own models (FLUX schnell `runware:100@1`) work on the current
@@ -6,8 +6,21 @@ What Runware serves (checked 2026-11-23 with modelSearch and test calls):
 - Speech: ElevenLabs (`elevenlabs:24@1` Flash v2.5 ...), Inworld, MiniMax Speech, Gemini
   TTS, xAI TTS and the open Qwen3-TTS (`alibaba:qwen@3-tts-1.7b-customvoice`, about
   $0.02 a line). Third-party models need a paid invoice or $5 of credit first.
-- Text: open models Gemma 4 31B (`google:gemma@4-31b`), DeepSeek V4 Flash, gpt-oss-
-  safeguard-20b, also Qwen 4, Kimi K3, MiniMax M3.1. Same $5 rule.
+- Text: modelSearch lists open models (Gemma 4 31B, DeepSeek V4 Flash, GLM, Kimi), but on
+  our account every one of them returns `invalidModel` (checked after the top-up, by SDK and
+  REST). OpenAI's GPT-5.4 mini (`openai:gpt@5.4-mini`) answers. Runware refuses a "system"
+  message; the system prompt goes in `settings.systemPrompt`.
+
+Chosen (from Runware's model docs and schemas, before any paid call):
+- Voice: Inworld TTS-2 (`inworld:tts@2`), $0.000035 per character, so a 100-160 character
+  line is about $0.0035-0.0056; Runware's examples show 1.8-3.7 s per line. One voice per
+  agent from the 73 voices it shares with TTS-1.5 (INWORLD_VOICES). `RUNWARE_TTS_MODEL`
+  overrides it, e.g. `inworld:tts@1.5-mini` ($0.000025 per character, same voices).
+- Riley: GPT-5.4 mini (`openai:gpt@5.4-mini`) through Runware, about $0.0002 and 2-3 s an
+  answer. `RUNWARE_TEXT_MODEL` overrides it (e.g. `google:gemma@4-31b` once Runware enables it).
+
+After the credit lands, `uv run python -m lab.sponsors.runware check` voices one line per
+agent and asks Riley once, then prints cost per line and Riley's latency (about $0.02 all in).
 
 Fallbacks: a line Runware can't voice comes back as `provider: "browser"` with an empty
 file (the browser speaks the `agent.say` text); Riley runs on `claude -p` with no tools
@@ -35,21 +48,46 @@ from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, report
 
 AUDIO = DATA / "audio"
 PORTRAITS = DATA / "portraits"
-TTS_MODEL = "alibaba:qwen@3-tts-1.7b-customvoice"
-TEXT_MODEL = "google:gemma@4-31b"
+TTS_MODEL = "inworld:tts@2"
+TEXT_MODEL = "openai:gpt@5.4-mini"
 IMAGE_MODEL = "runware:100@1"
 TIMEOUT_S = 45
+TTS_MAX_CHARS = 2000  # Inworld's limit per line; longer lines go to browser speech
 WORDS_PER_S = 2.6
 
-# One voice per agent (Qwen3-TTS CustomVoice speakers). Override with RUNWARE_VOICE_<AGENT>.
-VOICES = {"vale": "eric", "ines": "serena", "sam": "ryan", "telem": "vivian", "riley": "dylan"}
+# One voice per agent, per TTS family. Override one with RUNWARE_VOICE_<AGENT>. The voices match
+# the portraits (PORTRAIT_PROMPTS names each one's gender): Vale and Sam are men, Ines and Telem
+# women, Riley a young man.
+VOICE_SETS = {
+    "inworld:": {"vale": "Craig", "ines": "Serena", "sam": "Dennis", "telem": "Ashley", "riley": "Timothy"},
+    "alibaba:qwen@3-tts": {"vale": "eric", "ines": "serena", "sam": "ryan", "telem": "vivian", "riley": "dylan"},
+}
+# Inworld voices from Runware's schema for inworld:tts@1.5-mini; inworld:tts@2 accepts all of these too.
+INWORLD_VOICES = frozenset(
+    "Loretta Darlene Marlene Hank Evelyn Celeste Pippa Tessa Liam Callum Hamish Abby Graham Rupert Mortimer "
+    "Snik Anjali Saanvi Arjun Claire Oliver Simon Elliot James Serena Gareth Vinny Lauren Jessica Ethan Tyler "
+    "Jason Chloe Veronica Victoria Miranda Sebastian Victor Malcolm Kayla Nate Jake Brian Amina Kelsey Derek "
+    "Grant Evan Alex Ashley Craig Deborah Dennis Edward Elizabeth Hades Julia Pixie Mark Olivia Priya Ronald "
+    "Sarah Shaun Theodore Timothy Wendy Dominus Hana Clive Carter Blake Luna".split())
+
+
+def voice_for(agent: str, model: str) -> str:
+    override = os.environ.get(f"RUNWARE_VOICE_{agent.upper()}")
+    if override:
+        return override
+    for prefix, voices in VOICE_SETS.items():
+        if model.startswith(prefix):
+            return voices.get(agent, next(iter(voices.values())))
+    return VOICE_SETS["inworld:"].get(agent, "Dennis")
 
 PORTRAIT_PROMPTS = {
-    "vale": "head of a retail analytics lab, calm and exacting, reading glasses, warm office light",
-    "ines": "data examiner holding a clipboard of failing checks, precise and fair, cool light",
-    "sam": "methods reviewer with a marker at a whiteboard of SQL, patient and kind",
-    "telem": "research librarian among shelves of store reports and receipts, curious",
-    "riley": "eager young AI intern at a messy desk with spreadsheets, overconfident grin",
+    "vale": "a man in his fifties, head of a retail analytics lab, calm and exacting, reading glasses, "
+            "warm office light",
+    "ines": "a woman in her forties, data examiner holding a clipboard of failing checks, precise and fair, "
+            "cool light",
+    "sam": "a man in his thirties, methods reviewer with a marker at a whiteboard of SQL, patient and kind",
+    "telem": "a woman in her thirties, research librarian among shelves of store reports and receipts, curious",
+    "riley": "an eager young man, AI intern at a messy desk with spreadsheets, overconfident grin",
 }
 PORTRAIT_STYLE = "flat vector portrait, soft colors, plain background, friendly, no text"
 
@@ -82,23 +120,28 @@ def error_code(exc: BaseException) -> str:
     return m.group(1) if m else type(exc).__name__
 
 
-def mp3_seconds(path: Path) -> float:
-    """Duration from the first MPEG frame's bitrate (CBR); 0 when it can't tell."""
-    data = path.read_bytes()
+def mp3_seconds(path) -> float:
+    """Duration by walking every MPEG layer 3 frame (Runware's MP3s are VBR); 0 when it can't tell."""
+    data = Path(path).read_bytes()
     i = 0
     if data[:3] == b"ID3" and len(data) > 10:
         i = 10 + ((data[6] << 21) | (data[7] << 14) | (data[8] << 7) | data[9])
     rates = {1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],  # MPEG1 layer 3
              2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]}  # MPEG2/2.5 layer 3
-    while i < len(data) - 4:
-        if data[i] == 0xFF and (data[i + 1] & 0xE0) == 0xE0:
-            version = 1 if (data[i + 1] >> 3) & 0x03 == 0x03 else 2
-            idx = data[i + 2] >> 4
-            if 0 < idx < 15:
-                kbps = rates[version][idx]
-                return round((len(data) - i) * 8 / (kbps * 1000), 2)
+    srates = {3: (44100, 48000, 32000), 2: (22050, 24000, 16000), 0: (11025, 12000, 8000)}
+    total = 0.0
+    while i + 4 <= len(data):
+        b1, b2 = data[i + 1], data[i + 2]
+        if data[i] == 0xFF and (b1 & 0xE0) == 0xE0 and (b1 >> 1) & 0x03 == 0x01:
+            ver, idx, sri = (b1 >> 3) & 0x03, b2 >> 4, (b2 >> 2) & 0x03
+            if ver != 1 and 0 < idx < 15 and sri < 3:
+                mpeg1, sr = ver == 3, srates[ver][sri]
+                size = (144 if mpeg1 else 72) * rates[1 if mpeg1 else 2][idx] * 1000 // sr + ((b2 >> 1) & 1)
+                total += (1152 if mpeg1 else 576) / sr
+                i += size
+                continue
         i += 1
-    return 0.0
+    return round(total, 2)
 
 
 def speech_seconds(text: str) -> float:
@@ -165,7 +208,7 @@ class Runware:
 
     def tts(self, agent: str, text: str, *, line_of: Optional[int] = None) -> dict:
         """{file, seconds, cost, provider, lineOf}: the `voice.line` data. Cached by text and voice."""
-        voice = os.environ.get(f"RUNWARE_VOICE_{agent.upper()}", VOICES.get(agent, "ryan"))
+        voice = voice_for(agent, self.tts_model)
         name = hashlib.sha1(f"{self.tts_model}|{voice}|{text}".encode()).hexdigest()[:16] + ".mp3"
         path = self.audio_dir / name
         label = f"Voiced a line for {agent.capitalize()}"
@@ -174,7 +217,7 @@ class Runware:
             report(self.on_call, SponsorCall("runware", "tts", label + " (saved audio)", by=agent, fallback=True))
             return dict(base, file=name, seconds=mp3_seconds(path) or speech_seconds(text), cost=0.0,
                         provider="runware")
-        if not self.offline and "tts" not in self.no_credit:
+        if not self.offline and "tts" not in self.no_credit and len(text) <= TTS_MAX_CHARS:
             from runware import IAudioInference
 
             t = Timer()
@@ -224,7 +267,11 @@ class Runware:
     # -- Riley ----------------------------------------------------------------
 
     def riley(self, *, system: str, user: str, max_tokens: int = 600) -> dict:
-        """{text, model, provider, cost}: Riley's careless take, for `rival.answer`."""
+        """{text, model, provider, cost}: Riley's careless take, for `rival.answer`.
+
+        RILEY_GUARD goes after the engine's system prompt: without it GPT-5.4 mini sometimes re-checks
+        the planted careless analysis and states the opposite verdict."""
+        system = system + RILEY_GUARD
         if not self.offline and "text" not in self.no_credit:
             from runware import ITextInference, ITextInferenceMessage
 
@@ -232,19 +279,19 @@ class Runware:
             try:
                 x = _run(self._call("textInference", ITextInference(
                     model=self.text_model,
-                    messages=[ITextInferenceMessage(role="system", content=system),
-                              ITextInferenceMessage(role="user", content=user)],
-                    includeCost=True, settings={"maxTokens": max_tokens})))
+                    # Runware refuses a "system" message (invalidMessageRole); it takes settings.systemPrompt.
+                    messages=[ITextInferenceMessage(role="user", content=user)],
+                    includeCost=True, settings={"maxTokens": max_tokens, "systemPrompt": system})))
                 text = (x.text or "").strip()
                 if not text:
                     raise RuntimeError("empty")
                 cost = float(x.cost or 0.0)
-                report(self.on_call, SponsorCall("runware", "chat", "Riley answered on an open model", ms=t.ms,
+                report(self.on_call, SponsorCall("runware", "chat", "Riley answered on Runware", ms=t.ms,
                                                  by="riley", cost_usd=cost))
                 return {"text": text, "model": self.text_model, "provider": "runware", "cost": cost}
             except Exception as exc:  # noqa: BLE001
                 self._refused("text", exc)
-                report(self.on_call, SponsorCall("runware", "chat", "Riley answered on an open model", ok=False,
+                report(self.on_call, SponsorCall("runware", "chat", "Riley answered on Runware", ok=False,
                                                  ms=t.ms, by="riley", fallback=True, error=error_code(exc)))
         try:
             text = self._fallback(system, user)
@@ -253,7 +300,45 @@ class Runware:
         return {"text": text, "model": "claude", "provider": "claude_fallback", "cost": None}
 
 
+RILEY_GUARD = ("\n\nYour quick analysis is final. Repeat its verdict and only the numbers it gives; never add, "
+               "re-check or reverse anything. If it gives no number, name its suspicion and say you can't tell. "
+               "Plain words, no markdown.")
+
+CHECK_LINES = {
+    "vale": "Welcome to the lab. Your first task is on your desk.",
+    "ines": "Your answer says the claim holds, but the spend check failed for the West region.",
+    "sam": "Try comparing average spend by region before you trust the total.",
+    "telem": "I found a real case where a retailer counted the same receipts twice.",
+    "riley": "Easy one. Spend went up, so the claim holds. Next!",
+}
+CHECK_RILEY = ("You are Riley, an eager AI intern who answers fast and checks nothing. Reply in two short "
+               "sentences and end with a verdict word: holds, fails or cant_tell.",
+               "Claim: average spend per visit rose 12% in the West region last quarter. The visits table has "
+               "300 rows with store, region, visit_date and spend.")
+
+
+def check(rw: "Runware") -> dict:
+    """Live check after a top-up: one voice line per agent and one Riley answer (about $0.02)."""
+    import time
+
+    lines = {}
+    for agent, text in CHECK_LINES.items():
+        t0 = time.monotonic()
+        line = rw.tts(agent, text)
+        lines[agent] = dict(line, chars=len(text), voice=voice_for(agent, rw.tts_model),
+                            ms=int((time.monotonic() - t0) * 1000))
+    t0 = time.monotonic()
+    riley = rw.riley(system=CHECK_RILEY[0], user=CHECK_RILEY[1])
+    riley_ms = int((time.monotonic() - t0) * 1000)
+    paid = [x for x in lines.values() if x["provider"] == "runware" and x.get("cost")]
+    return {"ttsModel": rw.tts_model, "textModel": rw.text_model, "lines": lines,
+            "costPerLine": round(sum(x["cost"] for x in paid) / len(paid), 5) if paid else None,
+            "costPerChar": round(sum(x["cost"] for x in paid) / sum(x["chars"] for x in paid), 7) if paid else None,
+            "riley": dict(riley, ms=riley_ms)}
+
+
 if __name__ == "__main__":
+    import json
     import sys
 
     rw = Runware(on_call=lambda c: print(c.event_data()))
@@ -262,5 +347,7 @@ if __name__ == "__main__":
             print(a, rw.portrait(a, force="--force" in sys.argv))
     elif sys.argv[1:2] == ["say"] and len(sys.argv) >= 4:
         print(rw.tts(sys.argv[2], " ".join(sys.argv[3:])))
+    elif sys.argv[1:2] == ["check"]:
+        print(json.dumps(check(rw), indent=2))
     else:
-        print("usage: python -m lab.sponsors.runware portraits [--force] | say <agent> <text>")
+        print("usage: python -m lab.sponsors.runware portraits [--force] | say <agent> <text> | check")
