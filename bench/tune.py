@@ -41,6 +41,7 @@ from lab.autoloop import HEADING, MAX_BUNDLE_PARTS, MAX_SECTION_CHARS, Move
 TUNE = ROOT / "data" / "bench" / "tune"
 PROPOSER = judge.HERE / "proposer.md"
 TUNED = judge.HERE / "guide_tuned.md"
+SEEDS = judge.HERE / "seed_moves.json"
 GUIDE_NAME = "guide.md"
 LOCKED = ("Output", "Grading guide")
 MIN_GAIN = 1.0          # points of mean macro-F1
@@ -226,8 +227,9 @@ class Tuner:
     def note(self, kind: str, payload: dict) -> None:
         ledger_mod.append(kind, payload, path=self.ledger)
 
-    def run(self, start: str, max_moves: int = 5, aa: bool = True) -> dict:
+    def run(self, start: str, max_moves: int = 5, aa: bool = True, seeds: list[Move] = ()) -> dict:
         inc = start
+        seeds = list(seeds)
         p0, m0 = self.grade(inc, 0)
         rep0 = self.score(p0)
         inc_obj = objective(rep0)
@@ -246,15 +248,22 @@ class Tuner:
             if rejections >= autoloop.MAX_REJECTIONS_IN_A_ROW:
                 break
             move_id = f"g{i:02d}"
-            exs = examples(self.dialogues, inc_preds, inc_notes, seed=i)
-            move, problems, rec = self.proposer(inc, inc_rep, confusion(self.dialogues, inc_preds), exs,
-                                                self.history, self.model, move_id)
+            if seeds:
+                seed = seeds.pop(0)
+                move = Move(move_id, seed.kind, seed.target, seed.value, seed.rationale)
+                problems, path = validate(move, inc), "seed"
+                move = None if problems else move
+            else:
+                exs = examples(self.dialogues, inc_preds, inc_notes, seed=i)
+                move, problems, rec = self.proposer(inc, inc_rep, confusion(self.dialogues, inc_preds), exs,
+                                                    self.history, self.model, move_id)
+                path = "proposer"
             if move is None:
                 self.note("move.rejected", {"id": move_id, "reasons": problems, "stage": "propose"})
                 run.log(f"{move_id}: no valid move ({problems[:2]})")
                 rejections += 1
                 continue
-            self.note("move.proposed", {**move.record(), "describe": move.describe()})
+            self.note("move.proposed", {**move.record(), "describe": move.describe(), "path": path})
             variant = apply(move, inc)
             vdir = self.root / move_id
             vdir.mkdir(exist_ok=True)
@@ -283,7 +292,7 @@ class Tuner:
                     reasons.append(f"second replicate: gain {gain2} is not above 0")
             run.log(f"{move_id} {move.describe()}: {inc_obj} -> {v_obj} (gain {gain}, replicate 2 {gain2}) "
                     f"{decision} {per_dim}")
-            self.history.append({"describe": move.describe(), "before": inc_obj, "after": v_obj,
+            self.history.append({"describe": move.describe(), "path": path, "before": inc_obj, "after": v_obj,
                                  "decision": decision + (f" ({'; '.join(reasons)})" if reasons else ""),
                                  "rationale": move.rationale})
             if decision == "accepted":
@@ -309,11 +318,14 @@ def main(argv=None) -> int:
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--max-moves", type=int, default=5)
     ap.add_argument("--no-aa", action="store_true")
+    ap.add_argument("--seeds", default=str(SEEDS), help="JSON list of moves tried first ('' for none)")
     a = ap.parse_args(argv)
+    seeds = [Move(f"s{i}", m["kind"], m["target"], m["value"], m.get("rationale", ""))
+             for i, m in enumerate(json.loads(pathlib.Path(a.seeds).read_text()) if a.seeds else [], 1)]
     dialogues = data.select("dev-A", a.n)
     tuner = Tuner(dialogues, a.model, a.jobs)
     try:
-        out = tuner.run(judge.GUIDE.read_text(), a.max_moves, aa=not a.no_aa)
+        out = tuner.run(judge.GUIDE.read_text(), a.max_moves, aa=not a.no_aa, seeds=seeds)
     except llm.UsageStop as err:
         run.log(f"stopped on usage limit: {err}")
         return 1

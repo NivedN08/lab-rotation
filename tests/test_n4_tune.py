@@ -75,3 +75,23 @@ def test_examples_spread_over_dimensions():
     exs = tune.examples(DIALOGUES, preds, {}, limit=4)
     assert len(exs) == 4 and {e["dimension"] for e in exs} == {"ML"}
     assert all(e["guide"] == "Yes" and e["human"] != "Yes" for e in exs)
+
+
+def test_seed_moves_come_first_and_ship_valid():
+    seen = []
+
+    def grade(guide, replicate):
+        return gold_preds("Mistake_Location"), {"notes": {}}
+
+    def proposer(*a):
+        seen.append("proposer")
+        return None, ["nothing"], {}
+
+    t = tune.Tuner(DIALOGUES, "m", 1, grade=grade, proposer=proposer, root=__import__("pathlib").Path(
+        __import__("tempfile").mkdtemp()))
+    out = t.run(GUIDE, max_moves=2, aa=False, seeds=[Move("s1", "edit_section", "guide.md#Role", "Seeded.", "r")])
+    assert t.history[0]["path"] == "seed" and seen == ["proposer"] and out["moves"] == 1
+    from bench import judge
+    shipped = json.loads((judge.HERE / "seed_moves.json").read_text())
+    for m in shipped:
+        assert tune.validate(Move("s", m["kind"], m["target"], m["value"]), judge.GUIDE.read_text()) == []
