@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRotation } from "./api/client";
 import { listRuns, loadDemo, loadRun, type Demo, type Source } from "./data/load";
 import type { Run } from "./data/types";
 import { fmtClock, Replay } from "./sim/replay";
@@ -6,6 +7,7 @@ import { Chat, type Msg } from "./ui/Chat";
 import { Landing } from "./ui/Landing";
 import { LabLog } from "./ui/LabLog";
 import { FixturePanel, PersonPanel, RoomPanel, StudyPanel } from "./ui/Panels";
+import { TaskChips } from "./ui/TaskChips";
 import { Timeline } from "./ui/Timeline";
 import { WorkspaceTab } from "./ui/WorkspaceTab";
 import { buildTour } from "./ui/tour";
@@ -20,6 +22,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("landing");
   const replay = useMemo(() => (run ? new Replay(run) : null), [run]);
+  const rotation = useRotation(); // the one shared session, clock and event poll
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<LabEngine | null>(null);
@@ -363,23 +366,27 @@ export function App() {
                   </select>
                 </>
               )}
-              <nav className="chips" aria-label="Studies">
-                <button className="chip" aria-pressed={filter === null} onClick={() => chooseStudy(null)}>
-                  All studies
-                </button>
-                {R.run.studies.map((s) => {
-                  const fin = R.finalEvent(s.id, t);
-                  const working = R.run.agents.some((a) => a.study === s.id && a.role !== "solo" && R.status(a.id, t).working);
-                  const graded = R.graded(t) && s.grade;
-                  return (
-                    <button key={s.id} className="chip" aria-pressed={filter === s.id} onClick={() => chooseStudy(filter === s.id ? null : s.id)} title={s.title}>
-                      <span className={`dot ${working ? "working" : fin ? "done" : ""}`} title={working ? "Agents working" : fin ? "Finished" : "Waiting"} />
-                      {s.id}
-                      {graded && <span className={`mark ${s.grade!.lab ? "pass" : "fail"}`}>{s.grade!.lab ? "passed" : "failed"}</span>}
-                    </button>
-                  );
-                })}
-              </nav>
+              {rotation.tasks.length > 0 ? (
+                <TaskChips rotation={rotation} onOpen={() => setPanel("workspace")} />
+              ) : (
+                <nav className="chips" aria-label="Studies">
+                  <button className="chip" aria-pressed={filter === null} onClick={() => chooseStudy(null)}>
+                    All studies
+                  </button>
+                  {R.run.studies.map((s) => {
+                    const fin = R.finalEvent(s.id, t);
+                    const working = R.run.agents.some((a) => a.study === s.id && a.role !== "solo" && R.status(a.id, t).working);
+                    const graded = R.graded(t) && s.grade;
+                    return (
+                      <button key={s.id} className="chip" aria-pressed={filter === s.id} onClick={() => chooseStudy(filter === s.id ? null : s.id)} title={s.title}>
+                        <span className={`dot ${working ? "working" : fin ? "done" : ""}`} title={working ? "Agents working" : fin ? "Finished" : "Waiting"} />
+                        {s.id}
+                        {graded && <span className={`mark ${s.grade!.lab ? "pass" : "fail"}`}>{s.grade!.lab ? "passed" : "failed"}</span>}
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
               {demo && (
                 <button className="btn quiet hide-sm" onClick={toggleClip} title={clip ? "Play the whole run instead of the demo's 5 minutes" : "Play the demo's 5 minutes"}>
                   {clip ? "Whole run" : "Demo"}

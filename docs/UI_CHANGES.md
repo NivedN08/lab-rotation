@@ -29,7 +29,7 @@
 - [x] 5. Riley's desk in Team B, so both answers meet at the hatch (decided: Team B)
 - [x] 6. Right-side panel gets tabs Workspace, Details, Ask and Panel room; the Workspace tab mounts `web/src/workspace/index.tsx` and the panel widens while a task runs (`App.tsx`)
 - [ ] 7. New events play the existing animations (table below) (`world/engine.ts`, lab log lines in `sim/replay.ts`)
-- [ ] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
+- [x] 8. Top bar: study chips become Task 1, 2, 3 with passed or failed marks, plus the task timer (`App.tsx`)
 - [ ] 9. Verdict card, built from the results card: your verdict against the key, the failing Bruin check next to your evidence, your quoted words, Riley's answer, "sealed" (`App.tsx` or `ui/Verdict.tsx`)
 - [ ] 10. Sponsor strip: a thin bar above the timeline counting BAND messages, Telem searches (with trace links), Bruin checks run and failed, Runware lines and cost, Glasser calls (`ui/SponsorStrip.tsx`)
 - [ ] 11. Mastery chart: one bar per trap type; shown in your Details panel and on the verdict card (`ui/Mastery.tsx`, `ui/Panels.tsx`)
@@ -99,3 +99,4 @@ No new animation types are needed. Each new event reuses one that the original a
 - 4: You wear a gold badge and an always-on "You" name tag, your desk plate reads "Your desk" when zoomed in; Sam's head desk at the back of Team A is always drawn, and Sam sits there when the backend sends him.
 - 5: Riley sits at the Team B desk nearest the hatch, plate reads "Riley's desk" when zoomed in; both answers fly to the hatch between the rooms.
 - 9 (layout only, not ticked): verdict card component built from the results card; takes the verdict, check.result and answer event data as props. Wired up once the shared rotation state lands.
+- 8: top bar shows Task 1, 2, 3 with passed/failed marks and the time left, all read from the shared rotation state (same clock as the workspace timer); clicking a task opens the Workspace tab. Falls back to the study chips when there is no rotation.
