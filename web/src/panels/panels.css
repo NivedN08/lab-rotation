@@ -1,0 +1,268 @@
+/* Shared panels (sponsor strip, mastery chart, panel room, voice). Only the lab's variables from styles.css. */
+
+/* ---- Sponsor strip ---- */
+
+.pn-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  padding: 4px 14px;
+  background: var(--night-2);
+  box-shadow: 0 -2px 0 0 var(--line);
+  color: var(--mist);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.pn-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.pn-name {
+  color: var(--fog);
+  font-family: var(--pixel);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.pn-num {
+  color: var(--snow);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  animation: pn-flash 700ms steps(4);
+}
+
+@keyframes pn-flash {
+  from {
+    background: var(--gold);
+    color: var(--ink);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.pn-bad {
+  color: var(--bad);
+}
+
+.pn-traces {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+/* ---- Mastery chart ---- */
+
+.pn-mastery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pn-mastery li {
+  display: grid;
+  grid-template-columns: minmax(90px, 40%) 1fr 56px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.pn-trap {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pn-track {
+  display: block;
+  height: 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.pn-fill {
+  display: block;
+  height: 100%;
+  transition: width 400ms steps(6);
+}
+
+.pn-fill.low {
+  background: var(--bad);
+}
+
+.pn-fill.mid {
+  background: var(--gold);
+}
+
+.pn-fill.high {
+  background: var(--good);
+}
+
+.pn-pct {
+  text-align: right;
+  font-family: var(--pixel);
+  font-variant-numeric: tabular-nums;
+}
+
+.pn-delta {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.pn-delta.up {
+  color: var(--good);
+}
+
+.pn-delta.down {
+  color: var(--bad);
+}
+
+/* Compact: for the results card. Name sits above its bar. */
+.pn-mastery.compact {
+  gap: 6px;
+}
+
+.pn-mastery.compact li {
+  grid-template-columns: 1fr 48px;
+  gap: 2px 8px;
+  font-size: 12px;
+}
+
+.pn-mastery.compact .pn-trap {
+  grid-column: 1 / -1;
+}
+
+.pn-mastery.compact .pn-track {
+  height: 8px;
+}
+
+.pn-msg {
+  margin: 0;
+}
+
+/* ---- Panel room ---- */
+
+.pn-room {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pn-room h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.pn-log {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pn-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--line);
+  font-size: 14px;
+}
+
+.pn-log li.pn-ruling {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.pn-who {
+  color: var(--gold-hi);
+  font-family: var(--pixel);
+  font-size: 13px;
+}
+
+.pn-why {
+  color: var(--fog);
+  font-size: 12px;
+}
+
+.pn-compose {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pn-compose .ws-editor {
+  font-family: var(--text);
+  font-size: 14px;
+}
+
+/* ---- Voice ---- */
+
+.pn-mute {
+  gap: 6px;
+}
+
+.pn-mute[aria-pressed="true"] {
+  color: var(--fog);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pn-num {
+    animation: none;
+  }
+  .pn-fill {
+    transition: none;
+  }
+}
+
+/* ---- Small shared pieces (so this folder does not depend on the workspace's styles) ---- */
+
+.pn-title {
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pn-error {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--bad);
+  font-size: 13px;
+}
+
+.pn-ok {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--night);
+  box-shadow: 0 0 0 2px var(--good);
+  font-size: 13px;
+}
+
+.pn-editor {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  padding: 10px 12px;
+  background: var(--night);
+  color: var(--snow);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.pn-editor:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--gold);
+}
