@@ -6,8 +6,17 @@ import { plainNumbers } from "../sim/replay";
 // The verdict card shows what the backend sent and nothing else (contract/events.md); it never
 // grades or decides anything.
 
-/** The verdict, from a `verdict` event: passed or not, the answer key, and Ines's feedback. */
-export type VerdictData = { correct: boolean; key: Verdict; trap: string; sealed?: boolean; feedback?: string };
+/** The verdict, from a `verdict` event: passed or not, the answer key, which parts of your answer
+ *  matched it (`parts`), and Ines's feedback. */
+export type VerdictData = {
+  correct: boolean;
+  key: Verdict;
+  trap: string;
+  verdictRight?: boolean;
+  trapRight?: boolean;
+  sealed?: boolean;
+  feedback?: string;
+};
 /** One of Ines's Bruin checks, from a `check.result` event, with its plain-words line. */
 export type CheckData = { check: string; passed: boolean; label?: string };
 /** `data` of a `learner.answer` or `rival.answer` event. */
@@ -37,7 +46,9 @@ export function verdictFromEvents(events: LabEvent[], taskId: string): CardData 
   const mine = events.filter((e) => e.task === taskId);
   const last = (k: string) => [...mine].reverse().find((e) => e.k === k)?.data as Record<string, unknown> | undefined;
   type Ev = { label?: string };
-  const v = last("verdict") as { result?: string; correctVerdict?: Verdict; correctTrap?: string; text?: string; ledger?: unknown } | undefined;
+  const v = last("verdict") as
+    | { result?: string; correctVerdict?: Verdict; correctTrap?: string; text?: string; ledger?: unknown; parts?: { verdict?: number; trap?: number } }
+    | undefined;
   if (!v) return null;
   const answer = last("learner.answer") as (Partial<AnswerData> & { note?: string; evidence?: Ev[] }) | undefined;
   const rival = last("rival.answer") as Partial<AnswerData> | undefined;
@@ -45,11 +56,15 @@ export function verdictFromEvents(events: LabEvent[], taskId: string): CardData 
     ...(answer?.evidence ?? []).map((x) => x.label),
     ...mine.filter((e) => e.k === "learner.evidence").flatMap((e) => ((e.data as { action?: string; items?: Ev[] } | undefined)?.action === "remove" ? [] : ((e.data as { items?: Ev[] } | undefined)?.items ?? []).map((x) => x.label))),
   ].filter((x): x is string => !!x);
+  const key = v.correctVerdict ?? "cant_tell";
+  const trap = v.correctTrap ?? "none";
   return {
     verdict: {
       correct: v.result === "passed",
-      key: v.correctVerdict ?? "cant_tell",
-      trap: v.correctTrap ?? "none",
+      key,
+      trap,
+      verdictRight: typeof v.parts?.verdict === "number" ? v.parts.verdict > 0 : answer?.verdict === key,
+      trapRight: typeof v.parts?.trap === "number" ? v.parts.trap > 0 : (answer?.trap ?? "none") === trap,
       sealed: !!v.ledger || mine.some((e) => e.k === "ledger.seal"),
       feedback: v.text ? plainNumbers(v.text) : undefined,
     },
@@ -68,6 +83,14 @@ const SAY_VERDICT: Record<string, string> = { holds: "the claim holds", fails: "
 const say = (v: string | undefined) => SAY_VERDICT[v ?? ""] ?? String(v);
 const trapWords = (id: string | undefined) => (trapLabel(id ?? "none") ?? String(id)).toLowerCase();
 
+/** The headline: passed or not first, then which part of the answer missed. */
+function headline({ correct, trap, verdictRight = correct, trapRight = correct }: VerdictData): string {
+  if (!correct) return verdictRight && trapRight ? "Right answer, below the pass mark" : "Not this time";
+  if (verdictRight && trapRight) return trap === "none" ? "Passed: the data was clean" : "You found the trap";
+  if (!trapRight) return trap === "none" ? "Passed, but there was no trap" : "Passed, but you missed the trap";
+  return "Passed, but the verdict was wrong";
+}
+
 function Mark({ ok, yes = "passed", no = "failed" }: { ok: boolean; yes?: string; no?: string }) {
   return <span className={`mark ${ok ? "pass" : "fail"}`}>{ok ? yes : no}</span>;
 }
@@ -79,7 +102,7 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
       <span className="count">
         {taskTitle} · Verdict{verdict.sealed ? " · sealed" : ""}
       </span>
-      <h2>{verdict.correct ? "You found the trap" : "Not this time"}</h2>
+      <h2>{headline(verdict)}</h2>
       <p>
         The key says {say(verdict.key)}: {trapWords(verdict.trap)}.
       </p>
@@ -90,7 +113,8 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
         <dl className="kv">
           <dt>You said</dt>
           <dd>
-            {say(yours.verdict)}, {trapWords(yours.trap)} <Mark ok={verdict.correct} yes="right" no="wrong" />
+            {say(yours.verdict)} <Mark ok={verdict.verdictRight ?? verdict.correct} yes="right" no="wrong" />, {trapWords(yours.trap)}{" "}
+            <Mark ok={verdict.trapRight ?? verdict.correct} yes="right" no="wrong" />
           </dd>
           <dt>The key</dt>
           <dd>
@@ -114,7 +138,7 @@ export function VerdictCard({ taskTitle, verdict, yours, riley, checks, children
             <div>
               {(failing.length ? failing : checks).map((c, i) => (
                 <div className="item" key={`${c.check}-${i}`}>
-                  {c.label ?? `${c.check} check`} <Mark ok={c.passed} />
+                  {c.label ?? `${c.check} check`} <Mark ok={c.passed} yes="clean" no="trap in the data" />
                 </div>
               ))}
               {!checks.length && <p className="empty">No checks run.</p>}
