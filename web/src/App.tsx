@@ -103,7 +103,7 @@ export function App() {
   const [chatAgent, setChatAgent] = useState("vale");
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
   const [tour, setTour] = useState<number | null>(null);
-  const [welcome, setWelcome] = useState(false);
+  const [rotationIntro, setRotationIntro] = useState(false); // your rotation's start card is up; no session yet
   const tourList = useMemo(() => (replay ? buildRotationTour(replay) : []), [replay]);
   const lo = 0;
   const hi = replay?.end ?? 0;
@@ -225,7 +225,6 @@ export function App() {
   };
   const startStory = () => {
     setStory(true);
-    setWelcome(false);
     setSelected(null);
     setPanel(null);
     startDemo();
@@ -291,7 +290,7 @@ export function App() {
     }
   };
 
-  const enter = (asStory = false) => {
+  const enter = () => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     setView("leaving");
     const e = engine();
@@ -303,7 +302,6 @@ export function App() {
     }
     window.setTimeout(() => {
       setView("lab");
-      setWelcome(!asStory); // the story starts straight away, with no welcome box
       const en = engine();
       if (en && !en.playing && en.t < (replay?.end ?? 0) - 1) en.setPlaying(true);
     }, reduced ? 0 : 1050);
@@ -322,8 +320,9 @@ export function App() {
     if (m === "judge") setPanel("workspace");
   };
   /** Your rotation: start, then walk in. */
+  /** Your rotation: walk in to its start card; the session starts on its Start button. */
   const begin = () => {
-    startMode("rotation");
+    setRotationIntro(true);
     enter();
   };
   /** Judge mode: walk in to the start card; the clock starts on its Start button. */
@@ -331,7 +330,7 @@ export function App() {
     setJudgeIntro(true);
     setFollowOn(false); // the camera holds still for the judge
     if (engineRef.current) engineRef.current.followAction = false;
-    enter(true);
+    enter();
   };
 
   // Judge mode's debrief: when the verdict arrives, everything else steps aside for the verdict card.
@@ -348,7 +347,6 @@ export function App() {
 
   const goTour = (i: number | null) => {
     const e = engine();
-    setWelcome(false);
     setTour(i);
     if (e) e.followAction = i === null && followOn; // the camera holds still during the tour
     if (i === null || !e) return;
@@ -446,7 +444,7 @@ export function App() {
 
   return (
     <>
-      <div className={`lab${isRotation && !calm ? " with-strip" : ""}${calm ? " calm" : ""}`} inert={view !== "lab" ? true : undefined}>
+      <div className={`lab${isRotation && !calm && started ? " with-strip" : ""}${calm ? " calm" : ""}`} inert={view !== "lab" ? true : undefined}>
         <canvas ref={canvasRef} className="floor" aria-label="The lab floor. Click a person to see what they are working on." />
         {R && view !== "landing" && (
           <>
@@ -516,13 +514,14 @@ export function App() {
                   {demoOn ? "Your rotation" : "Demo"}
                 </button>
               )}
-              {!calm && (
+              {/* Before Start the tour's Workspace step would start the session early. */}
+              {!calm && !rotationIntro && (
                 <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
                   Tour
                 </button>
               )}
               {/* Before Start, nothing here may open a session in the wrong mode. */}
-              {!judgeIntro && (
+              {!judgeIntro && !rotationIntro && (
                 <>
                   {isRotation && (
                     <Safe name="The mute button">
@@ -642,7 +641,7 @@ export function App() {
               <StoryCaption scenes={scenes} index={sceneIdx} events={rotation.events} onBack={() => goScene(sceneIdx - 1)} onNext={() => goScene(sceneIdx + 1)} />
             )}
 
-            {tour === null && !welcome && !(story && demoOn) && !judgeIntro && debrief === null && !timeUp && (
+            {tour === null && !(story && demoOn) && !judgeIntro && !rotationIntro && debrief === null && !timeUp && (
               <LabLog R={R} t={t} filter={filter} select={(x) => select(x)} live={rotation.events} compact={judgePlaying} />
             )}
 
@@ -653,8 +652,9 @@ export function App() {
                 <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "var(--mist)", lineHeight: 1.6 }}>
                   <li>Read the claim.</li>
                   <li>Check the data in the tables or with SQL.</li>
-                  <li>Decide whether the claim holds, fails or can't be told, pick the trap, cite the rows, and submit.</li>
+                  <li>Decide whether the claim holds, fails or you can't tell, pick the trap, cite the rows, and submit.</li>
                 </ol>
+                <p style={{ marginTop: 8 }}>The data may hide one problem (duplicates, wrong units, a misleading dictionary…), or none.</p>
                 <div className="row">
                   <button
                     className="btn gold"
@@ -688,39 +688,23 @@ export function App() {
               />
             )}
 
-            {welcome && tour === null && (
-              <div className="tour box" role="dialog" aria-label="Welcome">
-                <h2>Welcome to the lab floor</h2>
-                <p>
-                  {demoOn
-                    ? "You're watching a recorded rotation, from the first task to the verdict. Everyone here is an AI agent; you are the student in Team A. Click anyone to see what they did and why."
-                    : "This is your rotation. Dr. Vale will bring you a task; open the Workspace to dig into the data. Telem, Sam, Riley and Ines are all at work around you. Click anyone to see what they're doing and why."}
-                </p>
+            {rotationIntro && tour === null && (
+              <div className="tour box" role="dialog" aria-label="Your rotation">
+                <span className="count">Your rotation</span>
+                <h2>Three tasks, each a little harder</h2>
+                <p>Read the claim, check the data, decide, cite your rows, submit.</p>
                 <div className="row">
-                  <button className="btn" onClick={() => setWelcome(false)}>
-                    Explore on my own
+                  <button
+                    className="btn gold"
+                    onClick={() => {
+                      setRotationIntro(false);
+                      startMode("rotation"); // the session, and its clock, start now
+                      setPanel("workspace");
+                    }}
+                    autoFocus
+                  >
+                    Start
                   </button>
-                  {isRotation && (
-                    <button className="btn" onClick={() => goTour(0)}>
-                      Take the tour
-                    </button>
-                  )}
-                  {isRotation ? (
-                    <button
-                      className="btn gold"
-                      onClick={() => {
-                        setWelcome(false);
-                        setPanel("workspace");
-                      }}
-                      autoFocus
-                    >
-                      Open the Workspace
-                    </button>
-                  ) : (
-                    <button className="btn gold" onClick={() => goTour(0)} autoFocus>
-                      Take the 1-minute tour
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -754,7 +738,7 @@ export function App() {
               </div>
             )}
 
-            {verdictCard && verdictTask && tour === null && !welcome && (
+            {verdictCard && verdictTask && tour === null && (
               <Safe name="The verdict card">
                 <VerdictCard
                   taskTitle={verdictTitle}
@@ -771,7 +755,7 @@ export function App() {
               </Safe>
             )}
 
-            {resultsShown && tour === null && !welcome && (
+            {resultsShown && tour === null && (
               <div className="tour box verdict" role="dialog" aria-label="Results">
                 <span className="count">Results</span>
                 <h2>
@@ -827,7 +811,8 @@ export function App() {
               </div>
             )}
 
-            {isRotation && !calm && (
+            {/* The strip reads the session, so it waits until one has been chosen (or the start card would start it). */}
+            {isRotation && !calm && started && (
               <div className="strip-slot">
                 <Safe name="The sponsor strip">
                   <SponsorStrip />
@@ -884,7 +869,7 @@ export function App() {
           onJudge={beginJudge}
           onDemo={() => {
             startStory();
-            enter(true);
+            enter();
           }}
           ready={!!replay}
           status={status}

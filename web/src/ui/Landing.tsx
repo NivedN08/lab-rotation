@@ -32,15 +32,16 @@ export function Landing({ onEnter, onJudge, onDemo, ready, status, live, leaving
           </button>
         ) : (
           <>
-            <button className="btn gold cta" onClick={onEnter} disabled={!ready} autoFocus>
-              Start your rotation
-            </button>
-            <button className="btn gold cta" onClick={onJudge} disabled={!ready} style={{ marginLeft: 10 }} title="One task, four minutes, then the full debrief">
+            <button className="btn gold cta" onClick={onJudge} disabled={!ready} autoFocus title="One task, four minutes, then the full debrief">
               Judge mode
+            </button>
+            <button className="btn cta" onClick={onEnter} disabled={!ready} style={{ marginLeft: 10 }} title="Three tasks, each a little harder">
+              Start your rotation
             </button>
             <button className="btn cta" onClick={onDemo} disabled={!ready} style={{ marginLeft: 10 }}>
               Watch the demo
             </button>
+            <p style={{ margin: "12px 0 0", fontSize: 15 }}>New here? Try Judge mode.</p>
           </>
         )}
         <div className="now">

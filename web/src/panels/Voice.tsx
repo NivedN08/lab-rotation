@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { audioUrl, getRotation, subscribeEvents, subscribeJump, type LabEvent } from "../api/client";
+import { useEffect, useSyncExternalStore } from "react";
+import { audioUrl, getDemoState, getRotation, subscribeEvents, subscribeJump, useDemo, useMock, useRotation, type LabEvent } from "../api/client";
 import { useMuted, voiceMute } from "./voiceMute";
 import "./panels.css";
 
@@ -9,9 +9,42 @@ type Line = { agent: string; file?: string; say?: string };
 let queue: Line[] = [];
 let current: { stop: () => void } | null = null;
 
-// If the server's audio keeps failing, stop asking it: the browser's own voice does the talking, with no more failed requests.
+// If the server's audio file keeps failing to load, stop asking it: the browser's own voice does the talking, with no more failed
+// requests. Only real load errors count (the audio element's `error` event). A browser blocking sound until the first click does
+// not, and neither does a missing file in sample mode. The count starts again whenever a new session or demo starts.
 let audioFailures = 0;
 const AUDIO_GIVE_UP = 2;
+
+// A line the browser would not play yet (autoplay blocked): it is kept and played after the next click or key press.
+let blocked: Line | null = null;
+const blockedSubs = new Set<() => void>();
+const setBlocked = (line: Line | null) => {
+  blocked = line;
+  blockedSubs.forEach((f) => f());
+};
+const useBlocked = (): boolean =>
+  useSyncExternalStore(
+    (f) => {
+      blockedSubs.add(f);
+      return () => blockedSubs.delete(f);
+    },
+    () => blocked !== null,
+  );
+
+/** Sample data has no real audio files, so a missing one is expected there. */
+const sampleAudio = (): boolean => useMock() || getDemoState().sample;
+
+// Browsers allow sound only after the person has interacted with the page.
+const GESTURES = ["pointerdown", "pointerup", "keydown", "touchend"] as const;
+function untilGesture(retry: () => void): () => void {
+  const go = () => {
+    off();
+    retry();
+  };
+  const off = () => GESTURES.forEach((g) => window.removeEventListener(g, go, true));
+  GESTURES.forEach((g) => window.addEventListener(g, go, true));
+  return off;
+}
 
 // A different voice for each agent where the browser has several, and a different pitch either way.
 const PITCH: Record<string, number> = { vale: 0.85, ines: 1.15, sam: 1.0, telem: 1.3, riley: 0.75, learner: 1.0 };
@@ -47,28 +80,52 @@ function next() {
   if (!line.file || audioFailures >= AUDIO_GIVE_UP) return speak(line, next);
 
   const a = new Audio(audioUrl(line.file));
-  let failed = false;
-  const fallBack = () => {
-    if (failed) return;
-    failed = true;
-    audioFailures += 1;
+  let over = false; // this line has been dealt with: failed, blocked or cut
+  const fallBack = (counts: boolean) => {
+    if (over) return;
+    over = true;
+    if (counts && !sampleAudio()) audioFailures += 1;
     a.onended = null;
     a.onerror = null;
     if (!current) return; // the line was cut (muted or sought) while it was loading
     current = null;
     speak(line, next);
   };
-  current = {
-    stop: () => {
-      failed = true; // a cut line must not fall back to speech
-      a.onended = null;
-      a.onerror = null;
-      a.pause();
-    },
+  const cut = { stop: () => {} };
+  current = cut;
+  cut.stop = () => {
+    over = true; // a cut line must not fall back to speech
+    a.onended = null;
+    a.onerror = null;
+    a.pause();
   };
   a.onended = next;
-  a.onerror = fallBack;
-  a.play().catch(fallBack);
+  a.onerror = () => fallBack(true); // a real load error
+  a.play().catch((err: unknown) => {
+    if (over) return;
+    if ((err as { name?: string } | null)?.name === "NotAllowedError") {
+      // Autoplay is blocked until the person clicks or presses a key: keep the line, say so, and play it then.
+      over = true;
+      a.onended = null;
+      a.onerror = null;
+      setBlocked(line);
+      const off = untilGesture(() => {
+        const keep = blocked;
+        setBlocked(null);
+        current = null;
+        if (keep) queue.unshift(keep);
+        next();
+      });
+      current = {
+        stop: () => {
+          off();
+          setBlocked(null);
+        },
+      };
+      return;
+    }
+    fallBack(false); // some other refusal: speak this line, but do not count it against the audio
+  });
 }
 
 function enqueue(line: Line) {
@@ -80,6 +137,7 @@ function silence() {
   queue = [];
   current?.stop();
   current = null;
+  setBlocked(null);
 }
 
 /** The text of the agent.say event a voice.line speaks (`lineOf` is its seq). */
@@ -115,7 +173,21 @@ export function Voice() {
     if (muted) silence();
   }, [muted]);
 
-  return null;
+  // A new session or a demo starting gives the server's audio a fresh chance.
+  const { sessionId } = useRotation();
+  const { status } = useDemo();
+  useEffect(() => {
+    audioFailures = 0;
+  }, [sessionId, status]);
+
+  // Sound is blocked until the person clicks: say so, until they do.
+  const waiting = useBlocked();
+  if (!waiting) return null;
+  return (
+    <div className="pn-sound-note" role="status">
+      Click anywhere to turn on sound
+    </div>
+  );
 }
 
 /** Mute or unmute voice lines. Sits in the top bar. */
