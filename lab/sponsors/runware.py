@@ -16,6 +16,10 @@ Chosen (from Runware's model docs and schemas, before any paid call):
   line is about $0.0035-0.0056; Runware's examples show 1.8-3.7 s per line. One voice per
   agent from the 73 voices it shares with TTS-1.5 (INWORLD_VOICES). `RUNWARE_TTS_MODEL`
   overrides it, e.g. `inworld:tts@1.5-mini` ($0.000025 per character, same voices).
+  Voice sets also exist for MiniMax Speech 2.8 (`minimax:speech@2.8`, $0.10 per 1,000 characters,
+  emotion calm and speed 0.95) and Gemini 3.8 Flash TTS (`google:gemini@3.8-flash-tts`, about
+  $0.025 per 1,000; it takes text and voice only and reads a spoken style direction aloud).
+  ElevenLabs returns `invalidModel` on our account. `speakable()` cleans each line first.
 - Riley: GPT-5.4 mini (`openai:gpt@5.4-mini`) through Runware, about $0.0002 and 2-3 s an
   answer. `RUNWARE_TEXT_MODEL` overrides it (e.g. `google:gemma@4-31b` once Runware enables it).
 
@@ -36,6 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -49,6 +54,9 @@ from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, report
 AUDIO = DATA / "audio"
 PORTRAITS = DATA / "portraits"
 TTS_MODEL = "inworld:tts@2"
+# Agents voiced on another model than TTS_MODEL (picked by ear in the bake-off, 2026-11-23).
+# RUNWARE_TTS_MODEL_<AGENT> overrides one agent; RUNWARE_TTS_MODEL changes everyone else.
+AGENT_TTS_MODELS = {"vale": "google:gemini@3.8-flash-tts"}
 TEXT_MODEL = "openai:gpt@5.4-mini"
 IMAGE_MODEL = "runware:100@1"
 TIMEOUT_S = 45
@@ -60,6 +68,9 @@ WORDS_PER_S = 2.6
 # women, Riley a young man.
 VOICE_SETS = {
     "inworld:": {"vale": "Craig", "ines": "Serena", "sam": "Dennis", "telem": "Ashley", "riley": "Timothy"},
+    "minimax:speech": {"vale": "English_Trustworth_Man", "ines": "English_ConfidentWoman",
+                       "sam": "English_PatientMan", "telem": "English_SereneWoman", "riley": "English_DecentYoungMan"},
+    "google:gemini": {"vale": "Charon", "ines": "Kore", "sam": "Achird", "telem": "Sulafat", "riley": "Puck"},
     "alibaba:qwen@3-tts": {"vale": "eric", "ines": "serena", "sam": "ryan", "telem": "vivian", "riley": "dylan"},
 }
 # Inworld voices from Runware's schema for inworld:tts@1.5-mini; inworld:tts@2 accepts all of these too.
@@ -79,6 +90,35 @@ def voice_for(agent: str, model: str) -> str:
         if model.startswith(prefix):
             return voices.get(agent, next(iter(voices.values())))
     return VOICE_SETS["inworld:"].get(agent, "Dennis")
+
+
+def speech_settings(agent: str, model: str) -> dict:
+    """Extra `speech` fields per model family. Runware's Gemini and xAI voices take text and voice
+    only; Inworld takes speed; MiniMax also takes an emotion. RUNWARE_TTS_SPEED sets the speed."""
+    out: dict = {}
+    if model.startswith("minimax:"):
+        out = {"emotion": "happy" if agent == "riley" else "calm", "speed": 0.95}
+    speed = os.environ.get("RUNWARE_TTS_SPEED")
+    if speed and model.startswith(("inworld:", "minimax:")):
+        out["speed"] = min(1.5, max(0.5, float(speed)))
+    return out
+
+
+_STAGE = r"(?:smiles?|laughs?|chuckles?|grins?|nods?|sighs?|pauses?|beat|shrugs?|winks?)"
+
+
+def speakable(text: str) -> str:
+    """The line as it should sound: verdict tokens as words, no markdown, no stage directions."""
+    t = re.sub(r"\bcant_tell\b", "can't tell", text)
+    t = re.sub(r"(\*\*|__)(.+?)\1", r"\2", t)                      # **bold**, __bold__
+    t = re.sub(r"\*[^*\n]{1,40}\*", " ", t)                          # *nods*
+    t = re.sub(r"\[[^\]\n]{1,40}\]", " ", t)                         # [laughs]
+    t = re.sub(rf"\(\s*{_STAGE}\b[^)\n]{{0,30}}\)", " ", t, flags=re.I)  # (smiles warmly)
+    t = re.sub(r"`([^`\n]*)`", r"\1", t)                              # `code`
+    t = re.sub(r"(?m)^\s*(?:#{1,6}|[-*•])\s+", "", t)                  # headings and bullets
+    t = re.sub(r"\b([A-Za-z]+)_(?=[A-Za-z])", r"\1 ", t)               # duplicate_rows -> duplicate rows
+    t = re.sub(r"\b([A-Za-z]+)_(?=[A-Za-z])", r"\1 ", t)
+    return re.sub(r"\s+", " ", t).strip()
 
 PORTRAIT_PROMPTS = {
     "vale": "a man in his fifties, head of a retail analytics lab, calm and exacting, reading glasses, "
@@ -206,10 +246,18 @@ class Runware:
 
     # -- voice ----------------------------------------------------------------
 
+    def model_for(self, agent: str) -> str:
+        """The TTS model for one agent: its own override, then AGENT_TTS_MODELS, then tts_model."""
+        return (os.environ.get(f"RUNWARE_TTS_MODEL_{agent.upper()}") or AGENT_TTS_MODELS.get(agent)
+                or self.tts_model)
+
     def tts(self, agent: str, text: str, *, line_of: Optional[int] = None) -> dict:
         """{file, seconds, cost, provider, lineOf}: the `voice.line` data. Cached by text and voice."""
-        voice = voice_for(agent, self.tts_model)
-        name = hashlib.sha1(f"{self.tts_model}|{voice}|{text}".encode()).hexdigest()[:16] + ".mp3"
+        model = self.model_for(agent)
+        voice = voice_for(agent, model)
+        said, extra = speakable(text), speech_settings(agent, model)
+        tag = "|" + json.dumps(extra, sort_keys=True) if extra else ""
+        name = hashlib.sha1(f"{model}|{voice}|{said}{tag}".encode()).hexdigest()[:16] + ".mp3"
         path = self.audio_dir / name
         label = f"Voiced a line for {agent.capitalize()}"
         base = {"lineOf": line_of} if line_of is not None else {}
@@ -217,13 +265,13 @@ class Runware:
             report(self.on_call, SponsorCall("runware", "tts", label + " (saved audio)", by=agent, fallback=True))
             return dict(base, file=name, seconds=mp3_seconds(path) or speech_seconds(text), cost=0.0,
                         provider="runware")
-        if not self.offline and "tts" not in self.no_credit and len(text) <= TTS_MAX_CHARS:
+        if said and not self.offline and "tts" not in self.no_credit and len(said) <= TTS_MAX_CHARS:
             from runware import IAudioInference
 
             t = Timer()
             try:
                 a = _run(self._call("audioInference", IAudioInference(
-                    model=self.tts_model, speech={"text": text, "voice": voice}, outputType="URL",
+                    model=model, speech={"text": said, "voice": voice, **extra}, outputType="URL",
                     outputFormat="MP3", includeCost=True)))
                 self.audio_dir.mkdir(parents=True, exist_ok=True)
                 self._download(a.audioURL, str(path))
@@ -325,7 +373,7 @@ def check(rw: "Runware") -> dict:
     for agent, text in CHECK_LINES.items():
         t0 = time.monotonic()
         line = rw.tts(agent, text)
-        lines[agent] = dict(line, chars=len(text), voice=voice_for(agent, rw.tts_model),
+        lines[agent] = dict(line, chars=len(text), model=rw.model_for(agent), voice=voice_for(agent, rw.model_for(agent)),
                             ms=int((time.monotonic() - t0) * 1000))
     t0 = time.monotonic()
     riley = rw.riley(system=CHECK_RILEY[0], user=CHECK_RILEY[1])
