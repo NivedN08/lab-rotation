@@ -514,7 +514,8 @@ export function App() {
                   {demoOn ? "Your rotation" : "Demo"}
                 </button>
               )}
-              {!calm && (
+              {/* Before Start the tour's Workspace step would start the session early. */}
+              {!calm && !rotationIntro && (
                 <button className="btn quiet hide-sm" onClick={() => goTour(0)}>
                   Tour
                 </button>
