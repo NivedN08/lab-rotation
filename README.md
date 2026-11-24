@@ -8,11 +8,13 @@
 
 Multiplayer AI Hackathon · Finch, AWS Builder Loft · Track 3 "Grow with Agents"
 
+[Live app](https://lab-rotation.vercel.app/) · [Demo video](https://www.youtube.com/watch?v=spOIizyNmVU)
+
 <br>
 
 <img src="docs/media/demo.gif" width="100%" alt="Lab Rotation in Judge mode: you query the tables with SQL and find West's spend is in cents, Sam drops by with a hint, you answer 'fails, unit mix-up' with evidence, the panel confers in private, Ines runs the Bruin checks and seals the verdict, then the debrief shows how the panel decided and what's next">
 
-<sub>Judge mode on the recorded mock session, sped up.</sub>
+<sub>Judge mode on the recorded mock session, sped up. <a href="https://www.youtube.com/watch?v=spOIizyNmVU">Watch the full demo video</a> or <a href="https://lab-rotation.vercel.app/">try the live app</a>.</sub>
 
 </div>
 
@@ -60,7 +62,7 @@ LAB_MOCK=1 uv run python web/server.py --port 8790   # mock mode: replays a reco
 cd web && npm install && npm run dev                  # http://localhost:5173/?mock=0
 ```
 
-Plain **http://localhost:5173** runs on the front end's built-in sample data with no server at all (a "Sample data" chip says so). `LAB_MOCK_SPEED=3` plays the mock session faster. The hosted replay is built with `VITE_STATIC=1` and opens on "Watch the demo" only.
+Plain **http://localhost:5173** runs on the front end's built-in sample data with no server at all (a "Sample data" chip says so). `LAB_MOCK_SPEED=3` plays the mock session faster. The hosted replay at [lab-rotation.vercel.app](https://lab-rotation.vercel.app/) is built with `VITE_STATIC=1` and opens on "Watch the demo" only.
 
 ## How we used each sponsor
 
