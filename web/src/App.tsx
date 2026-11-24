@@ -188,8 +188,9 @@ export function App() {
     } else if (demoState.position < near) setDemoEnded(false);
   }, [demoState.status, demoState.playing, demoState.position, demoState.end]);
   // ---- The demo as a guided story ----------------------------------------------------------------
-  // One scene at a time, one caption at a time. Each caption stays at least 5 s: the story speeds
-  // through quiet stretches, slows near the next scene, and waits there until the caption has had its time.
+  // One scene at a time, one caption at a time. Each caption stays at least 5 s: the story waits at
+  // the next scene until the caption has had its time. The player has already cut the quiet stretches
+  // (api/demo.ts, pace), so it plays at normal speed and the voice keeps up.
   const [story, setStory] = useState(false);
   const scenes = useMemo(() => buildScenes(demoState.timeline), [demoState.timeline]);
   const sceneIdx = sceneAt(scenes, demoState.position);
@@ -210,8 +211,7 @@ export function App() {
       storyWait.current = window.setTimeout(() => demoPlayer.play(), 5000 - shown);
       return;
     }
-    const want = demoState.position - cur.start < 6 || (next && next.start - demoState.position < 3) ? 1 : 6;
-    if (demoState.speed !== want) demoPlayer.setSpeed(want);
+    if (demoState.speed !== 1) demoPlayer.setSpeed(1);
   }, [story, scenes, sceneIdx, demoState.status, demoState.playing, demoState.position, demoState.speed]);
   useEffect(() => () => window.clearTimeout(storyWait.current), []);
   const goScene = (i: number) => {

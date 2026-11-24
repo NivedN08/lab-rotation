@@ -39,6 +39,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let last = 0; // wall clock of the previous tick
 let prevPos = 0; // position the last frame was published at
 let token = 0; // ignores a load that was stopped or restarted
+let wantPlay = false; // the visitor asked to watch while the recording was still loading
 const subs = new Set<() => void>();
 
 function set(patch: Partial<DemoState>) {
@@ -92,6 +93,57 @@ function publish(jumped: boolean) {
   prevPos = pos;
 }
 
+// ---- pacing ----
+
+const GAP_MAX = 2.5; // seconds: the longest quiet stretch kept (the learner's thinking time is cut)
+const VOICE_GAP = 0.3; // seconds between a line's words and its voice
+const VOICE_PAD = 0.6; // seconds of quiet after a voice line before anything else happens
+const END_PAD = 8; // seconds on the last scene (the benchmark card) before the end card
+
+/** Re-time a recording for watching, keeping its order: each voice line plays right after the words
+ *  it speaks, nothing else happens while it plays, and quiet stretches are cut to a few seconds. The
+ *  recorded files are not changed; only the playback clock is. Returns the new start and end too. */
+function pace(list: LabEvent[], start: number, end: number): { events: LabEvent[]; start: number; end: number } {
+  const sorted = [...list].sort((a, b) => a.t - b.t || a.seq - b.seq);
+  if (!sorted.length) return { events: sorted, start, end };
+  const lineOf = (e: LabEvent) => (e.data as { lineOf?: number } | undefined)?.lineOf;
+  const says = new Set(sorted.filter((e) => e.k === "agent.say").map((e) => e.seq));
+  const voices = new Map<number, LabEvent[]>();
+  for (const e of sorted) {
+    const of = e.k === "voice.line" ? lineOf(e) : undefined;
+    if (of !== undefined && says.has(of)) voices.set(of, [...(voices.get(of) ?? []), e]);
+  }
+  const moved = new Set([...voices.values()].flat());
+  const order: LabEvent[] = [];
+  for (const e of sorted) {
+    if (moved.has(e)) continue;
+    order.push(e);
+    if (e.k === "agent.say") order.push(...(voices.get(e.seq) ?? []));
+  }
+  let t = order[0].t;
+  let prevOrig = t;
+  let busy = t;
+  const at = new Map<LabEvent, number>();
+  for (const e of order) {
+    if (moved.has(e)) {
+      t += VOICE_GAP;
+    } else {
+      t = Math.max(t + Math.min(Math.max(e.t - prevOrig, 0), GAP_MAX), busy);
+      prevOrig = Math.max(prevOrig, e.t);
+    }
+    at.set(e, Math.round(t * 1000) / 1000);
+    if (e.k === "voice.line") busy = Math.max(busy, t + ((e.data as { seconds?: number } | undefined)?.seconds ?? 0) + VOICE_PAD);
+  }
+  const plain = order.filter((e) => !moved.has(e));
+  const mapT = (x: number) => at.get(plain.find((e) => e.t >= x) ?? plain[plain.length - 1]) ?? t;
+  const last = sorted[sorted.length - 1].t;
+  return {
+    events: order.map((e) => ({ ...e, t: at.get(e) ?? e.t })),
+    start: start <= sorted[0].t ? 0 : mapT(start),
+    end: end >= last - 0.01 ? Math.max(t, busy) + END_PAD : mapT(end),
+  };
+}
+
 // ---- the clock ----
 
 function tick() {
@@ -121,7 +173,7 @@ function stopClock() {
 
 // ---- loading ----
 
-async function load() {
+async function load(autoplay = true) {
   const mine = ++token;
   drive.claim(load);
   set({ ...off, status: "loading", sample: useMock() });
@@ -144,23 +196,26 @@ async function load() {
       since = page.next;
     }
     if (mine !== token) return;
-    events = all.sort((a, b) => a.t - b.t || a.seq - b.seq);
+    const paced = pace(all, info.start, info.end);
+    events = paced.events.sort((a, b) => a.t - b.t || a.seq - b.seq);
     sessionId = session;
-    const first = derive(info.start);
+    const play = autoplay || wantPlay;
+    wantPlay = false;
+    const first = derive(paced.start);
     drive.open(sessionId, first.tasks);
     set({
       sample,
       status: "ready",
-      playing: true,
+      playing: play,
       speed: info.speed || 1,
-      position: info.start,
-      start: info.start,
-      end: info.end,
+      position: paced.start,
+      start: paced.start,
+      end: paced.end,
       timeline: events.map(({ seq, t, k, agent }) => ({ seq, t, k, agent })),
     });
-    prevPos = info.start - 0.001;
+    prevPos = paced.start - 0.001;
     publish(true);
-    run();
+    if (play) run();
   } catch (e) {
     if (mine !== token) return;
     const message = (e as Error).message;
@@ -200,7 +255,18 @@ export const demo = {
 
 /** Start the demo: fetch the recorded session and play it from the beginning, looping. */
 export function startDemo() {
-  if (state.status === "loading" || state.status === "ready") return;
+  if (state.status === "loading") {
+    wantPlay = true;
+    return;
+  }
+  if (state.status === "ready") {
+    // Loaded behind the landing page and waiting there: play it from the beginning.
+    if (!state.playing) {
+      demo.seek(state.start);
+      demo.play();
+    }
+    return;
+  }
   load();
 }
 
@@ -234,9 +300,10 @@ export function useDemo(): DemoState {
 try {
   if (isStatic() || new URLSearchParams(window.location.search).get("demo") === "1") {
     // Take the state now so no live session starts first; fetch once every module has finished loading.
+    // The hosted replay loads behind the landing page and waits there until the visitor enters.
     drive.claim(load);
     set({ status: "loading" });
-    setTimeout(load, 0);
+    setTimeout(() => load(!isStatic()), 0);
   }
 } catch {
   /* no window */

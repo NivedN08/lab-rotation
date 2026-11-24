@@ -21,6 +21,7 @@ const SCENES: SceneDef[] = [
   { id: "answer", title: "Your answer", intro: "You send your verdict and evidence, and Riley's answer meets yours at the hatch.", starts: (m) => m.k === "learner.answer" },
   { id: "panel", title: "The panel confers", intro: "Dr. Vale, Sam and Ines talk it over in private before anyone rules.", starts: (m) => m.k === "panel.whisper", after: "answer" },
   { id: "verdict", title: "The verdict", intro: "Ines runs the Bruin checks on your answer and seals the verdict.", starts: (m) => m.k === "check.result" || m.k === "verdict", after: "answer" },
+  { id: "case", title: "A real case", intro: "With the verdict in, Telem brings a real case of the same mistake, and Dr. Vale says whether the morning's news shaped the pick.", starts: (m) => m.agent === "telem", after: "verdict" },
   { id: "next", title: "What's next", intro: "Your mastery of this trap moves, and that shapes the task you get next.", starts: (m) => m.k === "mastery.update", after: "verdict" },
 ];
 
@@ -63,7 +64,7 @@ export function StoryCaption({ scenes, index, events, onBack, onNext }: { scenes
   // After the verdict, Telem brings a real case of the same mistake.
   const verdictAt = events.find((e) => e.k === "verdict")?.t;
   const realCase =
-    (s.id === "verdict" || s.id === "next") && verdictAt !== undefined
+    (s.id === "verdict" || s.id === "case" || s.id === "next") && verdictAt !== undefined
       ? caseEvent(events, Math.max(s.start, verdictAt), end)
       : undefined;
   return (
