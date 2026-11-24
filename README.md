@@ -46,11 +46,11 @@ Click anyone on the floor to see their job, what they can read, and every decisi
 | **Sam** | Methods reviewer | Watches how you work and, when you're stuck, asks the panel before dropping by with a hint: always a question, never the answer. |
 | **Ines** | Examiner | Runs the Bruin data-quality checks at the referee bench, grades your verdict, trap and evidence against the answer key, seals the record and rules on appeals. |
 | **Riley** | AI intern | Your rival: works the same task from the same tables without ever seeing yours. Both answers meet at the hatch between the rooms. |
-| **You** | Rotation student | Your desk is in Team A. The workspace is yours; the panel only sees what you do there. |
+| **You** | Rotation student | Your desk sits across the wall from Riley's. The workspace is yours; the panel only sees what you do there. |
 
 ## Sponsor tools
 
-The backend (Nived's part) wires the sponsors in `lab/sponsors/`, each with a recorded fallback: **BAND** carries the panel's private room, **Telem AI** does the librarian's searches and case of the day, **Bruin** runs the trap checks behind every verdict, **Runware** gives the cast their voices and portraits and runs Riley on an open model, **Glasser** supplies real retail numbers for tasks, hints and the verdict's reality check, and **Teamily** is where the practice summary after a rotation will go (a stub that saves it locally for now). The sponsor strip above the timeline counts every call live. The routes and events are documented in `contract/api.md` and `contract/events.md`.
+The backend (Nived's part) wires the sponsors in `lab/sponsors/`, each with a recorded fallback: **BAND** carries the panel's private room, **Telem AI** does the librarian's searches and case of the day, **Bruin** runs the trap checks behind every verdict, **Runware** gives the cast their voices and portraits and runs Riley on GPT-5.4 mini served through Runware, and **Glasser** supplies real retail numbers for tasks, hints and the verdict's reality check. The sponsor strip above the timeline counts every call live. The routes and events are documented in `contract/api.md` and `contract/events.md`.
 
 ## How it was built
 

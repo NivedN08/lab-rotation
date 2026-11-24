@@ -569,13 +569,13 @@ export function StudyPanel({ id, ...nav }: Nav & { id: string }) {
 
 const ROOM_TEXT: Record<string, { role?: Role; what: string }> = {
   director: { role: "director", what: "Dr. Vale's office. Vale picks your task, walks it to your desk, and sits on the panel that rules on your answer with Ines and Sam." },
-  library: { role: "library", what: "Telem's library. Before you answer, Telem looks up the topic and tells you what to watch for; after the verdict, he brings a real case of the same mistake." },
+  library: { role: "library", what: "Telem's library. Before you answer, Telem looks up the topic and tells you what to watch for; after the verdict, she brings a real case of the same mistake." },
   "team-a": { role: "team-a", what: "Your desk is here. Sam, your mentor, sits at the head desk at the back and can drop by with a hint, never the answer." },
   "team-b": { role: "team-b", what: "Riley works the same task from the same tables, blind. Riley never sees your work and you never see Riley's until the verdict. The wall between the rooms has no door." },
   "team-c": { what: "Closed during a rotation. Nobody works here." },
   referee: { role: "referee", what: "Ines and the Bruin terminal. Ines gets your answer and Riley's as X and Y, without knowing whose is whose, and runs the Bruin checks that tell them apart. She may not vote." },
   solo: { what: "Closed during a rotation. Nobody works here." },
-  lobby: { what: "You arrive here when your session starts, then walk to your desk in Team A." },
+  lobby: { what: "You arrive here when your session starts, then walk to your desk." },
 };
 
 export function RoomPanel({ id, ...nav }: Nav & { id: string }) {
@@ -621,28 +621,19 @@ function roomName(id: string) {
 export function FixturePanel({ id, ...nav }: Nav & { id: string }) {
   const { R, t } = nav;
   if (id === "hatch") {
-    const cmps = R.run.events.filter((e) => e.k === "compare" && e.t <= t).reverse();
+    const answers = (nav.live ?? []).filter((e) => (e.k === "learner.answer" || e.k === "rival.answer") && e.t <= t + 0.5).reverse();
     return (
       <div>
         <h2 style={{ fontFamily: "var(--pixel)", fontSize: 30, margin: "0 0 6px" }}>The hatch</h2>
         <p style={{ color: "var(--mist)", margin: "8px 0 0" }}>
-          The only place Team A's and Team B's work meets. The lab's code, not an agent, compares the two answers field by field and tells each team only which fields agree.
+          Where your answer and Riley's meet. Neither of you sees the other's work before this; when both answers are in, the hatch lights green if they say the same thing and red if they differ.
         </p>
-        <Section title="Comparisons so far" count={cmps.length || undefined}>
-          {!cmps.length && <p className="empty">No answers have been compared yet.</p>}
-          {cmps.map((e, i) => (
-            <div className="item" key={i}>
-              <div className="label" style={{ color: e.agree ? "var(--good)" : "var(--bad)" }}>
-                {e.s}: {e.agree ? "agree" : "disagree"}
-              </div>
-              <div className="meta">
-                {fmtElapsed(e.t)} into the run, {roundWord(e.round)}
-              </div>
-              <dl className="kv">
-                {Object.entries(e.fields ?? {}).map(([k, v]) => (
-                  <Frag key={k} k={k} v={v ? "match" : "differ"} />
-                ))}
-              </dl>
+        <Section title="Answers so far" count={answers.length || undefined}>
+          {!answers.length && <p className="empty">No answers yet.</p>}
+          {answers.map((e) => (
+            <div className="item" key={e.seq}>
+              <div className="label">{plainLine(e)}</div>
+              <div className="meta">{fmtElapsed(e.t)} into the session</div>
             </div>
           ))}
         </Section>
@@ -672,33 +663,16 @@ export function FixturePanel({ id, ...nav }: Nav & { id: string }) {
     );
   }
   if (id === "vault") {
-    const notes = Object.values(R.run.notes).filter((n) => n.t <= t);
-    const by = (role: string) => notes.filter((n) => n.kind === "note" && n.by.endsWith(role)).length;
-    const pd = notes.filter((n) => n.kind === "pass_down").length;
     return (
       <div>
         <h2 style={{ fontFamily: "var(--pixel)", fontSize: 30, margin: "0 0 6px" }}>Your learner profile</h2>
         <p style={{ color: "var(--mist)", margin: "8px 0 0" }}>
-          Your learner profile lives here: after each ruling, a mastery note flies here from your desk. Shared memory on past.dev. Every note is written with an audience, and every read names who is reading, so a read returns only what that agent may see. One cabinet per study, one drawer per department. Every call goes through a gateway on Modal that knows each agent from a header the agent cannot forge.
+          After each verdict a note flies here from your desk, and your skill on that kind of trap moves up or down. Dr. Vale picks your next task from it, aiming at what you haven't mastered yet.
         </p>
-        <Section title="Written so far">
-          <dl className="kv">
-            <Frag k="Library notes" v={by("library")} />
-            <Frag k="Team A notes" v={by("team-a")} />
-            <Frag k="Team B notes" v={by("team-b")} />
-            <Frag k="Team C notes" v={by("team-c")} />
-            <Frag k="Referee notes" v={by("referee")} />
-            <Frag k="Passed down by the director" v={pd} />
-          </dl>
-        </Section>
-        <Section title="Who can read what">
-          <dl className="kv">
-            <Frag k="Director" v="Everything" />
-            <Frag k="Librarian" v="Its own study's library drawer" />
-            <Frag k="Team A" v="Its own drawer and what the director passes down" />
-            <Frag k="Team B" v="Its own drawer and what the director passes down" />
-            <Frag k="Referee" v="Two unlabelled answers" />
-          </dl>
+        <Section title="Your mastery">
+          <Safe name="The mastery chart">
+            <MasteryChart />
+          </Safe>
         </Section>
       </div>
     );

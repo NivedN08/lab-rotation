@@ -156,7 +156,7 @@ export type AskLink = { title: string; url: string };
 
 /**
  * An agent's answer. It only knows what that agent could see; `sources` says what it used (in plain words).
- * When Telem answers, it runs a live search with the learner's question and the reply adds `links` (the results) and
+ * When Telem answers, she runs a live search with the learner's question and the reply adds `links` (the results) and
  * `trace` (the Telem AI trace link).
  */
 export type AskReply = { agent: AgentId; text: string; sources: string[]; links?: AskLink[]; trace?: string };

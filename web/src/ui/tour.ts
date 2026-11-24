@@ -15,18 +15,18 @@ export function buildRotationTour(R: Replay): RotationStep[] {
   const steps: RotationStep[] = [
     {
       title: "Your rotation",
-      text: "Six people work this floor. You are the student in Team A; everyone else is an AI agent with one job. Here is who they are.",
+      text: "Six people work this floor. You are the student here; everyone else is an AI agent with one job. Here is who they are.",
       focus: null,
     },
   ];
   if (has("vale"))
     steps.push({ title: `${n("vale")} runs the lab`, text: `${n("vale")} picks each task, walks it over to your desk, and sits on the panel that rules on your answer.`, focus: who("vale"), select: who("vale") });
   if (has("telem"))
-    steps.push({ title: `${n("telem")} searches for you`, text: `Before you answer, ${n("telem")} looks up the topic and tells you what to watch for. After the verdict, he brings a real case of the same mistake.`, focus: who("telem"), select: who("telem") });
+    steps.push({ title: `${n("telem")} searches for you`, text: `Before you answer, ${n("telem")} looks up the topic and tells you what to watch for. After the verdict, she brings a real case of the same mistake.`, focus: who("telem"), select: who("telem") });
   if (has("learner"))
     steps.push({
       title: "This is you",
-      text: `Your desk is in Team A.${has("sam") ? ` ${n("sam")}, your mentor, sits at the back of the room and can drop by with a hint, never the answer.` : ""}`,
+      text: `This is your desk.${has("sam") ? ` ${n("sam")}, your mentor, sits at the back of the room and can drop by with a hint, never the answer.` : ""}`,
       focus: who("learner"),
       select: who("learner"),
     });

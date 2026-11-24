@@ -46,7 +46,7 @@ function upgrade(events: LabEvent[]): LabEvent[] {
     });
   }
 
-  // Telem's real-world case comes after the verdict. Before the answer he only talks about the topic.
+  // Telem's real-world case comes after the verdict. Before the answer she only talks about the topic.
   if (verdict && !list.some((e) => e.k === "search" && e.t > verdict.t)) {
     const early = list.find((e) => e.k === "search" && e.t < verdict.t);
     const earlyCall = list.find((e) => e.k === "sponsor.call" && (e.data as { sponsor?: string; op?: string }).sponsor === "telem" && (e.data as { op?: string }).op === "search");

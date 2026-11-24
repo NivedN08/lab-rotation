@@ -275,7 +275,7 @@ function react(s: Live, d: Def, a: Answer, r: ReturnType<typeof score>, T: numbe
     ...voice(s, T + 12.9, "ines", t, L("say")),
     { t: T + 13, k: "agent.move", agent: "vale", task: t, why: "the panel is done, so Vale goes back to the office", data: { from: "panel_table", place: "vale_office" } },
     { t: T + 13, k: "agent.move", agent: "sam", task: t, why: "the panel is done, so Sam goes back to the whiteboard", data: { from: "panel_table", place: "whiteboard" } },
-    // Telem's real case, after the transcript: he walks to the learner's desk and the case search holds the source and trace.
+    // Telem's real case, after the transcript: she walks to the learner's desk and the case search holds the source and trace.
     { t: T + 13.5, k: "agent.move", agent: "telem", to: "learner", task: t, why: "the verdict is in, so Telem can bring a real case", data: { from: "shelves", place: "learner_desk" } },
     { t: T + 14, k: "sponsor.call", agent: "system", why: "the librarian finds real cases with Telem AI", data: { sponsor: "telem", label: "searched for real cases", count: 1, op: "search", by: "telem", ms: 1380, fallback: false, trace } },
     { t: T + 14.5, k: "search", agent: "telem", task: t, why: `this happens in real life: a real case of ${trapLabel(d.key.trap).toLowerCase()}`, text: `Telem found a real case: ${d.caseResult.title}`, data: { phase: "case", trap: d.key.trap, query: d.caseResult.query, cached: false, trace, results: [{ title: d.caseResult.title, url: d.caseResult.url, snippet: d.caseResult.snippet }] } },
