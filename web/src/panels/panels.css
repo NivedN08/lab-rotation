@@ -449,3 +449,21 @@
   margin: 0;
   font-weight: 400;
 }
+
+/* ---- Sound note (autoplay blocked) ---- */
+
+.pn-sound-note {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 6px 14px;
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+  font-family: var(--pixel);
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
