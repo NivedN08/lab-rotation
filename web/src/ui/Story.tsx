@@ -14,8 +14,8 @@ type SceneDef = { id: string; title: string; intro: string; starts: (m: Mark) =>
 
 const SCENES: SceneDef[] = [
   { id: "brief", title: "The brief", intro: "Dr. Vale picks your task and brings it to your desk.", starts: (m) => m.k === "task.picked" },
-  { id: "context", title: "Context", intro: "Telem looks up the topic, so you know what to watch for. He keeps the real case for later.", starts: (m) => m.agent === "telem" },
-  { id: "rival", title: "The rival", intro: "Riley sits down in Team B to work the same task, without ever seeing yours.", starts: (m) => m.agent === "riley" },
+  { id: "context", title: "Context", intro: "Telem looks up the topic, so you know what to watch for. She keeps the real case for later.", starts: (m) => m.agent === "telem" },
+  { id: "rival", title: "The rival", intro: "Riley sits down next door to work the same task, without ever seeing yours.", starts: (m) => m.agent === "riley" },
   { id: "analysis", title: "Analysis", intro: "You query the tables to test the claim.", starts: (m) => m.k === "learner.query" },
   { id: "question", title: "The question", intro: "Sam sees where you are stuck and drops by with one question, never the answer.", starts: (m) => m.agent === "sam" && m.k === "agent.say" },
   { id: "answer", title: "Your answer", intro: "You send your verdict and evidence, and Riley's answer meets yours at the hatch.", starts: (m) => m.k === "learner.answer" },

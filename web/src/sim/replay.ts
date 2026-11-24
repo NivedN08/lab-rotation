@@ -10,8 +10,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   director: "Lab director",
   head: "Department head",
   library: "Research librarian",
-  "team-a": "Rotation student, Team A",
-  "team-b": "Rival student, Team B",
+  "team-a": "Rotation student",
+  "team-b": "Rival, AI intern",
   "team-c": "Scientist, Team C",
   referee: "Referee, runs the Bruin checks",
   solo: "Solo scientist",
@@ -30,7 +30,7 @@ export const ROLE_READS: Record<Role, string> = {
   other: "",
 };
 
-const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Head of Team A, your mentor", "team-b": "Head of Team B", "team-c": "Head of Team C" };
+const HEAD_OF: Record<string, string> = { library: "Head of the library", "team-a": "Your mentor", "team-b": "Head of Team B", "team-c": "Head of Team C" };
 
 /** The label under a person's name: a head says which department it runs. */
 export function roleLabel(id: string, role: Role): string {
