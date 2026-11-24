@@ -12,6 +12,8 @@
 //   recorded/<id>/profile/<table>.json       {table, columns: [ColumnProfile]}
 //   recorded/<id>/mastery.json               {traps: [...]}
 //   recorded/<id>/sponsors.json              SponsorTotals
+//   recorded/bench.json                      {source, rows, lines}, the examiner benchmark (GET /api/bench)
+//   recorded/portraits/<agent>.png           each agent's portrait (vale, ines, sam, telem, riley, learner)
 //   recorded/audio/<file>                    the voice lines
 //
 // A task's tables can also be kept per task: when a task id is asked for, `<id>/<task>/tables.json`,
@@ -25,6 +27,9 @@ const perTask = (id: string, task: string | undefined, rest: string): string[] =
 export const STATIC_FILES = {
   demo: (): string[] => [`${STATIC_BASE}demo.json`],
   agents: (): string[] => [`${STATIC_BASE}agents.json`],
+  bench: (): string[] => [`${STATIC_BASE}bench.json`],
+  /** A URL for an image element: the agent's portrait. */
+  portrait: (agent: string): string => `${STATIC_BASE}portraits/${encodeURIComponent(agent)}.png`,
   task: (id: string): string[] => [`${dir(id)}task.json`],
   events: (id: string): string[] => [`${dir(id)}events.json`],
   tables: (id: string, task?: string): string[] => perTask(id, task, "tables.json"),
