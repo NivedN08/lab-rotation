@@ -164,7 +164,7 @@ def test_check_reports_cost_per_line_and_riley_latency(tmp_path):
     out = rwmod.check(rw)
     assert set(out["lines"]) == set(rwmod.CHECK_LINES) and out["costPerLine"] == 0.0215
     assert out["riley"]["provider"] == "runware" and out["riley"]["ms"] >= 0
-    assert [r.speech.voice for r in client.requests[:5]] == [rwmod.voice_for(a, rw.tts_model) for a in rwmod.CHECK_LINES]
+    assert [r.speech.voice for r in client.requests[:5]] == [rwmod.voice_for(a, rw.model_for(a)) for a in rwmod.CHECK_LINES]
 
 
 def test_overlong_line_goes_to_browser_without_a_call(tmp_path):
@@ -232,3 +232,20 @@ def test_tts_sends_clean_text_and_settings(tmp_path, monkeypatch):
 def test_line_with_nothing_to_say_goes_to_browser(tmp_path):
     rw, client = make(tmp_path)
     assert rw.tts("sam", "*nods*")["provider"] == "browser" and client.requests == []
+
+
+def test_vale_on_gemini_everyone_else_on_inworld(tmp_path, monkeypatch):
+    for name in ("RUNWARE_TTS_MODEL", "RUNWARE_TTS_MODEL_VALE", "RUNWARE_TTS_SPEED", "RUNWARE_VOICE_VALE",
+                 "RUNWARE_VOICE_SAM"):
+        monkeypatch.delenv(name, raising=False)
+    rw, client = make(tmp_path)
+    assert (rw.model_for("vale"), rwmod.voice_for("vale", rw.model_for("vale"))) == \
+        ("google:gemini@3.8-flash-tts", "Charon")
+    assert (rw.model_for("sam"), rwmod.voice_for("sam", rw.model_for("sam"))) == ("inworld:tts@2", "Dennis")
+    vale, sam = rw.tts("vale", "Same words."), rw.tts("sam", "Same words.")
+    assert [(r.model, r.speech.voice) for r in client.requests] == [
+        ("google:gemini@3.8-flash-tts", "Charon"), ("inworld:tts@2", "Dennis")]
+    assert vale["file"] != sam["file"]  # the model is in the cache key: no collision
+    assert rwmod.speech_settings("sam", rw.model_for("sam")) == {}  # speed 1.0
+    monkeypatch.setenv("RUNWARE_TTS_MODEL_VALE", "inworld:tts@2")
+    assert rwmod.voice_for("vale", rw.model_for("vale")) == "Craig"

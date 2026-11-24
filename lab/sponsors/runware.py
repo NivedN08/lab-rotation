@@ -54,6 +54,9 @@ from lab.sponsors.calls import DATA, Reporter, SponsorCall, Timer, report
 AUDIO = DATA / "audio"
 PORTRAITS = DATA / "portraits"
 TTS_MODEL = "inworld:tts@2"
+# Agents voiced on another model than TTS_MODEL (picked by ear in the bake-off, 2026-11-23).
+# RUNWARE_TTS_MODEL_<AGENT> overrides one agent; RUNWARE_TTS_MODEL changes everyone else.
+AGENT_TTS_MODELS = {"vale": "google:gemini@3.8-flash-tts"}
 TEXT_MODEL = "openai:gpt@5.4-mini"
 IMAGE_MODEL = "runware:100@1"
 TIMEOUT_S = 45
@@ -243,12 +246,18 @@ class Runware:
 
     # -- voice ----------------------------------------------------------------
 
+    def model_for(self, agent: str) -> str:
+        """The TTS model for one agent: its own override, then AGENT_TTS_MODELS, then tts_model."""
+        return (os.environ.get(f"RUNWARE_TTS_MODEL_{agent.upper()}") or AGENT_TTS_MODELS.get(agent)
+                or self.tts_model)
+
     def tts(self, agent: str, text: str, *, line_of: Optional[int] = None) -> dict:
         """{file, seconds, cost, provider, lineOf}: the `voice.line` data. Cached by text and voice."""
-        voice = voice_for(agent, self.tts_model)
-        said, extra = speakable(text), speech_settings(agent, self.tts_model)
+        model = self.model_for(agent)
+        voice = voice_for(agent, model)
+        said, extra = speakable(text), speech_settings(agent, model)
         tag = "|" + json.dumps(extra, sort_keys=True) if extra else ""
-        name = hashlib.sha1(f"{self.tts_model}|{voice}|{said}{tag}".encode()).hexdigest()[:16] + ".mp3"
+        name = hashlib.sha1(f"{model}|{voice}|{said}{tag}".encode()).hexdigest()[:16] + ".mp3"
         path = self.audio_dir / name
         label = f"Voiced a line for {agent.capitalize()}"
         base = {"lineOf": line_of} if line_of is not None else {}
@@ -262,7 +271,7 @@ class Runware:
             t = Timer()
             try:
                 a = _run(self._call("audioInference", IAudioInference(
-                    model=self.tts_model, speech={"text": said, "voice": voice, **extra}, outputType="URL",
+                    model=model, speech={"text": said, "voice": voice, **extra}, outputType="URL",
                     outputFormat="MP3", includeCost=True)))
                 self.audio_dir.mkdir(parents=True, exist_ok=True)
                 self._download(a.audioURL, str(path))
@@ -364,7 +373,7 @@ def check(rw: "Runware") -> dict:
     for agent, text in CHECK_LINES.items():
         t0 = time.monotonic()
         line = rw.tts(agent, text)
-        lines[agent] = dict(line, chars=len(text), voice=voice_for(agent, rw.tts_model),
+        lines[agent] = dict(line, chars=len(text), model=rw.model_for(agent), voice=voice_for(agent, rw.model_for(agent)),
                             ms=int((time.monotonic() - t0) * 1000))
     t0 = time.monotonic()
     riley = rw.riley(system=CHECK_RILEY[0], user=CHECK_RILEY[1])
